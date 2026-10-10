@@ -1,17 +1,22 @@
 # 05a — Day 0-2 Completion Checklist (verified live on Kind)
 
-> **Status: DONE AND VERIFIED** on `kind-urumi` (rev 12, `helm list -n urumi` = `deployed`), 2026-10-10.
-> Store is live at `http://store.127.0.0.1.nip.io` (title "Urumi Store"), COD checkout + Woo REST verified with generated CK/CS in `woo-secrets`.
+> **Status: DONE AND VERIFIED** on `kind-urumi` (`helm list -n urumi` = `deployed`), 2026-10-10.
+> Store is live at `http://store.127.0.0.1.nip.io` (title "Urumi Store"), COD checkout + Woo REST verified with the generated CK/CS held in `woo-secrets`.
+> Credentials are chart-generated (ADR-015/016/017); the repo's history was rewritten once to remove the old default passwords (ADR-018 explains the `.gitignore` fix found during that push).
 
 ## How to reproduce / re-verify
 
 ```bash
 make kind-up
 make ingress                 # kubectl apply ingress-nginx for kind
-make helm-local              # secrets-local + helm upgrade --install (hooks run wp-setup)
+make helm-local              # helm upgrade --install (chart generates every Secret; hooks run wp-setup)
 make verify-store            # helm lint + ps + wp-setup logs + store curl + woo-secrets
 make verify-cod              # COD offered at checkout (Store API) + COD option value
 ```
+
+> **There is no `secrets-local` target any more** — it was deleted when credential generation
+> moved into the chart (ADR-015/016). `make helm-local` creates `mariadb-secret`,
+> `wordpress-secret`, `pg-secret`, `gateway-secrets` and `demo-notes-token` itself.
 Single-shot checks:
 ```bash
 helm lint ./helm -f helm/values-local.yaml && helm lint ./helm -f helm/values-prod.yaml
@@ -25,16 +30,17 @@ curl -s -H "Host: store.127.0.0.1.nip.io" http://localhost/wp-json/wc/v3/product
 
 ## Day 0 — Pre-Day (repo & tooling)
 
-- [x] `git init` + README skeleton + `.gitignore` (`.env`, `*.key`, `__pycache__`, `*.pem`, `*-secrets.yaml`)
+- [x] `git init` + README skeleton + `.gitignore` (`.env`, `*.key`, `__pycache__`, `*.pem`, `/secrets.yaml` and friends — **anchored**, see gotcha 15)
+- [x] `.env.example` tracked via a `!.env.example` exception
 - [x] Helm chart structure per `docs/06_KUBERNETES_AND_HELM.md` (umbrella `urumi 0.1.0 / 1.0.0`)
 - [x] `kind-config.yaml` (control-plane, 80/443 port mappings)
-- [x] `Makefile`: `kind-up`, `kind-down`, `ingress`, `lint`, `template`, `secrets-local`, `helm-local`, `helm-prod`, `logs`, `ps`, `port-forward`, **new** `verify-store`, `wp-logs`
-- [x] Pinned deps: `requirements.txt` (`fastapi==0.115.*`, `mcp==1.12.*`, `httpx==0.27.*`, `sqlalchemy[asyncio]==2.0.*`, `asyncpg`, `argon2-cffi`, `cryptography`, `openai==1.*`, ...)
+- [x] `Makefile`: `kind-up`, `kind-down`, `ingress`, `lint`, `template`, `helm-local`, `helm-prod`, `rotate-secrets`, `logs`, `ps`, `port-forward`, `verify-store`, `wp-logs`
+- [x] Pinned deps: `requirements.txt` (gateway) + `src/*/requirements.txt` per service (`mcp==1.12.*`, `httpx==0.27.*`, `pydantic==2.11.*` — see gotcha 13)
 - [x] `docker-compose.yml` for a fast local loop without Kind
 - [x] `helm/values.schema.json` (type/pattern validation for values) — new
 - [x] `helm/templates/NOTES.txt` (post-install verification commands) — new
 - [x] `ingress-nginx` installed on `kind-urumi` (kind provider manifest)
-- [ ] `git commit` — still 0 commits (see "Left for later")
+- [x] `values.schema.json` + `NOTES.txt` install-time guard rails
 
 ## Days 1-2 — Store on Kind (Layer 1)
 
@@ -46,7 +52,7 @@ curl -s -H "Host: store.127.0.0.1.nip.io" http://localhost/wp-json/wc/v3/product
   - COD gateway enabled with the **full gateway settings** (all 6 keys via `WC_Payment_Gateways` form defaults, not a partial option write) — verified offered at checkout on a clean install
   - 2 products seeded (Urumi Classic Tee $29.99 SKU `URUMI-TEE-001`, Urumi Hoodie $59.99 `URUMI-HOODIE-001`) with `_stock_status`/`_visibility`/`_manage_stock` + lookup-table regen
   - MU plugin `urumi-internal-rest.php` (see gotcha #3)
-  - Woo Consumer Key/Secret generated (`wc_api_hash`), rotated idempotently, written to `woo-secrets` via the K8s API (SA + Role/RoleBinding, `pods/exec` not needed)
+  - Woo Consumer Key/Secret generated with `wc_api_hash` and written to `woo-secrets` via the K8s API (SA + Role/RoleBinding; `pods/exec` not needed). **Reused, never rotated, on upgrade**: the hook re-runs on every `helm upgrade` but is a no-op when the keypair in the Secret still matches the `wp_woocommerce_api_keys` row (ADR-017)
   - Final verification step hits `wc/v3/products` with CK/CS
 - [x] Woo CK/CS stored in `woo-secrets` Secret (never in values)
 - [x] Manual test passed: storefront 200, COD order created via REST (`payment_method_title: "Cash on delivery"`), order listed back; on the clean install COD is offered at checkout with no manual save (`make verify-cod` -> `"payment_methods":["cod"]`)
@@ -78,6 +84,8 @@ curl -s -H "Host: store.127.0.0.1.nip.io" http://localhost/wp-json/wc/v3/product
 12. **Admin credentials can drift from `values.yaml`** — the user was created by whichever install attempt first succeeded against a recycled PVC, so `values.yaml` was not the source of truth and `admin`/`admin123` failed to log in. Fix: the setup Job now syncs the admin password on every run (`wp user update "$ADMIN_USER" --user_pass=...`) after install, so the chart is authoritative. When a login keeps failing, check the DB row (`SELECT user_login, user_registered FROM wp_users`) before assuming the value file is wrong.
 13. **COD settings must be written in the same shape WooCommerce writes** — hand-writing only `{"enabled":"yes","title":...,"description":...,"instructions":...}` (4 of 6 keys) is not a form WooCommerce ever produces, and the missing keys made the gateway behave differently at checkout than in Settings > Payments; only a manual untick/tick/save (which rewrites all 6) fixed it. Fix: the job builds the option from the **gateway's own `form_fields` defaults** via `WC_Payment_Gateways` and overrides enabled/title/description/instructions. Result is identical to an admin save: `enabled, title, description, instructions, enable_for_methods, enable_for_virtual` (verified by diff), configurable via `wpSetup.cod.*`.
 14. **WooCommerce 9.x installs the BLOCK checkout** — the payment method list is rendered client-side from the Store API (`GET /wp-json/wc/store/v1/cart` → `payment_methods`), so verifying "COD at checkout" with the classic `?wc-ajax=update_order_review` nonce flow shows nothing (no `update_order_review_nonce` is printed on the page). Verify with the Store API instead (`make verify-cod` does both; the classic path is a documented fallback).
+15. **A bare `secrets.yaml` ignore rule hid the Secrets template (ADR-018)** — Git matches a bare filename pattern in *any* directory, so `.gitignore`'s `secrets.yaml` silently swallowed `helm/templates/secrets.yaml`, the file that generates every credential Secret. Nothing failed locally because Helm reads the working tree, not git; a fresh clone however rendered **0 Secrets** (a chart that would start the databases with no credentials). Found while preparing the first push. Fix: anchor the rules (`/secrets.yaml`, `/gateway-secrets.yaml`, …) and add `!.env.example`; keep filenames so future edits can never be silently dropped again. Verified with `git check-ignore -v` + a fresh `git clone` + `helm template | grep -c "kind: Secret"` → 4.
+16. **The stale-credential trap: Helm deletes Secrets that are omitted from the manifest (ADR-016)** — a `lookup`-guarded Secret is rendered on the install that creates it and *suppressed* on the next upgrade; Helm then treats it as "removed from the manifest" and **deletes it** (the `helm.sh/resource-policy: keep` annotation does *not* prevent that). The following upgrade regenerates it with a *new* random value while the pods keep the env they started with, so the Secret stops matching the database password (`Access denied` on new connections) and token-protected servers answer 401 — this is exactly what made `verify-mcp` report `WOO_AUTH_FAILED` after an upgrade. Fix, applied to every credential Secret: **always render the resource** and let `lookup` choose only the **values**, so an upgrade re-applies identical bytes. Plus a `urumi.io/woo-secret-checksum` annotation on `deployment-woo-mcp.yaml` so a *deliberate* rotation rolls the pod (the wp-setup hook never rotates on upgrade — ADR-017). Proof: two consecutive `helm upgrade`s left all five credentials byte-identical.
 
 ## Verified clean install (fresh `kind` cluster, no recycled PVC)
 
@@ -88,9 +96,8 @@ Result on a from-scratch cluster (rev 1): store 200 `<title>Urumi Store</title>`
 
 ## Left for later / notes to future self
 
-- **Commit the repo**: still `git status` clean-ish but **0 commits**. Before any further work: `git add -A && git commit -m "Day 0-2: store on kind"` (the `Urumi AI FDE Internship - Round 1_ MCP Gateway on Kubernetes.pdf` is a large binary — decide whether to keep it tracked).
-- **`gateway-secrets` FERNET key**: `make secrets-local` generates a random one each run unless the secret already exists (lookup-guarded templates). For a stable dev key, create the secret once manually.
+- **`gateway-secrets` is NOT rendered by the chart yet** — it is gated on `gateway.enabled` (`false` today), so the Secret only appears when the gateway is deployed. It must follow the same rules as every other credential: **always render the Secret** (never conditionally on `lookup` — see gotcha 16), take values from `lookup` so an upgrade is a no-op, and add a **checksum annotation to the gateway Deployment** so a deliberate rotation rolls the pod. The **Fernet key must stay stable across upgrades**: it encrypts upstream credentials at rest, so a rotated key makes every stored upstream credential undecryptable.
 - **`dashboard.127.0.0.1.nip.io`** currently proxies to WordPress (dashboard not shipped yet) — intentional placeholder, documented in `helm/templates/ingress.yaml`.
 - **Postgres is deployed but unused** until Day 5-7; keep it (it is the gateway's DB and mirrors prod).
-- **`src/{gateway,woo-mcp,dashboard}` still empty** — next up is Days 3-4 (`src/woo-mcp`): FastAPI + `mcp` SDK Streamable HTTP, 6 tools via `httpx` to `wc/v3`, CK/CS from `woo-secrets`, probes `/healthz` `/readyz`, NetworkPolicy already staged.
+- **Layer 2 is done**: `src/woo-mcp` (6 tools) plus the two demo upstreams — see `docs/05b_DAY_3-4_CHECKLIST.md`. Only `src/gateway` and `src/dashboard` remain.
 - **kube-linter**: binary not available on this machine (Day 10 item); `helm lint` + `helm template` review is the current substitute.
