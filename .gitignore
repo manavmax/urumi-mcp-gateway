@@ -48,6 +48,9 @@ Thumbs.db
 .idea/
 *.swp
 
+# Local tool state (Kilo)
+.kilo/
+
 # Logs & tmp
 *.log
 /tmp/
