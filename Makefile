@@ -1,7 +1,12 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
+
+# Admin credentials: the USER comes from values, the PASSWORD only ever comes from the
+# Secret (ADR-019). ADMIN_SECRET_NAME lets `existingAdminSecret` be honoured by make.
+ADMIN_SECRET_NAME ?= $(shell helm get values $(RELEASE) -n $(NAMESPACE) -o json 2>/dev/null | grep -o '"existingAdminSecret":"[^"]*"' | cut -d'"' -f4)
+WP_ADMIN_USER ?= $(shell [ -n "$$(helm get values $(RELEASE) -n $(NAMESPACE) -o json 2>/dev/null | grep -o '"adminUser":"[^"]*"' | cut -d'"' -f4)" ] && helm get values $(RELEASE) -n $(NAMESPACE) -o json 2>/dev/null | grep -o '"adminUser":"[^"]*"' | cut -d'"' -f4 || grep -o 'adminUser: .*' helm/values.yaml | head -n1 | cut -d' ' -f2)
 
 kind-up:
 	kind create cluster --name urumi --config kind-config.yaml
@@ -51,6 +56,8 @@ verify-store:
 	@echo "== wp-setup logs (last 80) ==" && kubectl logs -n $(NAMESPACE) -l app=wp-setup --tail=80 2>&1 | tail -n 80 || kubectl logs -n $(NAMESPACE) job/$(RELEASE)-wp-setup --tail=80 2>&1 | tail -n 80 || echo "no wp-setup logs yet"
 	@echo "== store curl via Host header ==" && curl -s -H "Host: store.127.0.0.1.nip.io" http://localhost/ 2>&1 | head -n 30 || echo "store curl failed (ingress-nginx not ready?)"
 	@echo "== woo-secrets ==" && kubectl get secret woo-secrets -n $(NAMESPACE) -o yaml 2>&1 | head -n 20 || echo "woo-secrets not yet created (wp-setup not finished)"
+	@echo "== wordpress-admin Secret (existence only; use 'make admin-password' to read it) =="
+	@kubectl get secret wordpress-admin -n $(NAMESPACE) -o jsonpath='{.metadata.name} created {.metadata.creationTimestamp}{"\n"}' 2>/dev/null || echo "wordpress-admin not created yet"
 
 # Build the Layer 2 image and import it into the kind node (kind load has digest
 # issues on this machine, so we pipe the image straight into containerd).
@@ -96,6 +103,18 @@ verify-demo:
 	echo ""; echo "== 401 without token (what the gateway will have to solve) =="; \
 	kubectl exec -n $(NAMESPACE) $$NOTES_POD -c demo-notes -- python3 -c "$$(cat scripts/verify-demo-notes-401.py)"; \
 	echo ""; echo "token used for authenticated checks: $${TOKEN%%????}... (full value stays in the Secret)"
+
+# LOCAL USE ONLY - prints the WordPress admin credentials held in the chart-generated
+# `wordpress-admin` Secret. Never printed by any automated target, and never written to a
+# committed file (docs/DECISIONS.md ADR-019). If `wpSetup.existingAdminSecret` is set, read
+# that Secret instead.
+admin-password:
+	@SECRET=$${ADMIN_SECRET_NAME:-wordpress-admin}; \
+	PASS=$$(kubectl get secret $${SECRET} -n $(NAMESPACE) -o jsonpath='{.data.password}' 2>/dev/null | base64 -d); \
+	if [ -z "$$PASS" ]; then echo "ERROR: no password found in Secret $${SECRET} (namespace $(NAMESPACE))" >&2; exit 1; fi; \
+	echo "admin user: $(WP_ADMIN_USER)"; \
+	echo "admin pass: $$PASS"; \
+	echo "(from Secret $${SECRET} - local development only; never commit this value)"
 
 wp-logs:
 	kubectl logs -n $(NAMESPACE) -l app=wp-setup --tail=100 2>&1 | tail -n 100; echo "---"; kubectl logs -n $(NAMESPACE) job/$(RELEASE)-wp-setup --tail=100 2>&1 | tail -n 100 || true

@@ -117,8 +117,14 @@ wpSetup:
     repository: wordpress
     tag: cli-php8.2
     pullPolicy: IfNotPresent
+  # No password value lives in any values file (the brief forbids committed secrets).
+  # Admin credentials come from the `wordpress-admin` Secret, which the chart creates on
+  # install with a random password (randAlphaNum 24) and then reuses forever afterwards.
+  # Print it for local use with `make admin-password`.
   adminUser: admin
-  adminPassword: "admin123"  # overridden via Secret on prod; safe for local dev only
+  # Optional prod override: name of a pre-created Secret (key `password`) that already holds
+  # the admin password. When set, the chart does NOT render its own `wordpress-admin` Secret.
+  existingAdminSecret: ""
   adminEmail: admin@example.com
   title: "Urumi Store"
   # WooCommerce pinned to a release compatible with the WordPress image above

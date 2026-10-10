@@ -6,6 +6,49 @@
 
 ---
 
+## ADR-019 — The WordPress admin password is chart-generated, never committed
+
+**Date:** 2026-10-10
+**Context:** `values.yaml` carried a hardcoded `wpSetup.adminPassword` default. That is a committed
+secret (forbidden by the brief, and found by any reader who greps the repository), and it is
+a *known* login for a store that is reachable through an Ingress — on the VPS that is a
+publicly guessable admin account. The same file also implied the value could be "overridden
+via Secret on prod" while no such Secret mechanism existed, so the comment was aspirational.
+Separately, a recycled PVC could hold a password from an earlier run, so even a
+non-committed default was no guarantee the chart was authoritative.
+
+**Decision:** follow ADR-015/016 exactly.
+- `helm/values.yaml` keeps only `adminUser` and a new optional `existingAdminSecret`; there
+  is **no password value in any values file**.
+- `helm/templates/secrets.yaml` renders a `wordpress-admin` Secret (key `password`)
+  **unconditionally** (so Helm can never delete it the way it deleted the DB Secrets in
+  ADR-016), reuses an existing value through `lookup`, and only calls `randAlphaNum 24` when
+  the Secret does not exist. `helm.sh/resource-policy: keep` protects it on uninstall.
+- The `wp-setup` Job reads the password from that Secret via a `secretKeyRef` env var
+  (`WORDPRESS_ADMIN_PASSWORD`) and uses it for `wp core install` and the
+  `wp user create/update` sync. It is never rendered into the manifest, never echoed, and the
+  script has no `set -x` — verified by grepping the pod logs.
+- `wpSetup.existingAdminSecret` lets prod point at an operator-created Secret instead; the
+  chart then renders no Secret of its own and reads the password from that one.
+- `make admin-password` is the ONLY place the value is printed, and only on an explicit
+  local request.
+
+**Rejected alternatives:**
+- *Keep a static default* (a "well-known dev password"): it is a committed secret and, once
+  the store sits behind a real domain, a publicly known admin login. Failures like
+  "admin login rejected" also cost far more time than `make admin-password` takes.
+- *User supplies `--set wpSetup.adminPassword=...` only*: easy to forget (and it silently
+  lands in the release record, which `helm get values` prints), gives no reproducible demo
+  login, and cannot be validated on install. The Secret generated at install gives both
+  reproducibility and a value that is never in a tracked file.
+
+**Verified:** `make lint` (both profiles) and 5 rendered Secrets; two consecutive
+`helm upgrade`s leave the admin password byte-identical (sha256 compared, never printed);
+a login with the old default is rejected while `make admin-password` succeeds; the
+cluster-wide grep for every previously committed password string is empty.
+
+---
+
 ## ADR-018 — A bare `secrets.yaml` ignore rule hid the Secrets template
 
 **Date:** 2026-10-10

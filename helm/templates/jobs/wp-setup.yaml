@@ -153,7 +153,7 @@ spec:
                     --url="$STORE_URL" \
                     --title={{ .Values.wpSetup.title | quote }} \
                     --admin_user="$ADMIN_USER" \
-                    --admin_password={{ .Values.wpSetup.adminPassword | quote }} \
+                    --admin_password="$WORDPRESS_ADMIN_PASSWORD" \
                     --admin_email="$ADMIN_EMAIL" 2>&1; then
                     echo "WP core installed"
                     break
@@ -165,13 +165,16 @@ spec:
               wp core is-installed --allow-root --path=$WP_PATH
               echo "WP installed verified."
 
-              # --- Keep admin credentials in sync with values.yaml (source of truth) ---
-              # A pre-existing DB (recycled PVC) can hold a password set by an earlier run.
-              echo "Syncing admin user/password with values.yaml..."
+              # --- Keep admin credentials in sync with the Secret (source of truth) ---
+              # The password comes from the `wordpress-admin` Secret (or `existingAdminSecret`)
+              # as an env var, so this run can never drift from it the way a values-file
+              # default could. A recycled PVC can still hold an older password, hence the sync.
+              # NOTE: never echo the password, and there is deliberately no `set -x` here.
+              echo "Syncing admin user/password from the chart Secret..."
               wp user get "$ADMIN_USER" --allow-root --path=$WP_PATH >/dev/null 2>&1 || \
-                wp user create "$ADMIN_USER" "$ADMIN_EMAIL" --role=administrator --user_pass={{ .Values.wpSetup.adminPassword | quote }} --allow-root --path=$WP_PATH
-              wp user update "$ADMIN_USER" --user_pass={{ .Values.wpSetup.adminPassword | quote }} --allow-root --path=$WP_PATH
-              echo "Admin credentials synced."
+                wp user create "$ADMIN_USER" "$ADMIN_EMAIL" --role=administrator --user_pass="$WORDPRESS_ADMIN_PASSWORD" --allow-root --path=$WP_PATH
+              wp user update "$ADMIN_USER" --user_pass="$WORDPRESS_ADMIN_PASSWORD" --allow-root --path=$WP_PATH
+              echo "Admin credentials synced (password taken from the Secret, never logged)."
 
               # --- WooCommerce (pinned version for WP/PHP parity) ---
               echo "Ensuring WooCommerce ${WOO_WANT}..."
@@ -496,6 +499,15 @@ spec:
               valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_USER } }
             - name: WORDPRESS_DB_PASSWORD
               valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_PASSWORD } }
+            - name: WORDPRESS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.wpSetup.existingAdminSecret }}
+                  name: {{ .Values.wpSetup.existingAdminSecret | quote }}
+                  {{- else }}
+                  name: wordpress-admin
+                  {{- end }}
+                  key: password
             - name: COD_ENABLED
               value: {{ ternary "yes" "no" .Values.wpSetup.cod.enabled | quote }}
             - name: COD_TITLE
