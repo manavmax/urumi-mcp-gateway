@@ -6,6 +6,26 @@
 
 ---
 
+## ADR-018 — A bare `secrets.yaml` ignore rule hid the Secrets template
+
+**Date:** 2026-10-10
+**Context:** while preparing the first public push, `.gitignore` contained a bare
+`secrets.yaml` rule. Git matches such a rule in **any directory**, so
+`helm/templates/secrets.yaml` — the template that generates every credential Secret — was
+silently untracked in all commits. A fresh clone rendered a chart with **0 Secrets**, which
+would have shipped a Helm release where MariaDB/Wordpress/Postgres start with no database
+credentials at all. Nothing failed locally because Helm reads the working tree, not git.
+
+**Decision:** anchor the rules (`/secrets.yaml`, `/gateway-secrets.yaml`, …) and add
+`!.env.example` so the documented non-secret env template is tracked. Filenames were kept
+unchanged (no `git add -f`), so future edits can never be silently dropped again.
+
+**Verified:** `git check-ignore -v` on `helm/templates/secrets.yaml` and `.env.example`
+returns nothing, and a fresh `git clone` + `helm lint` + `helm template` renders **4
+Secrets** (`mariadb-secret`, `wordpress-secret`, `pg-secret`, `demo-notes-token`).
+
+---
+
 ## ADR-016 — A credential Secret is ALWAYS rendered; only its values are lookup-guarded
 
 **Date:** 2026-10-10
