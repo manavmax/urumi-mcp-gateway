@@ -1,0 +1,38 @@
+global:
+  domain: yourdomain.com  # override with real domain or <ip>.nip.io
+  ingressClass: nginx
+  storageClass: local-path  # k3s default; longhorn if installed
+  tlsEnabled: true
+
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    store: store.yourdomain.com
+    dashboard: dashboard.yourdomain.com
+  tls:
+    - secretName: urumi-tls
+      hosts: [store.yourdomain.com, dashboard.yourdomain.com]
+
+wordpress:
+  replicaCount: 1
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+mariadb:
+  storage: { size: 20Gi }
+  resources:
+    requests: { cpu: 300m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+postgres:
+  storage: { size: 10Gi }
+  resources:
+    requests: { cpu: 300m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+wpSetup:
+  enabled: true

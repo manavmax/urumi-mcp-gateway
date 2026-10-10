@@ -1,0 +1,19 @@
+{{- if .Values.demoTime.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-demo-time
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: demo-time
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.demoTime.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: demo-time
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

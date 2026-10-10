@@ -1,0 +1,19 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-dashboard
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.dashboard.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: dashboard
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

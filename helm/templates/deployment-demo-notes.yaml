@@ -1,0 +1,71 @@
+{{- if .Values.demoNotes.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "urumi.fullname" . }}-demo-notes
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: demo-notes
+    app.kubernetes.io/component: demo-notes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-notes
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: demo-notes
+        app.kubernetes.io/name: {{ include "urumi.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        tier: private
+    spec:
+      containers:
+        - name: demo-notes
+          image: "{{ .Values.demoNotes.image.repository }}:{{ .Values.demoNotes.image.tag }}"
+          imagePullPolicy: {{ .Values.demoNotes.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.demoNotes.port }}
+              name: http
+          env:
+            # Bearer token injected from the Secret (never from values at runtime).
+            - name: NOTES_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: demo-notes-token
+                  key: NOTES_API_TOKEN
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            # /readyz verifies the token is actually configured (503 otherwise).
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

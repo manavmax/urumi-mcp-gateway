@@ -1,0 +1,37 @@
+# Optional fast local loop WITHOUT Kubernetes (the chart is the real deployment).
+# No credential is committed here either: every password must be supplied via a local,
+# git-ignored `.env` file (copy `.env.example` and fill it in) — compose fails fast with
+# `${VAR:?message}` instead of silently using a default.
+name: urumi-dev
+services:
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set in .env}
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set in .env}
+    ports: ["3306:3306"]
+    volumes: [mariadb_data:/var/lib/mysql]
+  wordpress:
+    image: wordpress:6.6-php8.2-apache
+    depends_on: [mariadb]
+    ports: ["8080:80"]
+    environment:
+      WORDPRESS_DB_HOST: mariadb:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${MARIADB_PASSWORD:?set in .env}
+    volumes: [wp_content:/var/www/html/wp-content]
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: urumi
+      POSTGRES_USER: urumi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    ports: ["5432:5432"]
+    volumes: [pg_data:/var/lib/postgresql/data]
+volumes:
+  mariadb_data:
+  wp_content:
+  pg_data:

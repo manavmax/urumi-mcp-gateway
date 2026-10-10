@@ -1,0 +1,12 @@
+wooMcp:
+  # Local Kind: image built from src/woo-mcp and loaded into the node by
+  # `make woo-mcp-image` (imagePullPolicy Never => use the node copy).
+  image: { repository: urumi/woo-mcp, tag: "0.1.0", pullPolicy: Never }
+
+# Local Kind: the demo MCP images are built by `make demo-*-image` and imported into
+# the kind node, so use the node-local image with pullPolicy Never.
+demoTime:
+  image: { repository: urumi/demo-mcp-time, tag: "0.1.0", pullPolicy: Never }
+
+demoNotes:
+  image: { repository: urumi/demo-mcp-notes, tag: "0.1.0", pullPolicy: Never }

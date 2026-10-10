@@ -1,0 +1,64 @@
+{{- if .Values.demoTime.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "urumi.fullname" . }}-demo-time
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: demo-time
+    app.kubernetes.io/component: demo-time
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-time
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: demo-time
+        app.kubernetes.io/name: {{ include "urumi.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        tier: private
+    spec:
+      containers:
+        - name: demo-time
+          image: "{{ .Values.demoTime.image.repository }}:{{ .Values.demoTime.image.tag }}"
+          imagePullPolicy: {{ .Values.demoTime.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.demoTime.port }}
+              name: http
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+          # Same shape as woo-mcp: probe routes live in this app too.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

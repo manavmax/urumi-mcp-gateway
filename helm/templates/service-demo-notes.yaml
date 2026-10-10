@@ -1,0 +1,19 @@
+{{- if .Values.demoNotes.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-demo-notes
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: demo-notes
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.demoNotes.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: demo-notes
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

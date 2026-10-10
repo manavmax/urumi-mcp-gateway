@@ -1,0 +1,23 @@
+{{/*
+  Postgres uses StatefulSet volumeClaimTemplates (see statefulset-postgres.yaml).
+  Standalone PVC was duplicate — disabled unless explicitly requested via
+  postgres.persistence.enabled (legacy Deployment+PVC mode).
+*/}}
+{{- if and .Values.postgres.enabled .Values.postgres.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "urumi.fullname" . }}-pg-data
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.postgres.storage.size }}
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass | quote }}
+  {{- end }}
+{{- end }}

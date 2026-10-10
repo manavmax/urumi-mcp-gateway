@@ -1,0 +1,14 @@
+apiVersion: v2
+name: urumi
+description: Urumi MCP Gateway — WooCommerce hosting + Team MCP Gateway on Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - woocommerce
+  - wordpress
+  - mcp
+  - gateway
+home: https://github.com/urumi-ai/mcp-gateway
+maintainers:
+  - name: Manav Sharma

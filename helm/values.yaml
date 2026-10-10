@@ -1,0 +1,137 @@
+global:
+  domain: 127.0.0.1.nip.io
+  ingressClass: nginx
+  storageClass: standard  # kind: standard, k3d/k3s: local-path
+  tlsEnabled: false
+  # Node network CIDR (kind: 172.18.0.0/16, k3s: 10.42.0.0/16). Needed because
+  # in-cluster traffic to the API ClusterIP (kubernetes.default.svc) is DNAT-ed to a
+  # node IP, so egress policies must allow this range on 443/6443.
+  nodeCIDR: 172.18.0.0/16
+
+ingress:
+  enabled: true
+  annotations: {}
+  hosts:
+    store: store.127.0.0.1.nip.io
+    dashboard: dashboard.127.0.0.1.nip.io
+  tls: []
+
+# --- WordPress + WooCommerce ---
+wordpress:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: wordpress
+    tag: 6.6-php8.2-apache
+    pullPolicy: IfNotPresent
+  service:
+    port: 80
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  persistence:
+    enabled: true
+    size: 5Gi
+    # storageClassName overridden via global.storageClass
+
+mariadb:
+  enabled: true
+  image:
+    repository: mariadb
+    tag: "11.4"
+    pullPolicy: IfNotPresent
+  port: 3306
+  database: wordpress
+  user: wordpress
+  # rootPassword/password are NOT in values: the chart generates them on install
+  # (randAlphaNum 24) into the mariadb-secret Secret and reuses them afterwards.
+  # Pre-create the Secret to supply your own: MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD.
+  storage:
+    size: 10Gi
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# Postgres for gateway state (users/keys/servers/audit)
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  port: 5432
+  database: urumi
+  user: urumi
+  # password is NOT in values: generated on install into the pg-secret Secret.
+  storage:
+    size: 5Gi
+  persistence:
+    enabled: false  # false = StatefulSet volumeClaimTemplates; true = standalone PVC (legacy)
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# Placeholders — not deployed in Day 1-2 but present for helm lint
+gateway:
+  enabled: false
+  image: { repository: ghcr.io/urumi/gateway, tag: "0.1.0", pullPolicy: IfNotPresent }
+  port: 8000
+
+wooMcp:
+  # Layer 2. For local Kind the image is built and loaded into the node
+  # (`make woo-mcp-image`); for VPS/prod use the ghcr.io registry and keep this true.
+  enabled: true
+  image: { repository: ghcr.io/urumi/woo-mcp, tag: "0.1.0", pullPolicy: IfNotPresent }
+  port: 8000
+
+dashboard:
+  enabled: false
+  image: { repository: ghcr.io/urumi/dashboard, tag: "0.1.0", pullPolicy: IfNotPresent }
+  port: 80
+
+# Extra demo upstreams (Roadmap Day 5-7 "seed 2nd/3rd servers"). They are full MCP
+# servers in their own right so the gateway can prove aggregation, prefixing and
+# credential injection rather than mocking them.
+demoTime:
+  enabled: true
+  image: { repository: ghcr.io/urumi/demo-mcp-time, tag: "0.1.0", pullPolicy: IfNotPresent }
+  port: 8000
+
+demoNotes:
+  enabled: true
+  image: { repository: ghcr.io/urumi/demo-mcp-notes, tag: "0.1.0", pullPolicy: IfNotPresent }
+  port: 8000
+  # The bearer token is NEVER stored in values (the brief forbids hardcoded secrets).
+  # On install the chart creates the `demo-notes-token` Secret from a random token
+  # (randAlphaNum) when it does not exist; because a `lookup` guards creation, the same
+  # value is reused on every upgrade. Rotate by deleting the Secret and upgrading, or by
+  # pre-creating it with `kubectl create secret generic demo-notes-token
+  # --from-literal=NOTES_API_TOKEN=<token>` before the first install.
+
+networkPolicy:
+  enabled: true
+
+wpSetup:
+  enabled: true
+  image:
+    repository: wordpress
+    tag: cli-php8.2
+    pullPolicy: IfNotPresent
+  adminUser: admin
+  adminPassword: "admin123"  # overridden via Secret on prod; safe for local dev only
+  adminEmail: admin@example.com
+  title: "Urumi Store"
+  # WooCommerce pinned to a release compatible with the WordPress image above
+  # (wp plugin install from wordpress.org; new majors need newer WP/PHP).
+  wooVersion: "9.4.2"
+  # Cash on delivery gateway. The setup job writes the COMPLETE gateway settings
+  # (all form fields with WooCommerce defaults + these overrides) via
+  # WC_Payment_Gateways, the same shape WooCommerce writes on an admin save.
+  cod:
+    enabled: true
+    title: "Cash on delivery"
+    description: "Pay with cash upon delivery."
+    instructions: "Pay with cash upon delivery."
+
+nameOverride: ""
+fullnameOverride: ""

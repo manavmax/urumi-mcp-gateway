@@ -1,0 +1,19 @@
+{{- if .Values.wooMcp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-woo-mcp
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: woo-mcp
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.wooMcp.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: woo-mcp
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

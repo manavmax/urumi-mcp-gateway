@@ -1,0 +1,26 @@
+Urumi AI — {{ .Chart.Name }} {{ .Chart.Version }} installed.
+
+Namespace: {{ .Release.Namespace }}
+Store:     http://{{ .Values.ingress.hosts.store }}
+Dashboard: http://{{ .Values.ingress.hosts.dashboard }}{{ if .Values.global.tlsEnabled }} (TLS via {{ .Values.global.ingressClass }}){{- end }}
+
+Next:
+
+  # Secrets are lookup-guarded — pre-create for prod or let dev defaults apply:
+  kubectl get secrets -n {{ .Release.Namespace }} | grep -E "mariadb-secret|pg-secret|wordpress-secret|woo-secrets"
+
+  # Status
+  kubectl get pods,svc,ingress,pvc,jobs,networkpolicy -n {{ .Release.Namespace }}
+  kubectl logs -n {{ .Release.Namespace }} -l app=wp-setup --tail=100
+  kubectl logs -n {{ .Release.Namespace }} -l app=wordpress --tail=50
+
+  # Store check (Day 1-2 exit)
+  curl -s -H "Host: {{ .Values.ingress.hosts.store }}" http://localhost/ | head -n 20
+  # with ingress-nginx on Kind (NodePort/extraPortMappings):
+  curl -s http://{{ .Values.ingress.hosts.store }}/ | head -n 20
+
+  # Warranty: gateway/woo-mcp/dashboard disabled until Days 3-9
+  # Enable via values:
+  #   gateway.enabled: true  wooMcp.enabled: true  dashboard.enabled: true
+
+See docs/08_IMPLEMENTATION_ROADMAP.md and docs/06_KUBERNETES_AND_HELM.md

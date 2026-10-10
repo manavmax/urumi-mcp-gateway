@@ -1,0 +1,19 @@
+{{- if .Values.wordpress.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-wordpress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: wordpress
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: wordpress
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

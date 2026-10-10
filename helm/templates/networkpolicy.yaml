@@ -1,0 +1,291 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /* Default deny — blocks all pod ingress/egress by default; explicit allows below open what's needed */ -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-default-deny
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Only kube-dns may receive DNS — fixes prior open-to-world second egress rule
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-dns
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 9153
+        - protocol: TCP
+          port: 9153
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-ingress-to-public
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      tier: public
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 80
+        - port: 8000
+    # allow same-namespace probes / internal (kubelet, etc.)
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 80
+---
+# wordpress -> mariadb (DB ingress from wordpress + wp-setup job)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-wordpress-to-mariadb
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: mariadb
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: wordpress
+        - podSelector:
+            matchLabels:
+              app: wp-setup
+      ports:
+        - port: {{ .Values.mariadb.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-wordpress-egress-to-mariadb
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: wordpress
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mariadb
+      ports:
+        - port: {{ .Values.mariadb.port }}
+---
+# wp-setup job needs wordpress:80 + mariadb:3306 + DNS + HTTPS (plugin/theme download
+# from downloads.wordpress.org / api.wordpress.org). Egress is restricted to public
+# internet only — RFC1918 + metadata ranges are excluded, mirroring the SSRF posture.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-wp-setup-egress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: wp-setup
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: wordpress
+      ports:
+        - port: 80
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mariadb
+      ports:
+        - port: {{ .Values.mariadb.port }}
+    # K8s API server (kubernetes.default.svc, ClusterIP in the service CIDR) so the
+    # job can persist the generated Woo CK/CS into the woo-secrets Secret. The node
+    # CIDR is added because ClusterIP traffic is DNAT-ed to a node IP.
+    - to:
+        - ipBlock:
+            cidr: 10.96.0.0/12
+      ports:
+        - port: 443
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.global.nodeCIDR | quote }}
+      ports:
+        - port: 443
+        - port: 6443
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+      ports:
+        - port: 443
+        - port: 80
+    - to:
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - fc00::/7
+      ports:
+        - port: 443
+        - port: 80
+---
+# woo-mcp must reach the WordPress service (Woo REST) and DNS only — it has no
+# reason to talk to MariaDB, Postgres, the K8s API, or the internet at large.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-woo-mcp-egress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: woo-mcp
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: wordpress
+      ports:
+        - port: 80
+# woo-mcp must only ever be entered by the gateway (docs/03 §1) — ingress stays
+# covered by allow-gateway-to-woo-mcp above; no other ingress policy selects it.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-gateway-to-woo-mcp
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: woo-mcp
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - port: {{ .Values.wooMcp.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-gateway-egress-to-woo-mcp
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: woo-mcp
+      ports:
+        - port: {{ .Values.wooMcp.port }}
+{{- end }}
+---
+# --- Extra demo upstreams -------------------------------------------------------
+# Both are ClusterIP-only MCP servers whose ingress is restricted to the gateway,
+# exactly like woo-mcp. Neither needs Woo, the DBs, or the internet, so their
+# only egress is DNS.
+{{- if .Values.demoTime.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-gateway-to-demo-time
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-time
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - port: {{ .Values.demoTime.port }}
+{{- end }}
+{{- if .Values.demoNotes.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-gateway-to-demo-notes
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-notes
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - port: {{ .Values.demoNotes.port }}
+{{- end }}
+

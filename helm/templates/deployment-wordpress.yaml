@@ -1,0 +1,96 @@
+{{- if .Values.wordpress.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "urumi.fullname" . }}-wordpress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: wordpress
+    app.kubernetes.io/component: wordpress
+spec:
+  replicas: {{ .Values.wordpress.replicaCount }}
+  selector:
+    matchLabels:
+      app: wordpress
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: wordpress
+        app.kubernetes.io/name: {{ include "urumi.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        tier: public
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.36
+          command: ["sh", "-c", "chown -R 33:33 /var/www/html/wp-content 2>/dev/null || true; chmod -R 775 /var/www/html/wp-content 2>/dev/null || true"]
+          volumeMounts:
+            - name: wp-content
+              mountPath: /var/www/html/wp-content
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: true
+            capabilities: { add: ["CHOWN", "FOWNER"] }
+        - name: wait-for-db
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z {{ include "urumi.fullname" . }}-mariadb {{ .Values.mariadb.port }}; do echo waiting for mariadb; sleep 2; done; echo mariadb ready"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+      containers:
+        - name: wordpress
+          image: "{{ .Values.wordpress.image.repository }}:{{ .Values.wordpress.image.tag }}"
+          imagePullPolicy: {{ .Values.wordpress.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: WORDPRESS_DB_HOST
+              valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_HOST } }
+            - name: WORDPRESS_DB_NAME
+              valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_NAME } }
+            - name: WORDPRESS_DB_USER
+              valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_USER } }
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_PASSWORD } }
+            - name: WORDPRESS_TABLE_PREFIX
+              value: wp_
+          resources:
+            {{- toYaml .Values.wordpress.resources | nindent 12 }}
+          # NOTE: kubelet follows redirects; /wp-login.php 302s to /wp-admin/install.php,
+          # which takes ~6s on first PHP bootstrap. Use a static 200 endpoint for
+          # readiness/liveness so probes are fast, and give startup generous headroom.
+          startupProbe:
+            httpGet: { path: /wp-login.php, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 20      # cold PHP bootstrap of install redirect target
+            failureThreshold: 30    # ~150s grace
+          livenessProbe:
+            httpGet: { path: /readme.html, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readme.html, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 2
+          volumeMounts:
+            - name: wp-content
+              mountPath: /var/www/html/wp-content
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            capabilities: { add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"] }
+      volumes:
+        - name: wp-content
+          persistentVolumeClaim:
+            claimName: {{ include "urumi.fullname" . }}-wp-content
+{{- end }}

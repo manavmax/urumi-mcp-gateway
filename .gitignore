@@ -1,0 +1,53 @@
+# Secrets & env
+# NOTE: keep these rules ANCHORED or name-exact. A bare `secrets.yaml` rule matches in any
+# directory and silently swallowed helm/templates/secrets.yaml (the chart's credential
+# template), so a fresh clone rendered 0 Secrets. See docs/DECISIONS.md ADR-018.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+/secrets.yaml
+/gateway-secrets.yaml
+/woo-secrets.yaml
+/pg-secret.yaml
+/mariadb-secret.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Dashboard
+node_modules/
+dashboard/dist/
+dashboard/.vite/
+
+# Helm
+helm/charts/*.tgz
+helm/Chart.lock
+
+# Kube / local
+kubeconfig
+k3s.yaml
+kind-kubeconfig
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs & tmp
+*.log
+/tmp/
