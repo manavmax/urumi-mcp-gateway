@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     # ---- core ----
     database_url: str = "postgresql+asyncpg://urumi:urumi@localhost:5432/urumi"
     fernet_key: str = ""  # must be 44 urlsafe base64 chars; generated into gateway-secrets
+
+    # LLM wiring for the chat assistant (charts values gateway.llm.*). The key is a
+    # Secret reference (`gateway-llm`, or gateway.llm.existingSecret); the endpoint and
+    # model are plain values because they are not secrets.
     openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-4o-mini"
 
     # gateway administrator bootstrap (password comes from the chart-generated
     # `gateway-admin` Secret - never from a values file or a source default).
@@ -89,6 +95,8 @@ def get_settings() -> Settings:
         "FERNET_KEY": "fernet_key",
         "DATABASE_URL": "database_url",
         "OPENAI_API_KEY": "openai_api_key",
+        "OPENAI_BASE_URL": "openai_base_url",
+        "OPENAI_MODEL": "openai_model",
         "SESSION_SECRET": "session_secret",
         "GATEWAY_ADMIN_PASSWORD": "admin_password",
     }

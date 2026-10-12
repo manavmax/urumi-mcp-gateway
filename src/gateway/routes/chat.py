@@ -45,7 +45,7 @@ async def chat_completions(
     if not settings.openai_api_key:
         # Return non-SSE JSON so dashboard can show message without SSE parsing
         return JSONResponse(
-            {"content": "Chat is not configured: OPENAI_API_KEY is empty. Set it in the gateway-secrets Secret and restart the gateway.", "tool_calls": []}
+            {"content": "Chat is not configured: the gateway-llm Secret has an empty OPENAI_API_KEY. Put a real key in it (or set gateway.llm.existingSecret) and upgrade.", "tool_calls": []}
         )
 
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))

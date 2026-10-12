@@ -57,6 +57,34 @@ kubectl port-forward -n urumi svc/urumi-woo-mcp 8000:8000   # then connect to ht
 
 VPS is same `helm/` + `helm/values-prod.yaml` (domain, storageClass, TLS). See `docs/06_KUBERNETES_AND_HELM.md`.
 
+## Credentials & LLM wiring (no committed secrets)
+
+Every credential is chart-generated at install into a Secret (`lookup`-guarded, `helm.sh/resource-policy: keep`), never committed: `mariadb-secret`, `wordpress-secret`, `pg-secret`, `gateway-secrets`, `gateway-admin`, `gateway-llm`, `demo-notes-token`, `wordpress-admin`.
+
+```bash
+make admin-password            # WordPress admin (Secret wordpress-admin)
+make gateway-admin-password    # Gateway dashboard admin (Secret gateway-admin)
+kubectl get secret gateway-llm -n urumi -o jsonpath='{.data.OPENAI_API_KEY}' | base64 -d | wc -c   # length only, never print
+```
+
+The chat assistant's LLM endpoint is values, not code — `gateway.llm` in `helm/values.yaml`:
+
+| value | default | meaning |
+|---|---|---|
+| `gateway.llm.enabled` | `true` | injects `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` into the gateway pod |
+| `gateway.llm.baseUrl` | `https://api.openai.com/v1` | any OpenAI-compatible endpoint works (groq, together, vllm, ...) — no code change |
+| `gateway.llm.model` | `gpt-4o-mini` | model name passed to the chat completions call |
+| `gateway.llm.existingSecret` | `""` | optional prod override: name of a pre-created Secret holding key `OPENAI_API_KEY`; when set the chart renders no `gateway-llm` Secret |
+
+No API key is committed anywhere. The chart renders a `gateway-llm` Secret whose `OPENAI_API_KEY` is **empty until an operator supplies a real one** — deliberately not `randAlphaNum`, because a generated string is a guaranteed-invalid key and the honest failure is "chat is not configured" (ADR-022). Supply a key with:
+
+```bash
+kubectl -n urumi create secret generic gateway-llm --from-literal=OPENAI_API_KEY=sk-... --dry-run=client -o yaml | kubectl apply -f -
+make helm-local                               # the urumi.io/llm-secret-checksum annotation rolls the gateway pod
+```
+
+Point `gateway.llm.existingSecret` at your own pre-created Secret (key `OPENAI_API_KEY`) to skip the chart-rendered one entirely.
+
 ## Submission (when ready)
 
 - Demo video (chapters: design, K8s, MCP internals, security, chat, local→VPS) + GitHub repo → https://forms.gle/nftwgyNeenSDmiRb6

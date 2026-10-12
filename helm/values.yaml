@@ -79,6 +79,18 @@ gateway:
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
+  # LLM wiring for the chat assistant. No API key is ever committed here (the brief
+  # forbids committed secrets): the chart renders a `gateway-llm` Secret whose key
+  # OPENAI_API_KEY is looked up from the cluster and left EMPTY until an operator
+  # supplies a real key, so an unconfigured install says "chat is not configured"
+  # instead of failing on a fake credential (docs/DECISIONS.md ADR-022).
+  llm:
+    enabled: true
+    baseUrl: "https://api.openai.com/v1"
+    model: "gpt-4o-mini"
+    # Optional prod override: name of a pre-created Secret holding key OPENAI_API_KEY.
+    # When set, the chart does NOT render its own `gateway-llm` Secret.
+    existingSecret: ""
 
 wooMcp:
   # Layer 2. For local Kind the image is built and loaded into the node

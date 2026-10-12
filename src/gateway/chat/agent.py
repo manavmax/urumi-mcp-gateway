@@ -78,7 +78,7 @@ async def chat_loop(
     """
     settings = get_settings()
     if not settings.openai_api_key:
-        yield {"type": "text", "content": "Chat is not configured: OPENAI_API_KEY is empty. Set it in the gateway-secrets Secret and restart the gateway."}
+        yield {"type": "text", "content": "Chat is not configured: the gateway-llm Secret has an empty OPENAI_API_KEY. Put a real key in it (or set gateway.llm.existingSecret) and upgrade - urumi.io/llm-secret-checksum rolls the gateway pod for you."}
         return
 
     allowed_tools = await _get_allowed_tools(db)
@@ -89,7 +89,9 @@ async def chat_loop(
     try:
         from openai import AsyncOpenAI
 
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        # base_url lets any OpenAI-compatible endpoint (groq, together, vllm, ...) be used
+        # by editing gateway.llm.baseUrl - no code change and no new secret.
+        client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url or None)
     except Exception as exc:
         yield {"type": "text", "content": f"LLM client init failed: {exc}"}
         return
@@ -105,7 +107,7 @@ async def chat_loop(
         # Use non-streaming chat, then stream tokens pseudo? For simplicity we do non-stream.
         # We expose tokens as one chunk; SSE still shows tool chips progressively.
         kwargs: dict = {
-            "model": "gpt-4o-mini",
+            "model": settings.openai_model,
             "messages": messages,  # type: ignore[arg-type]
         }
         if openai_tools:

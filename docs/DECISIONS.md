@@ -6,6 +6,52 @@
 
 ---
 
+---
+
+## ADR-022 — The LLM endpoint is a value; the LLM key is an empty Secret until an operator fills it
+
+**Date:** 2026-10-12
+**Context:** the chat agent hardcoded `model: "gpt-4o-mini"`, never passed a `base_url`
+(any OpenAI-compatible endpoint was impossible without a code change), and read its key
+from a key on `gateway-secrets` that no process had ever populated. Switching provider or
+model meant editing source; supplying a key meant patching the catch-all gateway Secret.
+
+**Decision:** split endpoint, model and credential.
+- `gateway.llm.baseUrl` and `gateway.llm.model` are **plain values** (`OPENAI_BASE_URL`,
+  `OPENAI_MODEL` env): they are not secrets, so changing them is a reviewable values edit
+  instead of a Secret patch, and any OpenAI-compatible endpoint works with no code change.
+- `gateway.llm.existingSecret` lets prod point at an operator-created Secret (key
+  `OPENAI_API_KEY`); when set, the chart renders no Secret of its own — the same pattern as
+  `wpSetup.existingAdminSecret` (ADR-019).
+- The chart renders `gateway-llm` (key `OPENAI_API_KEY`) **unconditionally** with
+  `resource-policy: keep` and a lookup-guarded value, per the ADR-016 rule. But its
+  generated default is deliberately **empty**, not `randAlphaNum`: a generated string is a
+  *guaranteed invalid* API key, so manufacturing one would turn "chat is not configured"
+  (a clear message the app already has) into a confusing 401 from a fake credential. The
+  Secret still exists from install, so Helm can never delete it and filling it in later
+  needs no new resources.
+- The Deployment carries a `urumi.io/llm-secret-checksum` annotation (same mechanism as
+  ADR-021's gateway checksum): a `secretKeyRef` is resolved by the kubelet at container
+  start, so replacing the key would otherwise keep the old one until an unrelated rollout.
+
+**Rejected:** generating the key with `randAlphaNum` like every other Secret (a fake
+credential that fails 401 at first use); keeping `OPENAI_API_KEY` in `gateway-secrets`
+(a rotated chat key silently rolls — and can be confused with — the Fernet key and
+DATABASE_URL, and the empty key sat unconfigured since Day 5-7); a committed
+`gateway.llm.apiKey` value (that is exactly the committed secret the brief forbids).
+
+**Evidence:** `helm template` shows the Secret's *key names* only —
+`gateway-llm -> [OPENAI_API_KEY]` — and both lint profiles pass; the live Secret's value is
+empty until supplied, and the pod env carries `OPENAI_BASE_URL` / `OPENAI_MODEL` from
+values. One upgrade note for clusters that predate this change: Kubernetes strategic-merge
+patches never remove map keys that disappear from a template, so an upgraded cluster keeps
+the old **empty** `OPENAI_API_KEY` key on `gateway-secrets` until an operator drops it
+(`kubectl patch secret gateway-secrets -p '{"data":{"OPENAI_API_KEY":null}}'`) — fresh
+installs never have it, and the chart renders no such key.
+
+
+---
+
 ## ADR-021 — The gateway admin password is chart-generated, and rotated on start
 
 **Date:** 2026-10-12
