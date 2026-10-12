@@ -44,17 +44,22 @@
 - [x] Dashboard shell: React login + Servers page (list/add/edit/disable) + Members/Keys + Audit table (read-only first)
 - **Exit:** Inspector with gateway URL + user key shows aggregated tools from 3 servers; `tools/call woo__create_product` creates product; audit row appears
 
-> **Done 2026-10-12** — see `docs/05c_DAY_5-7_CHECKLIST.md` (verify-gateway: 19/19 PASS — handshake, 11-tool fan-out across 3 servers, 3-server routing, SSRF, audit).
+> **Done 2026-10-12** — see `docs/05c_DAY_5-7_CHECKLIST.md` (verify-gateway: 23/23 PASS — handshake, 11-tool fan-out across 3 servers, 3-server routing, admin login with the Secret password, SSRF, audit; plus 29 unit tests via `make test`).
 
 ## Days 8-9 — Chat Agent (Layer 4) + Dashboard Polish
 
-- [x] `src/gateway/chat/agent.py` — OpenAI `gpt-4o-mini` tool loop (8 iters, SSE stream), impersonates logged-in user
+- [x] `src/gateway/chat/agent.py` — OpenAI tool loop (8 iters, SSE stream), impersonates logged-in user; model + endpoint now come from `gateway.llm.*` values, not source
 - [x] `POST /api/chat/completions` (SSE) + React `Chat.tsx` (tokens + tool chips)
 - [x] RBAC filtering for chat tools + redaction + sanitization + system prompt
-- [x] Dashboard polish: status badges, tool drawers, key copy-once, audit filters, chat UX
+- [ ] Dashboard polish: status badges, tool drawers, key copy-once, audit filters, chat UX — pages ship, but this pass is not reviewed/demoed
 - **Exit:** Chat as User A "create product" + "what orders today?" shows tool chips + audit attribution
 
-> **Done as part of 05c above** — chat backend + SPA `Chat.tsx` already shipped and reachable via `dashboard.127.0.0.1.nip.io`; actual LLM streaming requires `OPENAI_API_KEY` in `gateway-secrets`.
+> **Code complete, exit criterion NOT demonstrated** — the chat endpoint answers
+> `200 {"content": "Chat is not configured …"}` (verified) because the chart deliberately
+> leaves the `gateway-llm` Secret's `OPENAI_API_KEY` empty until an operator supplies a
+> real key (ADR-022; it used to be documented as a key on `gateway-secrets`). The streaming
+> tool loop, tool chips and chat audit attribution have therefore never run end-to-end:
+> treat Days 8-9 as **code complete, demo pending**, not done.
 
 ## Day 10 — Hardening & K8s Polish
 

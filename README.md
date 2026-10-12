@@ -1,6 +1,6 @@
 # Urumi AI — MCP Gateway on Kubernetes (Brain Docs)
 
-> **Status:** Days 0-4 complete and verified live on Kind — store + MariaDB + Ingress + setup Job + Woo MCP server (Layer 2: 6 tools over Streamable HTTP, ClusterIP-only, gateway-only NetworkPolicy). See `docs/05a_DAY_0-2_CHECKLIST.md` and `docs/05b_DAY_3-4_CHECKLIST.md`. Gateway + dashboard next. Take-home due **26 Oct 2026, 11:59 PM IST**.
+> **Status:** Days 0-7 complete and verified live on Kind — store + MariaDB + Ingress + setup Job + Woo MCP server (Layer 2: 6 tools) **and Layer 3** (gateway + dashboard + 3-server `/mcp` aggregation, `verify-gateway` 23/23 PASS + `make test` 29 unit tests). Days 8-9 (chat exit demo) are code-complete but un-demonstrated: the LLM key is empty by design until an operator supplies one (ADR-022). Take-home due **26 Oct 2026, 11:59 PM IST**.
 
 ## What This Is
 

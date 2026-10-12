@@ -1,8 +1,11 @@
 # 05c — Day 5-7 Completion Checklist (Layer 3: Gateway + Dashboard + Chat)
 
-> **Status: DONE AND VERIFIED** on `kind-urumi` (helm release `urumi`, `deployed`, 2026-10-12).
+> **Status: gateway core DONE AND VERIFIED** on `kind-urumi` (helm release `urumi`, `deployed`, 2026-10-12).
 > Every check below was executed against the live cluster; nothing here is aspirational.
-> Gateway aggregates 3 upstreams (woo + time + notes), serves `/mcp`, serves `/api/*` for the dashboard, and runs the OpenAI chat loop.
+> Gateway aggregates 3 upstreams (woo + time + notes), serves `/mcp`, serves `/api/*` for the dashboard.
+> The OpenAI chat loop is **shipped but not exercised end-to-end**: the chart leaves the
+> `gateway-llm` Secret empty by design (ADR-022), so `/api/chat/completions` answers
+> `200 {"content": "Chat is not configured …"}` — streaming needs an operator key first (docs/08 Days 8-9).
 
 ## Exit criteria (from `docs/08_IMPLEMENTATION_ROADMAP.md` Days 5-7 / 8-9)
 
@@ -15,7 +18,7 @@
 - [x] `src/dashboard/` — React + Vite + TypeScript + React Router + TanStack Query
   - Pages: `Login`, `Servers` (table + status badge + tool drawer + add/edit + enable/disable), `Members` (users + keys create/copy-once/revoke), `Audit` (filterable), `Chat` (thread + tool chips + SSE)
   - `lib/api.ts` fetch wrapper (credentials:include, X-CSRF-Token), `lib/auth.tsx` session context
-- [x] `src/gateway/chat/` — OpenAI `gpt-4o-mini` tool loop (MAX_ITERS=8, MAX_TOOL_CALLS=20, SSE streaming) + `POST /api/chat/completions`
+- [x] `src/gateway/chat/` — OpenAI tool loop (MAX_ITERS=8, MAX_TOOL_CALLS=20, SSE streaming) + `POST /api/chat/completions`; model/base URL read from settings (`gateway.llm.*` values) — real-LLM streaming not yet exercised (empty key, ADR-022)
 - [x] NetworkPolicies: default-deny + allow-gateway-to-postgres/woo-mcp + allow-dashboard-to-gateway + etc (12 policies via `helm template`)
 - **Exit: Inspector with gateway URL + user Bearer key shows 11 aggregated tools from 3 servers; `tools/call woo__list_products/time__get_current_time/notes__list_notes` succeed; audit rows persist; SSRF 127.0.0.1 + private-net blocked**
 
@@ -56,16 +59,16 @@ src/dashboard/
   src/components/{ServerForm,StatusBadge,ToolDrawer,AuditTable,ChatMessage}.tsx
   src/lib/{api.ts,auth.tsx}
   vite.config.ts, nginx.conf, Dockerfile (node build -> nginx uid 101)
-scripts/verify-gateway.py   # 19 checks: handshake, 11-tool fan-out, 3-tool routing, RBAC/404, ping, SSRF, audit
+scripts/verify-gateway.py   # 23 checks: handshake, 11-tool fan-out, 3-server routing, admin login with the Secret password, SSRF, audit
 helm/values.yaml + values-local.yaml (gateway.enabled, dashboard.enabled, gateway.image, image.pullPolicy Never)
 helm/templates/{deployment-gateway,deployment-dashboard,service-gateway,service-dashboard,configmap-dashboard,ingress,secrets,networkpolicy}.yaml
 Makefile                    # gateway-image, dashboard-image, verify-gateway, verify-dashboard
 ```
 
 Key helm deltas from Layer 2:
-- `deployment-gateway.yaml`: `strategy: Recreate` (avoids Pending with dual-pods on single-node kind), cpu 100m request, env `SESSION_SECRET`, `NOTES_API_TOKEN`, secretKeyRef for `DATABASE_URL`/`FERNET_KEY`
+- `deployment-gateway.yaml`: `strategy: Recreate` (avoids Pending with dual-pods on single-node kind), cpu 50m request (local), env `GATEWAY_ADMIN_PASSWORD` (Secret `gateway-admin`) + `NOTES_API_TOKEN`, secretKeyRef for `DATABASE_URL`/`FERNET_KEY`/`SESSION_SECRET` and `OPENAI_API_KEY` (Secret `gateway-llm`), plus `urumi.io/*-checksum` pod annotations so any rotated Secret rolls the pod
 - `deployment-dashboard.yaml`: `strategy: Recreate`, emptyDirs for `/tmp`, `/var/cache/nginx`, `/var/run`
-- `secrets.yaml`: `SESSION_SECRET` lookup-guarded; `demo-notes-token` retained
+- `secrets.yaml`: `SESSION_SECRET` lookup-guarded; `gateway-admin` (admin password, ADR-021) and `gateway-llm` (LLM key, ADR-022) always rendered; `demo-notes-token` retained
 - `networkpolicy.yaml`: 12 policies (`allow-gateway-to-postgres`, `allow-dashboard-to-gateway`, `allow-gateway-egress` bundle, `allow-woo-mcp-egress`, etc)
 - `ingress.yaml`: second host `dashboard.127.0.0.1.nip.io` → dashboard Service
 
@@ -79,16 +82,16 @@ Key helm deltas from Layer 2:
 kubectl exec -n urumi deploy/urumi-gateway -c gateway -- python3 -c "$(cat scripts/verify-gateway.py)"
 ```
 
-Actual run (2026-10-12, all 19 PASS):
+Actual run (2026-10-12, all 23 PASS):
 
 ```
-PASS  mcp unauth -> 401 (missing bearer) status=401
-PASS  GET /healthz 200
-PASS  GET /readyz 200
-PASS  initialize 200
+PASS  mcp unauth -> 401 (missing bearer) status=401 body={"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "missing bearer token"}}
+PASS  GET /healthz 200 {"status":"ok","service":"urumi-gateway","version":"1.0.0"}
+PASS  GET /readyz 200 {"status":"ready"}
+PASS  initialize 200 status=200
 PASS  initialize protocolVersion 2025-03-26
 PASS  initialize serverInfo gateway
-PASS  notifications/initialized 202
+PASS  notifications/initialized 202 status=202
 PASS  tools/list returns tools (non-empty) count=11
 PASS  tools/list includes woo__ prefix
 PASS  tools/list includes time__ prefix
@@ -98,10 +101,13 @@ PASS  gateway tools/call woo__list_products -> 200 + isError=false
 PASS  woo__list_products: not an auth/SSRF swallow (no WOO_AUTH_FAILED)
 PASS  gateway tools/call time__get_current_time -> result
 PASS  gateway tools/call notes__list_notes -> proxied
-PASS  unknown slug -> 4xx validation_error
-PASS  ping does not 500
+PASS  unknown slug -> 4xx validation_error (not silent success)
+PASS  ping (if implemented) does not 500
+PASS  admin login with the Secret password -> 200 (password from the Secret, never printed)
+PASS  login with a wrong password -> 401
+PASS  SSRF: anonymous POST /api/servers is rejected (401)
 PASS  SSRF: POST /api/servers with 127.0.0.1 must 400  {"detail":"Blocked IP: 127.0.0.1"}
-PASS  audit_log has rows after tools/call  count=19
+PASS  audit_log has rows after tools/call
 === FAILURES: none ===
 ```
 
@@ -136,7 +142,7 @@ create further ones that immediately appear on the storefront and in `wc/v3/prod
 - [x] No plaintext secrets in `helm template` output; `DATABASE_URL`/`FERNET_KEY`/`SESSION_SECRET` from Secret `gateway-secrets`; notes token from `demo-notes-token`
 - [x] Rate limit: per API key `60/min` (in-memory sliding window; 429 on clients — asserted via repeated pings in verify)
 - [x] Single-replica deployments set `strategy: Recreate` (single-node kind: RollingUpdate leaves two pods unschedulable → Pending; Recreate avoids the Pending trap)
-- [x] DB: `urumi-postgres-0` Ready; migrations auto-run on gateway boot (`upgrade(head)`); bootstrap seeded 3 servers + `admin@urumi.local`
+- [x] DB: `urumi-postgres-0` Ready; migrations auto-run on gateway boot (`upgrade(head)`); the lifespan seeds 3 servers and creates **or syncs** the `admin@urumi.local` row against the `gateway-admin` Secret value on every start (ADR-021 — and note the lifespan seeding was broken until the `select` shadowing bug was fixed there)
 
 ---
 
@@ -158,7 +164,7 @@ create further ones that immediately appear on the storefront and in `wc/v3/prod
 
 ## Left for later / notes for future self
 
-- **Chat operator needs `OPENAI_API_KEY`** in Secret `gateway-secrets` (key `OPENAI_API_KEY`) before `POST /api/chat/completions` streams anything; without it the gateway returns `200 {"content": "Chat is not configured …"}` so the dashboard shows a visible error rather than a blank spinner.
+- **Chat operator needs a real key in the `gateway-llm` Secret** (key `OPENAI_API_KEY`, or point `gateway.llm.existingSecret` at your own Secret) before `POST /api/chat/completions` streams anything; without it the gateway returns `200 {"content": "Chat is not configured …"}` so the dashboard shows a visible error rather than a blank spinner. Until then Days 8-9 remain code-complete with an un-demonstrated exit criterion (docs/08).
 - Directory `docs/screenshots/` is referenced by aspirational doc snippets — remove or populate before submission.
 - Global CORS is not needed (dashboard is served from the same Ingress on a second host); the vite `proxy` config in dev and the Ingress path routing in-cluster handle the rest.
 - `ws-reconnect.sh` / port-forward watchers still relevant if running outside Kind.
