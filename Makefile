@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard test
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -126,6 +126,18 @@ verify-gateway:
 	echo "== healthz/readyz =="; kubectl exec -n $(NAMESPACE) $$POD -c gateway -- sh -c 'curl -s http://127.0.0.1:8000/healthz; echo ""; curl -s http://127.0.0.1:8000/readyz; echo ""'; echo ""; \
 	echo "== MCP handshake via gateway (requires API key) =="; \
 	kubectl exec -n $(NAMESPACE) $$POD -c gateway -- python3 -c "$$(cat scripts/verify-gateway.py)" 2>&1 || echo "grep the FAILURES line above - gateway verification FAILED"
+
+# Unit tests for the gateway modules (docs/04): password hashing + verify-fails-closed,
+# tool namespacing/routing, timeout isolation + circuit breaker, RBAC/CSRF 403, audit
+# redaction. No cluster and no network needed. First run bootstraps ./.venv from
+# requirements-dev.txt (never shipped in the image, gitignored).
+test:
+	@if [ ! -x .venv/bin/pytest ]; then \
+		echo "bootstrapping .venv for the test suite (first run only)..."; \
+		python3 -m venv .venv; \
+		.venv/bin/pip install -q -r requirements-dev.txt; \
+	fi
+	cd src/gateway && ../../.venv/bin/python -m pytest tests -v
 
 # LOCAL USE ONLY - prints the gateway administrator password held in the chart-generated
 # `gateway-admin` Secret (never printed by any automated target, never written to a

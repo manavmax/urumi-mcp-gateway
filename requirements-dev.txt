@@ -1,0 +1,5 @@
+# Test-only dependencies layered on the gateway runtime pins (src/gateway/requirements.txt).
+# Installed into ./.venv by `make test` on first run; never shipped in the image.
+-r src/gateway/requirements.txt
+pytest==8.*
+pytest-asyncio==0.24.*

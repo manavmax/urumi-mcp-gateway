@@ -126,11 +126,12 @@ async def call_tool_routed(
         server.status = "Unreachable"
         server.last_error = "timeout"
         raise TimeoutError(f"Upstream {slug} timed out") from exc
-    except RuntimeError:
-        raise
     except ValueError:
         raise
     except Exception as exc:
+        # RuntimeError from the MCP/anyio transport counts as an upstream failure too:
+        # without this, a proxy that fails with RuntimeError would hammer a dead
+        # upstream forever without ever tripping the breaker (found by tests).
         breaker.record_failure(server.id)
         server.status = "Unreachable"
         server.last_error = str(exc)[:500]

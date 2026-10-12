@@ -8,6 +8,34 @@
 
 ---
 
+---
+
+## ADR-023 — Unit tests pin the docs/04 contracts; a blind spot in the breaker got fixed
+
+**Date:** 2026-10-12
+**Context:** item 5 of the review added a pytest suite (`make test`, `src/gateway/tests/`)
+covering the five core behaviours without a live cluster: password hashing
+(argon2id, verify fails closed on wrong/tampered/garbage hashes), tool namespacing
+(`slug__tool` split on the first `__`, unprefixed names rejected), timeout isolation (one
+slow upstream cannot block a healthy one; its own timeout + breaker are per server),
+RBAC/CSRF 403 paths, and the structural guarantee that audit rows can never carry tool
+arguments or credentials.
+
+**Found by the tests, then fixed:** `call_tool_routed` had a bare `except RuntimeError:
+raise` branch that re-raised transport failures (MCP/anyio raises `RuntimeError` from
+inside the SDK) *without* `breaker.record_failure` — a dead upstream that failed with
+`RuntimeError` would be hammered forever and the circuit would never open. The branch now
+falls into the generic failure path: breaker failure recorded, `status = "Unreachable"`,
+re-raised as `Upstream <slug> error: ...` (same exception type the JSON-RPC layer already
+mapped). `ValueError` stays a validation passthrough by design — unknown slug / disabled
+server are caller errors, not upstream health.
+
+**Evidence:** `make test` → 29 passed (hashing, namespacing, timeout isolation, breaker,
+RBAC/CSRF 403, audit redaction); `make verify-gateway` and `make verify-mcp` both
+`FAILURES: none` after the image rebuild.
+
+---
+
 ## ADR-022 — The LLM endpoint is a value; the LLM key is an empty Secret until an operator fills it
 
 **Date:** 2026-10-12
