@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     fernet_key: str = ""  # must be 44 urlsafe base64 chars; generated into gateway-secrets
     openai_api_key: str = ""
 
+    # gateway administrator bootstrap (password comes from the chart-generated
+    # `gateway-admin` Secret - never from a values file or a source default).
+    admin_email: str = "admin@urumi.local"
+    admin_password: str = ""  # empty => no bootstrap/sync, never a fallback password
+
     # session / CSRF (dashboard)
     session_secret: str = ""  # itsdangerous signer; defaults to fernet_key if empty
     session_cookie_name: str = "urumi_session"
@@ -85,6 +90,7 @@ def get_settings() -> Settings:
         "DATABASE_URL": "database_url",
         "OPENAI_API_KEY": "openai_api_key",
         "SESSION_SECRET": "session_secret",
+        "GATEWAY_ADMIN_PASSWORD": "admin_password",
     }
     for env_key, field in mapping.items():
         if env_key in os.environ and field not in os.environ:

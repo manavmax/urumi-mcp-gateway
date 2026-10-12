@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
 import uuid
@@ -23,6 +24,13 @@ import httpx
 
 BASE = "http://127.0.0.1:8000"
 FAILURES: list[str] = []
+
+# The dashboard admin password comes from the chart-generated `gateway-admin` Secret, which
+# the gateway pod receives as GATEWAY_ADMIN_PASSWORD. This script runs inside that pod
+# (kubectl exec), so it reads the same value the app does - there is no committed default
+# to fall back to, by design (docs/DECISIONS.md ADR-021).
+ADMIN_EMAIL = "admin@urumi.local"
+ADMIN_PASSWORD = os.environ.get("GATEWAY_ADMIN_PASSWORD", "")
 
 
 def check(label: str, cond: bool, detail: str = "") -> None:
@@ -207,33 +215,50 @@ async def main() -> int:
         r2 = await c.post(f"{BASE}/mcp", headers=h, json={"jsonrpc": "2.0", "id": 100, "method": "ping"})
         check("ping (if implemented) does not 500", r2.status_code in (200, 400), f"status={r2.status_code} {r2.text[:100]}")
 
+        # --- admin login: the Secret's password works, and a wrong password does not ---
+        # The password is only ever read from the in-pod env (the gateway-admin Secret), so
+        # this doubles as proof that no committed default is accepted any more. The rejected
+        # value is derived at runtime so it can never collide with the real one.
+        if not ADMIN_PASSWORD:
+            check("admin login (needs GATEWAY_ADMIN_PASSWORD in the pod env)", False,
+                  "GATEWAY_ADMIN_PASSWORD is empty - is the gateway-admin Secret mounted?")
+        else:
+            r = await c.post(f"{BASE}/api/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, headers={"Content-Type": "application/json"})
+            check("admin login with the Secret password -> 200", r.status_code == 200,
+                  f"status={r.status_code} (password from the Secret, never printed)")
+            wrong = ADMIN_PASSWORD + "-wrong"
+            bad = await c.post(f"{BASE}/api/auth/login", json={"email": ADMIN_EMAIL, "password": wrong}, headers={"Content-Type": "application/json"})
+            check("login with a wrong password -> 401", bad.status_code == 401,
+                  f"status={bad.status_code}")
+
         # --- SSRF deny (gateway-level): creating a server with 127.0.0.1 must be rejected ---
-        # Requires a session cookie, not an API key. Try anonymous first (expect 401), then mint a session cookie via login.
-        ssrf_probed = False
+        # Two separate probes, because session auth makes the "anonymous" case conditional:
+        # a client that already holds a session cookie is authenticated, not anonymous.
         try:
-            r = await c.post(f"{BASE}/api/servers", json={"slug": "ssrf-probe", "url": "http://127.0.0.1:8000/mcp"}, headers={"Content-Type": "application/json"})
-            if r.status_code == 401:
-                # log in to get a session cookie
-                r2 = await c.post(f"{BASE}/api/auth/login", json={"email": "admin@urumi.local", "password": "admin123"}, headers={"Content-Type": "application/json"})
-                if r2.status_code == 200:
-                    cookies = r2.cookies
+            ssrf_body = {"slug": "ssrf-probe", "url": "http://127.0.0.1:8000/mcp"}
+            # (a) a client with no session at all must never get past auth
+            async with httpx.AsyncClient(base_url=BASE, timeout=15) as anon:
+                r = await anon.post("/api/servers", json=ssrf_body, headers={"Content-Type": "application/json"})
+            check("SSRF: anonymous POST /api/servers is rejected", r.status_code in (401, 403), f"status={r.status_code} {r.text[:140]}")
+            # (b) a real admin session with the CSRF token the app hands out must reach the
+            # URL validator and be rejected there (proves the deny is not an auth artefact)
+            checked = False
+            if ADMIN_PASSWORD:
+                r2 = await c.post(f"{BASE}/api/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, headers={"Content-Type": "application/json"})
+                if r2.status_code != 200:
+                    check("SSRF probe: login to get session cookie", False, f"login status={r2.status_code} {r2.text[:140]}")
+                else:
                     csrf = r2.json().get("csrf_token") if r2.headers.get("content-type", "").startswith("application/json") else None
                     h2 = {"Content-Type": "application/json"}
                     if csrf:
                         h2["X-CSRF-Token"] = csrf
-                    r = await c.post(f"{BASE}/api/servers", json={"slug": "ssrf-probe", "url": "http://127.0.0.1:8000/mcp"}, headers=h2, cookies=cookies)
+                    r = await c.post(f"{BASE}/api/servers", json=ssrf_body, headers=h2, cookies=r2.cookies)
                     check("SSRF: POST /api/servers with 127.0.0.1 must 400", r.status_code == 400, r.text[:220])
-                    ssrf_probed = True
-                else:
-                    check("SSRF probe: login to get session cookie", False, f"login status={r2.status_code} {r2.text[:140]}")
-            else:
-                check("SSRF: POST /api/servers with 127.0.0.1 must 400", r.status_code == 400, r.text[:220])
-                ssrf_probed = True
+                    checked = True
+            if not checked:
+                check("SSRF probe: no session available to prove the deny", False, "GATEWAY_ADMIN_PASSWORD is empty")
         except Exception as exc:
             check("SSRF probe did not crash", False, str(exc))
-            ssrf_probed = True
-        if not ssrf_probed:
-            pass
 
         # --- audit row written (best-effort; allow flush interval) ---
         await asyncio.sleep(1.5)

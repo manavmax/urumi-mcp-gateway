@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 
 from contextlib import asynccontextmanager
@@ -16,11 +17,29 @@ from config import get_settings
 from db.session import get_session_factory
 from sqlalchemy import select, text
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}',
-)
+LOG_FORMAT = '{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}'
+
+
+def configure_logging():
+    """(Re-)install the gateway's own logging config.
+
+    Alembic's `Config(alembic.ini)` runs `logging.config.fileConfig()` on the ini's
+    [loggers] section, with `disable_existing_loggers=True`: it replaces the root
+    handler *and* sets `disabled=True` on the already-created "gateway" logger, so every
+    line logged after the migration is dropped - which is how a failing startup step once
+    went completely unnoticed. Re-applying after the upgrade keeps startup observable.
+    """
+    try:
+        level = getattr(logging, get_settings().log_level.upper(), logging.INFO)
+    except Exception:
+        level = logging.INFO
+    logging.basicConfig(level=level, format=LOG_FORMAT, force=True)
+    logger.disabled = False
+
+
 logger = logging.getLogger("gateway")
+
+configure_logging()
 
 # silence noisy mcp logs in gateway (we proxy, not serve FastMCP here)
 for _n in ("mcp.server.streamable_http", "mcp.server.streamable_http_manager"):
@@ -30,14 +49,13 @@ for _n in ("mcp.server.streamable_http", "mcp.server.streamable_http_manager"):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    logging.getLogger().setLevel(getattr(logging, settings.log_level.upper(), logging.INFO))
+    configure_logging()
     logger.info("gateway starting version=%s", settings.service_version)
 
     # Auto-migrate + seed on startup (K8s: gateway starts after postgres is ready)
     try:
         from alembic.config import Config
         from alembic import command
-        import os
 
         alembic_ini = os.path.join(os.path.dirname(__file__), "alembic.ini")
         if os.path.exists(alembic_ini):
@@ -49,11 +67,14 @@ async def lifespan(app: FastAPI):
             import asyncio as _asyncio
 
             await _asyncio.to_thread(command.upgrade, cfg, "head")
+            # alembic's fileConfig reconfigures logging: restore ours, or nothing logged
+            # from here on (seed errors included) is ever seen
+            configure_logging()
             logger.info("alembic upgrade head done")
     except Exception as exc:
         logger.warning("alembic upgrade failed (will retry on next start): %s", exc)
 
-    # seed default servers + admin user
+    # seed default servers + the administrator account
     try:
         factory = get_session_factory()
         async with factory() as db:
@@ -61,43 +82,58 @@ async def lifespan(app: FastAPI):
             from registry.crud import seed_default_servers
 
             await seed_default_servers(db)
-            # seed admin user if none exists
+            # seed / rotate the administrator. The password comes from the
+            # `gateway-admin` Secret (env GATEWAY_ADMIN_PASSWORD) which the chart generates
+            # at install (docs/DECISIONS.md ADR-019/021). There is deliberately no default
+            # in this file: an empty value skips the bootstrap instead of inventing a
+            # credential.
             from db.models import User
-            from auth.rbac import hash_password
+            from auth.rbac import hash_password, verify_password
 
-            res = await db.execute(select(User).where(User.email == "admin@urumi.local"))
-            if not res.scalars().first():
-                # create default admin: admin@urumi.local / admin123
-                # Password is for local dev; prod should create via API with proper password
-                pw = await hash_password("admin123")
-                u = User(email="admin@urumi.local", password_hash=pw, role="admin")
-                db.add(u)
-                logger.info("seeded default admin admin@urumi.local")
-            # also show count
+            res = await db.execute(select(User).where(User.email == settings.admin_email))
+            user = res.scalars().first()
+            if not settings.admin_password:
+                logger.warning(
+                    "GATEWAY_ADMIN_PASSWORD is not set: skipping admin bootstrap for %s "
+                    "(the chart always renders the gateway-admin Secret; read the value with "
+                    "'make gateway-admin-password')",
+                    settings.admin_email,
+                )
+            elif user is None:
+                pw = await hash_password(settings.admin_password)
+                db.add(User(email=settings.admin_email, password_hash=pw, role="admin"))
+                logger.info(
+                    "seeded administrator %s (password taken from the gateway-admin Secret)",
+                    settings.admin_email,
+                )
+            elif not await verify_password(user.password_hash, settings.admin_password):
+                # A database carried over from an earlier build can still hold a hash of
+                # the default that used to be committed in this file. The Secret is the
+                # source of truth, so rotate on start rather than leave a known credential
+                # on a dashboard that is reachable through the Ingress.
+                user.password_hash = await hash_password(settings.admin_password)
+                logger.info(
+                    "rotated the password for %s to the gateway-admin Secret value",
+                    settings.admin_email,
+                )
             await db.commit()
     except Exception as exc:
         logger.warning("seeding failed: %s", exc)
 
     # Notes token injection: if NOTES_API_TOKEN env present and notes server has no cred, set it
     try:
-        import os
-
         token = os.environ.get("NOTES_API_TOKEN") or os.environ.get("notes_api_token") or ""
         if token:
-            from sqlalchemy import select
+            from db.models import Server
+            from registry.crypto import encrypt
 
-            factory = get_session_factory()
-            async with factory() as db:
-                from db.models import Server
-                from registry.crypto import encrypt
-
-                res = await db.execute(select(Server).where(Server.slug == "notes"))
-                srv = res.scalars().first()
-                if srv and not srv.credential_encrypted:
-                    srv.credential_encrypted = encrypt(token)
-                    srv.auth_type = "bearer"
-                    await db.commit()
-                    logger.info("injected NOTES_API_TOKEN into notes server")
+            res = await db.execute(select(Server).where(Server.slug == "notes"))
+            srv = res.scalars().first()
+            if srv and not srv.credential_encrypted:
+                srv.credential_encrypted = encrypt(token)
+                srv.auth_type = "bearer"
+                await db.commit()
+                logger.info("injected NOTES_API_TOKEN into notes server")
     except Exception as exc:
         logger.warning("notes token injection failed: %s", exc)
 

@@ -6,6 +6,63 @@
 
 ---
 
+## ADR-021 — The gateway admin password is chart-generated, and rotated on start
+
+**Date:** 2026-10-12
+**Context:** `src/gateway/main.py` seeded `admin@urumi.local` with a password hardcoded in
+the source, and `scripts/verify-gateway.py` logged in with it. Two problems:
+1. It is a committed credential for the one account that can create API keys and reach
+   `/api/*`, on a dashboard that is exposed through the Ingress — exactly the same class of
+   issue ADR-019 removed for the WordPress admin.
+2. The seeding branch was `if not res.scalars().first()`, so it only ran on an empty
+   database. Any database carried over from that build kept its old hash forever, so even
+   removing the default would not have rotated a live deployment — the old password would
+   have kept working.
+
+**Decision:** apply the ADR-019 pattern to the gateway, plus a start-time sync.
+- `helm/templates/secrets.yaml` renders a `gateway-admin` Secret (key `password`)
+  **unconditionally**: the value is `lookup`-guarded so an upgrade is a no-op, and
+  `randAlphaNum 24` only fires when the Secret does not exist.
+  `helm.sh/resource-policy: keep` protects it on uninstall. No value is ever committed.
+- The Deployment injects it as `GATEWAY_ADMIN_PASSWORD` (required, not optional — the
+  chart always renders the Secret, and a missing Secret should be loud).
+- `main.py` bootstraps **and syncs**: absent row → create; present row whose hash does not
+  verify the Secret value → re-hash and write. That is what actually expires the old
+  credential. When the env var is empty the bootstrap is skipped with a warning instead of
+  inventing a password.
+- `make gateway-admin-password` reads the Secret the same way `make admin-password` does;
+  it is not called by any automated target.
+
+**Rejected:** a `values.yaml` default behind a `prod` flag — a committed secret with extra
+steps. Also rejected: rotating only when the row is missing (the old behaviour), because it
+leaves a known credential live.
+
+**Two bugs the rotation exercise found (both fixed in the same change):**
+1. `main.py`'s notes-token block re-ran `from sqlalchemy import select` inside
+   `lifespan`. Python binds function-local names at compile time, so the *module-level*
+   `select` that the seeding block uses became an unbound local: the whole seeding block
+   died with `UnboundLocalError` before it ever looked at the password. The admin seeding
+   has therefore never actually run since that import was added — the row in the database
+   came from an earlier build. This is exactly the "rotate only when missing" failure
+   ADR-021 exists to prevent, hiding behind a `try/except`.
+2. `command.upgrade(Config(alembic.ini))` reads the ini's `[loggers]` section, so
+   `logging.config.fileConfig()` runs with `disable_existing_loggers=True`: it replaces the
+   root handlers and sets `disabled=True` on the `gateway` logger, so **every** line logged
+   after the migration was dropped — including the `seeding failed: ...` warning that
+   reported bug 1. The startup log used to end after `Will assume transactional DDL.`,
+   which looked like a containerd truncation but was the logging being switched off.
+   `configure_logging()` now re-applies the gateway's own config after the upgrade, which
+   is what makes the `rotated the password for ...` line below verifiable.
+
+**Evidence:** grepping the tree for the retired default admin password (the same grep
+ADR-019 used for the WordPress one) returns nothing. Live proof: login with the
+Secret's password returns 200, a wrong password returns 401, and the Secret's stored value
+is byte-identical across two consecutive upgrades (the `lookup` guard). The gateway log line
+`rotated the password for admin@urumi.local ...` appears on the first start after the
+change, and `make verify-gateway` ends in `=== FAILURES: none ===`.
+
+---
+
 ## ADR-020 — The kind node's CPU *requests*, not slow setup, broke the wp-setup hook
 
 **Date:** 2026-10-12

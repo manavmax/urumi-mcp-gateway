@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-image dashboard-image verify-gateway verify-dashboard
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -125,7 +125,19 @@ verify-gateway:
 	echo "== gateway pod: $$POD =="; kubectl get pods -n $(NAMESPACE) -l app=gateway; echo ""; \
 	echo "== healthz/readyz =="; kubectl exec -n $(NAMESPACE) $$POD -c gateway -- sh -c 'curl -s http://127.0.0.1:8000/healthz; echo ""; curl -s http://127.0.0.1:8000/readyz; echo ""'; echo ""; \
 	echo "== MCP handshake via gateway (requires API key) =="; \
-	kubectl exec -n $(NAMESPACE) $$POD -c gateway -- python3 -c "$$(cat scripts/verify-gateway.py)" 2>&1 || echo "verify-gateway.py not yet written - run scripts/verify-gateway.py manually"
+	kubectl exec -n $(NAMESPACE) $$POD -c gateway -- python3 -c "$$(cat scripts/verify-gateway.py)" 2>&1 || echo "grep the FAILURES line above - gateway verification FAILED"
+
+# LOCAL USE ONLY - prints the gateway administrator password held in the chart-generated
+# `gateway-admin` Secret (never printed by any automated target, never written to a
+# committed file - docs/DECISIONS.md ADR-021). The gateway reads the same Secret as
+# GATEWAY_ADMIN_PASSWORD and syncs it to the admin row on every start, so this value is
+# always the one that works.
+gateway-admin-password:
+	@PASS=$$(kubectl get secret gateway-admin -n $(NAMESPACE) -o jsonpath='{.data.password}' 2>/dev/null | base64 -d); \
+	if [ -z "$$PASS" ]; then echo "ERROR: no password found in Secret gateway-admin (namespace $(NAMESPACE))" >&2; exit 1; fi; \
+	echo "admin email: $${GATEWAY_ADMIN_EMAIL:-admin@urumi.local}"; \
+	echo "admin pass:  $$PASS"; \
+	echo "(from Secret gateway-admin - local development only; never commit this value)"
 
 verify-dashboard:
 	@POD=$$(kubectl get pods -n $(NAMESPACE) -l app=dashboard -o jsonpath='{.items[0].metadata.name}'); \

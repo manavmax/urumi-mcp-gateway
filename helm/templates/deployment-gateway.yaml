@@ -61,6 +61,11 @@ spec:
               valueFrom: { secretKeyRef: { name: gateway-secrets, key: OPENAI_API_KEY, optional: true } }
             - name: NOTES_API_TOKEN
               valueFrom: { secretKeyRef: { name: demo-notes-token, key: NOTES_API_TOKEN, optional: true } }
+            # Gateway administrator bootstrap. Always present because the chart always
+            # renders the Secret (ADR-019); the gateway refuses to invent a password, so a
+            # missing key means "no admin bootstrap" instead of a committed default.
+            - name: GATEWAY_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: gateway-admin, key: password } }
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:
