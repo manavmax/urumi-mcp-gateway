@@ -6,6 +6,58 @@
 
 ---
 
+## ADR-020 — The kind node's CPU *requests*, not slow setup, broke the wp-setup hook
+
+**Date:** 2026-10-12
+**Symptom:** `make helm-local` failed at revisions 11–13 with
+`post-upgrade hooks failed: resource Job/urumi/urumi-wp-setup not ready ... context
+deadline exceeded`, after revisions 4–10 had passed.
+
+**Root cause (three independent checks):**
+1. `kubectl describe pod urumi-wp-setup-c869f` →
+   `FailedScheduling 0/1 nodes are available: 1 Insufficient cpu. preemption: 0/1 nodes
+   are available: 1 No preemption victims found`. The pod was **Pending for 109 minutes**
+   with a single `SuccessfulCreate` event — it was never *slow*, it was never *started*.
+2. Summing `resources.requests.cpu` of every non-terminal pod on the single node
+   `urumi-control-plane` gives **exactly 2000m = the node's allocatable 2 CPU**, so the
+   scheduler has zero headroom and refuses every pod that requests CPU.
+3. The hook itself is harmless — once scheduled it finishes in ~1m15s (captured live
+   during verification). The 11m52s runtime of the rev-13 job was ~10m35s of that job
+   waiting to be scheduled, not setup work.
+
+Contributing factor: the chart's own CPU requests grew as layers were added
+(rev 5 = store only; rev 11+ = store + postgres + gateway + woo-mcp + dashboard + two
+demo servers) until they filled the node exactly. The failure only appeared at the point
+the total crossed 100%, which is why revs 4–10 looked healthy and the outage looked
+intermittent.
+
+**Decision:**
+- `wp-setup` hook requests **no CPU, only memory** (`wpSetup.resources`), with the
+  previous 300m limit retained. A short-lived BestEffort-on-CPU hook cannot deadlock the
+  node it is meant to configure; the limit still bounds it.
+- `helm/values-local.yaml` re-sizes the chart's CPU requests for the 2-CPU kind node
+  (app footprint 1050m → 410m), leaving ~540m headroom so any pod recreated by an
+  upgrade or rollback can also schedule. **No limit changed**, so behaviour under load is
+  identical to prod.
+- Container `resources` moved from the templates into `values.yaml` (prod defaults are
+  byte-identical to the previous hard-coded ones) so local and prod can differ
+  legitimately instead of editing templates.
+- `make helm-local` timeout 8m → 15m: a full WooCommerce bootstrap legitimately takes
+  minutes on this node, and a too-small budget makes helm abandon a working hook.
+
+**Rejected:** raising only the timeout (the other term of the wait) — that converts the
+failure into a slow one and leaves the node unschedulable, which was proven when a
+post-fix `helm rollback` left the **gateway** pod Pending with the same
+`Insufficient cpu` error. Also rejected: `requests`-free everything (the DB workloads keep
+their requests so they get predictable shares).
+
+**Evidence:** two consecutive `make helm-local` runs (rev 16, rev 17) both `Upgrade
+complete`, the hook log captured live ending in `=== WP setup complete ===`, all 8 pods
+`1/1 Running`, and `make verify-store`, `verify-cod`, `verify-mcp`, `verify-demo`,
+`verify-gateway` all reporting `=== FAILURES: none ===`.
+
+---
+
 ## ADR-019 — The WordPress admin password is chart-generated, never committed
 
 **Date:** 2026-10-10

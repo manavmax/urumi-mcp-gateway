@@ -29,8 +29,7 @@ spec:
             - containerPort: {{ .Values.dashboard.port }}
               name: http
           resources:
-            requests: { cpu: 50m, memory: 64Mi }
-            limits: { cpu: 200m, memory: 128Mi }
+            {{- toYaml .Values.dashboard.resources | nindent 12 }}
           livenessProbe:
             httpGet: { path: /, port: http }
             initialDelaySeconds: 5

@@ -42,8 +42,7 @@ spec:
             - name: NOTES_API_TOKEN
               valueFrom: { secretKeyRef: { name: demo-notes-token, key: NOTES_API_TOKEN, optional: true } }
           resources:
-            requests: { cpu: 100m, memory: 128Mi }
-            limits: { cpu: 500m, memory: 512Mi }
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 15

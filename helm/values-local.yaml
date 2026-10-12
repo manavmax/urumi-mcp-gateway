@@ -1,20 +1,60 @@
 gateway:
   enabled: true
   image: { repository: urumi/gateway, tag: "0.1.0", pullPolicy: Never }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
 
 dashboard:
   enabled: true
   image: { repository: urumi/dashboard, tag: "0.1.0", pullPolicy: Never }
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
 
 wooMcp:
   # Local Kind: image built from src/woo-mcp and loaded into the node by
   # `make woo-mcp-image` (imagePullPolicy Never => use the node copy).
   image: { repository: urumi/woo-mcp, tag: "0.1.0", pullPolicy: Never }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 300m, memory: 256Mi }
 
 # Local Kind: the demo MCP images are built by `make demo-*-image` and imported into
 # the kind node, so use the node-local image with pullPolicy Never.
 demoTime:
   image: { repository: urumi/demo-mcp-time, tag: "0.1.0", pullPolicy: Never }
+  resources:
+    requests: { cpu: 20m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
 
 demoNotes:
   image: { repository: urumi/demo-mcp-notes, tag: "0.1.0", pullPolicy: Never }
+  resources:
+    requests: { cpu: 20m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+# --- Sizing for the 2-CPU kind node ---
+# `kind create` gives this node 2 allocatable cpu, and the workloads this chart does
+# NOT own (kube-apiserver, kube-controller-manager, kube-scheduler, etcd, 2x coredns,
+# kindnet, kube-proxy, the ingress controller and local-path-provisioner) already reserve
+# ~1050m of it. The prod defaults in values.yaml therefore overcommit the node: with the
+# full release the sum of cpu *requests* is exactly 2000m, so there is no headroom and
+# the scheduler refuses EVERY new pod - the wp-setup hook, and any deployment pod that is
+# recreated during an upgrade or rollback (both observed: `0/1 nodes are available:
+# 1 Insufficient cpu`). These requests keep the release schedulable with room to spare
+# while leaving every limit untouched, so behaviour under load is unchanged.
+wordpress:
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+mariadb:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+postgres:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }

@@ -26,8 +26,12 @@ lint:
 template:
 	helm template $(RELEASE) ./helm -n $(NAMESPACE) -f helm/values-local.yaml
 
+# The wp-setup hook is a full WordPress + WooCommerce bootstrap (core download, plugin
+# install, pages, COD settings, product seed, REST keypair). On the 2-CPU kind node that
+# takes several minutes, so the hook budget must be generous: a too-small --timeout makes
+# helm give up on a hook that is still working and report "context deadline exceeded".
 helm-local:
-	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-local.yaml --timeout 8m
+	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-local.yaml --timeout 15m
 
 # Rotate generated credentials: delete a Secret and let the chart generate a new one on
 # the next upgrade. For MariaDB/Postgres you MUST also delete the data PVC, because

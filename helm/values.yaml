@@ -76,6 +76,9 @@ gateway:
   enabled: false
   image: { repository: ghcr.io/urumi/gateway, tag: "0.1.0", pullPolicy: IfNotPresent }
   port: 8000
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
 
 wooMcp:
   # Layer 2. For local Kind the image is built and loaded into the node
@@ -83,11 +86,17 @@ wooMcp:
   enabled: true
   image: { repository: ghcr.io/urumi/woo-mcp, tag: "0.1.0", pullPolicy: IfNotPresent }
   port: 8000
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 300m, memory: 256Mi }
 
 dashboard:
   enabled: false
   image: { repository: ghcr.io/urumi/dashboard, tag: "0.1.0", pullPolicy: IfNotPresent }
   port: 80
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
 
 # Extra demo upstreams (Roadmap Day 5-7 "seed 2nd/3rd servers"). They are full MCP
 # servers in their own right so the gateway can prove aggregation, prefixing and
@@ -96,11 +105,17 @@ demoTime:
   enabled: true
   image: { repository: ghcr.io/urumi/demo-mcp-time, tag: "0.1.0", pullPolicy: IfNotPresent }
   port: 8000
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
 
 demoNotes:
   enabled: true
   image: { repository: ghcr.io/urumi/demo-mcp-notes, tag: "0.1.0", pullPolicy: IfNotPresent }
   port: 8000
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
   # The bearer token is NEVER stored in values (the brief forbids hardcoded secrets).
   # On install the chart creates the `demo-notes-token` Secret from a random token
   # (randAlphaNum) when it does not exist; because a `lookup` guards creation, the same
@@ -138,6 +153,15 @@ wpSetup:
     title: "Cash on delivery"
     description: "Pay with cash upon delivery."
     instructions: "Pay with cash upon delivery."
+  # Hook sizing. This pod deliberately requests NO cpu, only memory: the chart's
+  # other workloads plus the control plane already consume ~100% of the cpu
+  # *requests* on a small local node (see helm/values-local.yaml), so any cpu
+  # request here makes the pod unschedulable forever and the upgrade dies with
+  # "context deadline exceeded" while it waits for the hook Job. The limit still
+  # bounds the job when the node is idle. Prod can raise these.
+  resources:
+    requests: { memory: 128Mi }
+    limits: { cpu: 300m, memory: 512Mi }
 
 nameOverride: ""
 fullnameOverride: ""

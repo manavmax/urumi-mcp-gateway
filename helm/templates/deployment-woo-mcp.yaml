@@ -49,8 +49,7 @@ spec:
             - name: WOO_CONSUMER_SECRET
               valueFrom: { secretKeyRef: { name: woo-secrets, key: WOO_CONSUMER_SECRET } }
           resources:
-            requests: { cpu: 100m, memory: 128Mi }
-            limits: { cpu: 300m, memory: 256Mi }
+            {{- toYaml .Values.wooMcp.resources | nindent 12 }}
           livenessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 10

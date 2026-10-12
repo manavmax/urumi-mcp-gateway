@@ -29,8 +29,7 @@ spec:
             - containerPort: {{ .Values.demoTime.port }}
               name: http
           resources:
-            requests: { cpu: 50m, memory: 128Mi }
-            limits: { cpu: 200m, memory: 256Mi }
+            {{- toYaml .Values.demoTime.resources | nindent 12 }}
           # Same shape as woo-mcp: probe routes live in this app too.
           startupProbe:
             httpGet: { path: /healthz, port: http }
