@@ -87,6 +87,29 @@ def _to_openai_tools(tools: list[dict]) -> list[dict]:
     return out
 
 
+def _assistant_message_with_tool_calls(content: str, tool_calls) -> dict:
+    """Build the assistant message that echoes an assistant's tool_calls back to the LLM.
+
+    Gemini's OpenAI-compatible endpoint requires each echoed tool_call to carry back the
+    `extra_content` (google.thought_signature) or the follow-up request is rejected with
+    `400 "Function call is missing a thought_signature"`. extra_content is copied through
+    verbatim; for plain OpenAI endpoints it is simply absent and this is a no-op.
+    """
+    return {
+        "role": "assistant",
+        "content": content or "",
+        "tool_calls": [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                "extra_content": getattr(tc, "extra_content", None),
+            }
+            for tc in tool_calls
+        ],
+    }
+
+
 def _sanitize(text: str) -> str:
     from chat.sanitize import sanitize
 
@@ -175,16 +198,7 @@ async def chat_loop(
             return
 
         # Append assistant message with tool_calls
-        messages.append(
-            {
-                "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [
-                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in tool_calls
-                ],
-            }
-        )
+        messages.append(_assistant_message_with_tool_calls(msg.content or "", tool_calls))
 
         # Execute each tool call via gateway (audited as the chat user)
         for tc in tool_calls:
