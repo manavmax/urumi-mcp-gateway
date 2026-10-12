@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-image dashboard-image verify-gateway verify-dashboard
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -103,6 +103,31 @@ verify-demo:
 	echo ""; echo "== 401 without token (what the gateway will have to solve) =="; \
 	kubectl exec -n $(NAMESPACE) $$NOTES_POD -c demo-notes -- python3 -c "$$(cat scripts/verify-demo-notes-401.py)"; \
 	echo ""; echo "token used for authenticated checks: $${TOKEN%%????}... (full value stays in the Secret)"
+
+# Layer 3 — gateway + dashboard images (local Kind: build + import into node)
+gateway-image:
+	docker build -t urumi/gateway:0.1.0 src/gateway
+	docker save urumi/gateway:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	@echo "loaded urumi/gateway:0.1.0 into kind node"
+
+dashboard-image:
+	docker build -t urumi/dashboard:0.1.0 src/dashboard
+	docker save urumi/dashboard:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	@echo "loaded urumi/dashboard:0.1.0 into kind node"
+
+# Verify gateway: handshake, tools/list fan-out (3 servers), tools/call routing, SSRF deny, audit, RBAC
+verify-gateway:
+	@POD=$$(kubectl get pods -n $(NAMESPACE) -l app=gateway -o jsonpath='{.items[0].metadata.name}'); \
+	echo "== gateway pod: $$POD =="; kubectl get pods -n $(NAMESPACE) -l app=gateway; echo ""; \
+	echo "== healthz/readyz =="; kubectl exec -n $(NAMESPACE) $$POD -c gateway -- sh -c 'curl -s http://127.0.0.1:8000/healthz; echo ""; curl -s http://127.0.0.1:8000/readyz; echo ""'; echo ""; \
+	echo "== MCP handshake via gateway (requires API key) =="; \
+	kubectl exec -n $(NAMESPACE) $$POD -c gateway -- python3 -c "$$(cat scripts/verify-gateway.py)" 2>&1 || echo "verify-gateway.py not yet written - run scripts/verify-gateway.py manually"
+
+verify-dashboard:
+	@POD=$$(kubectl get pods -n $(NAMESPACE) -l app=dashboard -o jsonpath='{.items[0].metadata.name}'); \
+	echo "== dashboard pod: $$POD =="; kubectl get pods -n $(NAMESPACE) -l app=dashboard; echo ""; \
+	echo "== ingress hosts =="; kubectl get ingress -n $(NAMESPACE) -o jsonpath='{.items[0].spec.rules[*].host}'; echo ""; \
+	kubectl exec -n $(NAMESPACE) $$POD -c dashboard -- sh -c 'curl -s -o /dev/null -w "dashboard / -> %{http_code}\n" http://127.0.0.1:80/ 2>/dev/null || wget -qO- http://127.0.0.1:80/ 2>&1 | head -n 5'
 
 # LOCAL USE ONLY - prints the WordPress admin credentials held in the chart-generated
 # `wordpress-admin` Secret. Never printed by any automated target, and never written to a

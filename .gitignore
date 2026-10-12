@@ -27,8 +27,9 @@ venv/
 
 # Node / Dashboard
 node_modules/
-dashboard/dist/
-dashboard/.vite/
+src/dashboard/dist/
+src/dashboard/.vite/
+*.tsbuildinfo
 
 # Helm
 helm/charts/*.tgz

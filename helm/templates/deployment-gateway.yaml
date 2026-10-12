@@ -8,6 +8,8 @@ metadata:
     app: gateway
     app.kubernetes.io/component: gateway
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -33,10 +35,14 @@ spec:
               valueFrom: { secretKeyRef: { name: gateway-secrets, key: DATABASE_URL, optional: true } }
             - name: FERNET_KEY
               valueFrom: { secretKeyRef: { name: gateway-secrets, key: FERNET_KEY, optional: true } }
+            - name: SESSION_SECRET
+              valueFrom: { secretKeyRef: { name: gateway-secrets, key: SESSION_SECRET, optional: true } }
             - name: OPENAI_API_KEY
               valueFrom: { secretKeyRef: { name: gateway-secrets, key: OPENAI_API_KEY, optional: true } }
+            - name: NOTES_API_TOKEN
+              valueFrom: { secretKeyRef: { name: demo-notes-token, key: NOTES_API_TOKEN, optional: true } }
           resources:
-            requests: { cpu: 200m, memory: 256Mi }
+            requests: { cpu: 100m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
           livenessProbe:
             httpGet: { path: /healthz, port: http }
@@ -56,4 +62,10 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

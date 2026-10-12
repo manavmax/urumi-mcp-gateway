@@ -1,3 +1,11 @@
+gateway:
+  enabled: true
+  image: { repository: urumi/gateway, tag: "0.1.0", pullPolicy: Never }
+
+dashboard:
+  enabled: true
+  image: { repository: urumi/dashboard, tag: "0.1.0", pullPolicy: Never }
+
 wooMcp:
   # Local Kind: image built from src/woo-mcp and loaded into the node by
   # `make woo-mcp-image` (imagePullPolicy Never => use the node copy).

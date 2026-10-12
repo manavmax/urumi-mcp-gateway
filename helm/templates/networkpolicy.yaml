@@ -222,7 +222,27 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "urumi.fullname" . }}-allow-gateway-egress-to-woo-mcp
+  name: {{ include "urumi.fullname" . }}-allow-gateway-to-postgres
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - port: {{ .Values.postgres.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-gateway-egress
   labels:
     {{- include "urumi.labels" . | nindent 4 }}
 spec:
@@ -238,6 +258,24 @@ spec:
               app: woo-mcp
       ports:
         - port: {{ .Values.wooMcp.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: demo-time
+      ports:
+        - port: {{ .Values.demoTime.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: demo-notes
+      ports:
+        - port: {{ .Values.demoNotes.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: {{ .Values.postgres.port }}
 {{- end }}
 ---
 # --- Extra demo upstreams -------------------------------------------------------

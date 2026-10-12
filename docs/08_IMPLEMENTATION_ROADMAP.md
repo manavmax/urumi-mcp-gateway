@@ -36,21 +36,25 @@
 
 ## Days 5-7 — Gateway Core (Layer 3, hardest)
 
-- [ ] `src/gateway/` — FastAPI + PG + SQLAlchemy async + Alembic (`users, api_keys, servers, tools, audit_logs`)
-- [ ] Auth: API key generate/hash/verify/revoke + RBAC (admin/member) + session for dashboard
-- [ ] Registry CRUD: `POST /api/servers` with SSRF validator + Fernet encrypt; seed Woo-MCP on startup
-- [ ] MCP aggregation: `POST/GET /mcp` — `tools/list` fan-out (gather+timeout) + `tools/call` routing (prefix `slug__tool`) + audit queue
-- [ ] Health loop + circuit breaker + seeding 2nd/3rd servers (time + memory)
-- [ ] Dashboard shell: React login + Servers page (list/add/edit/disable) + Members/Keys + Audit table (read-only first)
+- [x] `src/gateway/` — FastAPI + PG + SQLAlchemy async + Alembic (`users, api_keys, servers, tools, audit_logs`)
+- [x] Auth: API key generate/hash/verify/revoke + RBAC (admin/member) + session for dashboard
+- [x] Registry CRUD: `POST /api/servers` with SSRF validator + Fernet encrypt; seed Woo-MCP on startup
+- [x] MCP aggregation: `POST/GET /mcp` — `tools/list` fan-out (gather+timeout) + `tools/call` routing (prefix `slug__tool`) + audit queue
+- [x] Health loop + circuit breaker + seeding 2nd/3rd servers (time + memory)
+- [x] Dashboard shell: React login + Servers page (list/add/edit/disable) + Members/Keys + Audit table (read-only first)
 - **Exit:** Inspector with gateway URL + user key shows aggregated tools from 3 servers; `tools/call woo__create_product` creates product; audit row appears
+
+> **Done 2026-10-12** — see `docs/05c_DAY_5-7_CHECKLIST.md` (verify-gateway: 19/19 PASS — handshake, 11-tool fan-out across 3 servers, 3-server routing, SSRF, audit).
 
 ## Days 8-9 — Chat Agent (Layer 4) + Dashboard Polish
 
-- [ ] `src/gateway/chat/agent.py` — OpenAI `gpt-4o-mini` tool loop (8 iters, SSE stream), impersonates logged-in user
-- [ ] `POST /api/chat/completions` (SSE) + React `Chat.tsx` (tokens + tool chips)
-- [ ] RBAC filtering for chat tools + redaction + sanitization + system prompt
-- [ ] Dashboard polish: status badges, tool drawers, key copy-once, audit filters, chat UX
+- [x] `src/gateway/chat/agent.py` — OpenAI `gpt-4o-mini` tool loop (8 iters, SSE stream), impersonates logged-in user
+- [x] `POST /api/chat/completions` (SSE) + React `Chat.tsx` (tokens + tool chips)
+- [x] RBAC filtering for chat tools + redaction + sanitization + system prompt
+- [x] Dashboard polish: status badges, tool drawers, key copy-once, audit filters, chat UX
 - **Exit:** Chat as User A "create product" + "what orders today?" shows tool chips + audit attribution
+
+> **Done as part of 05c above** — chat backend + SPA `Chat.tsx` already shipped and reachable via `dashboard.127.0.0.1.nip.io`; actual LLM streaming requires `OPENAI_API_KEY` in `gateway-secrets`.
 
 ## Day 10 — Hardening & K8s Polish
 
