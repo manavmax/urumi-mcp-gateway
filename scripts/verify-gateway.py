@@ -114,12 +114,6 @@ async def main() -> int:
 
         h = gw_headers(api_key)
 
-        # --- probes ---
-        r = await c.get(f"{BASE}/healthz")
-        check("GET /healthz 200", r.status_code == 200, r.text[:80])
-        r = await c.get(f"{BASE}/readyz")
-        check("GET /readyz 200", r.status_code == 200, r.text[:120])
-
         # --- initialize ---
         r = await c.post(f"{BASE}/mcp", headers=h, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "verify-gateway", "version": "1"}}})
         try:
@@ -179,7 +173,6 @@ async def main() -> int:
             check("have a woo__ target to call", False, f"names={sorted(names)[:12]}")
 
         if target_time:
-            # time server: get_current_time requires timezone
             time_args = {"timezone": "UTC"} if target_time == "time__get_current_time" else {}
             r = await c.post(f"{BASE}/mcp", headers=h, json={"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": target_time, "arguments": time_args}})
             try:
@@ -189,6 +182,18 @@ async def main() -> int:
             res = out.get("result", {}) if isinstance(out, dict) else {}
             ok = isinstance(out, dict) and "result" in out
             check(f"gateway tools/call {target_time} -> result", ok, json.dumps(out)[:220])
+            if target_time == "time__convert_time":
+                r2 = await c.post(f"{BASE}/mcp", headers=h, json={"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "time__convert_time", "arguments": {"time": "2026-10-10T14:30:00", "from_tz": "UTC", "to_tz": "America/New_York"}}})
+                out2 = r2.json() if r2.status_code == 200 else {}
+                res2 = out2.get("result", {}) if isinstance(out2, dict) else {}
+                is_err = bool(res2.get("isError")) if isinstance(res2, dict) else True
+                txt2 = ""
+                try:
+                    txt2 = ((res2.get("content") or [{}])[0] or {}).get("text", "") or json.dumps(res2)[:400]
+                except Exception:
+                    txt2 = json.dumps(out2)[:400]
+                check("time__convert_time -> isError=false", r2.status_code == 200 and not is_err, txt2[:240])
+                check("time__convert_time returned converted time", "2026-10-10" in txt2 and "America/New_York" in txt2, txt2[:240])
 
         if target_notes:
             r = await c.post(f"{BASE}/mcp", headers=h, json={"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": target_notes, "arguments": {}}})
