@@ -29,17 +29,58 @@ OVERALL_TIMEOUT = 60
 MAX_TOOL_OUTPUT = 20_000
 
 
+def _sanitize_llm_schema(schema):
+    """Reduce an MCP tool JSON Schema to the subset the common function-calling
+    dialect accepts, without changing what the tool means (docs/04 §6, docs/09).
+
+    Provider-neutral by design: it only removes constructs that several LLM tool-call
+    endpoints (notably Gemini's OpenAI-compatible endpoint) reject as malformed, and
+    leaves every meaningful keyword (enum, minimum/maximum, minLength/maxLength,
+    pattern, description, required) untouched:
+
+      - a literal {"type": "null"} branch inside `anyOf` is dropped. In every schema
+        this appears on an optional field (it is never in `required`), so the field
+        stays optional: the model simply omits it instead of passing null, which is
+        the exact same meaning the tool already assigns to null (`if x:` guards).
+      - the `const` keyword is dropped (not supported by the target dialect). For
+        `woo__list_orders.status` the free-string `const: "any"` branch is preserved
+        as a plain `{"type": "string"}` branch, so "any" stays an accepted value.
+      - if only one branch survives an `anyOf`, it is inlined; if none survive, the
+        `anyOf` is removed (field becomes a plain optional value).
+    """
+    if isinstance(schema, dict):
+        out: dict = {}
+        for k, v in schema.items():
+            if k == "const":
+                continue
+            if k == "anyOf":
+                cleaned = [_sanitize_llm_schema(b) for b in v if not (isinstance(b, dict) and b.get("type") == "null")]
+                if not cleaned:
+                    continue
+                if len(cleaned) == 1:
+                    out.update(cleaned[0])
+                else:
+                    out["anyOf"] = cleaned
+                continue
+            out[k] = _sanitize_llm_schema(v) if isinstance(v, (dict, list)) else v
+        return out
+    if isinstance(schema, list):
+        return [_sanitize_llm_schema(i) for i in schema]
+    return schema
+
+
 def _to_openai_tools(tools: list[dict]) -> list[dict]:
     out = []
     for t in tools:
-        schema = t.get("inputSchema") or {"type": "object", "properties": {}}
+        raw = t.get("inputSchema") or {"type": "object", "properties": {}}
+        schema = _sanitize_llm_schema(raw) if isinstance(raw, dict) else {"type": "object", "properties": {}}
         out.append(
             {
                 "type": "function",
                 "function": {
                     "name": t["name"],
                     "description": t.get("description", "")[:500],
-                    "parameters": schema if isinstance(schema, dict) else {"type": "object", "properties": {}},
+                    "parameters": schema,
                 },
             }
         )

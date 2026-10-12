@@ -4,6 +4,12 @@ gateway:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
+  llm:
+    # Gemini's OpenAI-compatible endpoint + a current flash model (local override only;
+    # prod stays whatever values.yaml sets). The key lives in the gateway-llm Secret,
+    # never here. The deployment passes these through as OPENAI_BASE_URL/OPENAI_MODEL.
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
+    model: "gemini-2.0-flash"
 
 dashboard:
   enabled: true
