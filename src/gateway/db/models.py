@@ -55,7 +55,9 @@ class ApiKey(Base):
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     prefix: Mapped[str] = mapped_column(Text, nullable=False, default="urumi_sk_")
-    hash: Mapped[str] = mapped_column(Text, nullable=False)  # argon2
+    # The ONLY stored credential material: sha256 hex digest of the raw key (64 chars).
+    # Looked up by digest and compared with hmac.compare_digest (auth/keys.py); the raw
+    # key is 256-bit random and shown once, so no slow KDF is warranted (ADR-025).
     sha256: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     last4: Mapped[str] = mapped_column(Text, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

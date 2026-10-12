@@ -35,7 +35,7 @@ src/dashboard/
 | Surface | Auth | Storage |
 |---|---|---|
 | Dashboard `/api/*` | Session cookie `HttpOnly, Secure, SameSite=Lax, __Host-` + `X-CSRF-Token` | `itsdangerous` signed cookie or JWT in PG session table |
-| Gateway `/mcp` | `Authorization: Bearer <api_key>` | `api_keys` table (argon2id) |
+| Gateway `/mcp` | `Authorization: Bearer <api_key>` | `api_keys` table (SHA-256 digest, ADR-025) |
 
 - Chat uses session (so audit ties to logged-in user).
 - MCP client uses API key (so audit ties to that key's user).

@@ -118,7 +118,7 @@ Layer 4: Chat Agent    — LLM tool loop via gateway, acting as logged-in user
 | Req | Answer |
 |---|---|
 | Roles: admin, member | `users.role` enum, RBAC middleware |
-| Per-user API keys, revocable, hashed | `api_keys` table, `argon2id` hash + `sha256` lookup, `revoked_at`, plaintext once |
+| Per-user API keys, revocable, hashed | `api_keys` table, SHA-256 digest only (64 hex, indexed) + `hmac.compare_digest`, `revoked_at`, plaintext once (ADR-025) |
 | Audit log (user, server, tool, ts, duration, outcome) | `audit_logs` partitioned table, async queue writer, dashboard query |
 
 ### 6.5 Chat Agent

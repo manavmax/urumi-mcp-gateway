@@ -6,7 +6,41 @@
 
 ---
 
-## ADR-024 — Passwords use argon2id; API keys store argon2id *and* a SHA-256 lookup column
+## ADR-025 — API keys store ONLY their SHA-256 digest; argon2id is for passwords only (supersedes ADR-024)
+
+**Date:** 2026-10-12
+**Supersedes:** the key half of ADR-024 (its password reasoning stands). The brief's
+scheme wins: **store only the SHA-256 hash of the key (64 hex chars), look the key up by
+that digest, and compare with `hmac.compare_digest`**. The `ApiKey.hash` argon2 column is
+dropped (alembic `002_api_keys_sha256_only`); argon2id remains for user passwords.
+
+**Why high-entropy keys do not need a slow hash:**
+- the raw key is `urumi_sk_` + 32 urlsafe bytes (2^256, uniform). Brute-forcing sha256
+  over that space is infeasible, so a memory-hard KDF adds no security on this path;
+- what the slow hash *does* do is cost latency on **every** `/mcp` call — the gateway's
+  hottest path. A password verifier wants exactly that cost (guesses must be expensive);
+  a 256-bit random key needs no stretching, so paying per request buys nothing and is a
+  self-DoS;
+- the lookup is `WHERE sha256 = <64 hex>` on a unique index; `hmac.compare_digest`
+  re-compares the digests in constant time before the revoked/expiry checks;
+- the raw key is shown once at creation and never stored, so nothing else leaks it.
+
+**Rejected:** keeping the argon2 column "for defense in depth" (two verifiers on the hot
+path — one of them eventually gets skipped, and the sha256 of a 256-bit key is not
+invertible in any realistic threat model, so the second check added only latency);
+storing the raw key (never); salted-sha256 passwords (GPU brute-forceable — argon2id
+stays there).
+
+**Evidence:** `make test` pins the contract (stored digest is 64 hex == sha256, the
+`hash` column is gone from the schema, digest mismatch fails closed, revocation takes
+effect on the very next call, key shown once and never persisted);
+`make verify-gateway` green; live API-key flow: create → 200 on `/mcp`, revoke → next
+call 401. Migration `002` drops the column; existing dev keys keep working and can be
+revoked/recreated.
+
+---
+
+## ADR-024 — Passwords use argon2id; API keys store argon2id *and* a SHA-256 lookup column [SUPERSEDED by ADR-025]
 
 **Date:** 2026-10-12
 **Context:** `auth.rbac.hash_password`/`verify_password` (users) and `auth.keys.hash_key`/

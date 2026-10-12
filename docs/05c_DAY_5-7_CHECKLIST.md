@@ -10,9 +10,9 @@
 ## Exit criteria (from `docs/08_IMPLEMENTATION_ROADMAP.md` Days 5-7 / 8-9)
 
 - [x] `src/gateway/` — FastAPI + asyncpg + SQLAlchemy async + Alembic
-  - Models: `users`, `api_keys` (argon2id + sha256), `servers`, `tools` (cached catalog), `audit_logs`, `permissions` (table present, enforcement is allow-all hook for now)
+  - Models: `users`, `api_keys` (SHA-256 digest only, ADR-025), `servers`, `tools` (cached catalog), `audit_logs`, `permissions` (table present, enforcement is allow-all hook for now)
   - `POST/GET /mcp` — Streamable HTTP: `initialize` / `notifications/initialized` / `tools/list` (fan-out) / `tools/call` (prefix routing) / `ping`
-  - Auth: argon2id API keys + RBAC `admin/member` (session cookie + CSRF for `/api/*`, Bearer for `/mcp`)
+  - Auth: SHA-256 API keys (digest lookup + `hmac.compare_digest`, ADR-025) + argon2id passwords + RBAC `admin/member` (session cookie + CSRF for `/api/*`, Bearer for `/mcp`)
   - Registry CRUD: `POST /api/servers` with full SSRF validator (scheme + literal-IP + DNS) + Fernet encrypt; seed `woo/time/notes` on startup
   - Health loop + circuit breaker (threshold 3, reset 60s) + audit queue (batch 100 / 1s)
 - [x] `src/dashboard/` — React + Vite + TypeScript + React Router + TanStack Query

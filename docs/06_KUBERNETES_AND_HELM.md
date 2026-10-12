@@ -253,7 +253,7 @@ resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 300m, memory: 25
     valueFrom: {secretKeyRef: {name: gateway-secrets, key: FERNET_KEY}}
   ```
 - **Never put `ck_xxx` in values.yaml.** Values have `secrets.create: false` and docs say `kubectl create secret ...`.
-- **Hashed API keys:** plain key never stored; only `argon2id` hash in PG.
+- **Hashed API keys:** plain key never stored; only its SHA-256 hex digest (64 chars) in PG, compared with `hmac.compare_digest` (argon2id stays for user passwords, ADR-025).
 - **`.gitignore`:** `.env`, `*.key`, `secrets.yaml`.
 
 ---

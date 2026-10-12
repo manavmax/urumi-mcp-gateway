@@ -6,7 +6,7 @@
 
 | Priority | Item | Effort | What to Build | Where to Find |
 |---|---|---|---|---|
-| **Must** | Security hardening (SSRF + NP + hashed keys) | Low | `registry/validator.py`, `NetworkPolicy`, `argon2id` | 04_GATEWAY_BACKEND, 07_SECURITY |
+| **Must** | Security hardening (SSRF + NP + hashed keys) | Low | `registry/validator.py`, `NetworkPolicy`, `sha256` keys + argon2id passwords | 04_GATEWAY_BACKEND, 07_SECURITY |
 | **Do** | VPS deployment (k3s) | Medium | Same chart on VPS, `values-prod.yaml`, TLS optional | 06_KUBERNETES |
 | **Do** | Tool permissions (per-role) | Low-Med | `permissions` table, `can_call` filter on list+call, UI matrix | 04_GATEWAY_BACKEND |
 | **Consider** | Many-tools handling (`search_tools`) | Mid | Meta-tool that searches catalog then executes | below |

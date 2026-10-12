@@ -34,7 +34,7 @@ src/gateway/
     models.py        # users, api_keys, servers, tools, audit_logs, permissions
     session.py       # async engine + SessionLocal
   auth/
-    keys.py          # generate, argon2id hash, sha256 lookup, verify, revoke
+    keys.py          # generate, sha256 digest (the only stored material), verify, revoke
     rbac.py          # require_admin, require_member dependencies
     session.py       # cookie session for dashboard (itsdangerous)
   registry/

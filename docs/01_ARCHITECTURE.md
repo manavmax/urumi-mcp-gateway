@@ -196,7 +196,7 @@ gateway/
   main.py              # FastAPI app, lifespan (health loop, audit worker)
   config.py            # pydantic-settings (DATABASE_URL, FERNET_KEY, LLM keys)
   db/                  # SQLAlchemy async models + Alembic
-  auth/                # API key hashing (argon2id), RBAC dependency, session
+  auth/                # API key hashing (sha256 digest), RBAC dependency, session (argon2id for passwords)
   registry/            # servers CRUD, SSRF validator, credential encryption
   mcp/                 # aggregation, routing, prefix collision, timeout/circuit breaker
   audit/               # async queue + writer
@@ -267,7 +267,7 @@ Namespace: urumi
 | MCP transport | Streamable HTTP (2025-03-26) | Spec current, single endpoint, JSON + SSE, SDK native |
 | Aggregation pattern | Prefix `slug__tool` | Deterministic, no collision, LLM-friendly, easy audit routing |
 | Timeout isolation | `httpx.Timeout` + `asyncio.wait_for(10s)` + `gather(return_exceptions)` | Dead server never blocks healthy; circuit breaker for repeated fails |
-| API key storage | `argon2id` hash + `sha256` lookup column | Hashed at rest, indexed lookup, constant-time verify |
+| API key storage | SHA-256 digest of the key (64 hex, indexed) | Raw key shown once, never stored; lookup by digest + `hmac.compare_digest`; no slow KDF (ADR-025). argon2id only for user passwords |
 | Credential encryption | Fernet (key from Secret, rotation via `key_id`) | Simple, at-rest encryption, never logged |
 | DB | Postgres + async SQLAlchemy | Concurrent audit, multi-replica safe, partitioning |
 | Chat LLM | OpenAI `gpt-4o-mini` (env switch to Anthropic/Ollama) | Cheap, tool calling mature, free tier suffices |
