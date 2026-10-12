@@ -276,6 +276,29 @@ spec:
               app: postgres
       ports:
         - port: {{ .Values.postgres.port }}
+{{- if .Values.gateway.llm.enabled }}
+    # Chat LLM (gateway.llm.*): the gateway must reach the configured LLM endpoint
+    # over HTTPS. Egress is restricted to public internet only — RFC1918 + metadata
+    # ranges are excluded, mirroring the SSRF posture in the wp-setup rule above.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+      ports:
+        - port: 443
+    - to:
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - fc00::/7
+      ports:
+        - port: 443
+{{- end }}
 {{- end }}
 ---
 # --- Extra demo upstreams -------------------------------------------------------
