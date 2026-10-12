@@ -1,4 +1,18 @@
 {{- if .Values.gateway.enabled }}
+{{- /* The gateway reads FERNET_KEY, SESSION_SECRET, DATABASE_URL and OPENAI_API_KEY from
+        the gateway-secrets Secret, and the demo-notes bearer token from demo-notes-token.
+        A secretKeyRef is resolved by the kubelet when the container starts, so editing a
+        Secret does NOT restart the pod: a rotated Fernet key would leave the gateway
+        unable to decrypt stored upstream credentials, and a rotated notes token would
+        make every notes__ call 401, until some unrelated rollout happened to replace the
+        pod. These checksums change only when the Secret's contents change, so the rotation
+        is what forces the restart - same mechanism as the woo-mcp checksum. */}}
+{{- $gwSecret := lookup "v1" "Secret" .Release.Namespace "gateway-secrets" }}
+{{- $gwChecksum := "" }}
+{{- if $gwSecret }}{{- $gwChecksum = ($gwSecret.data | default dict | toYaml | sha256sum) }}{{- end }}
+{{- $notesSecret := lookup "v1" "Secret" .Release.Namespace "demo-notes-token" }}
+{{- $notesChecksum := "" }}
+{{- if $notesSecret }}{{- $notesChecksum = (index ($notesSecret.data | default dict) "NOTES_API_TOKEN" | default "" | sha256sum) }}{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,6 +31,12 @@ spec:
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
+      annotations:
+        # Changes only when the gateway-secrets contents change -> forces a rollout so the
+        # pod always starts with the credentials that are actually in the Secret.
+        urumi.io/gateway-secret-checksum: {{ $gwChecksum }}
+        # Same for the notes bearer token, which the gateway injects on every notes__ call.
+        urumi.io/notes-token-checksum: {{ $notesChecksum }}
       labels:
         app: gateway
         app.kubernetes.io/name: {{ include "urumi.name" . }}
