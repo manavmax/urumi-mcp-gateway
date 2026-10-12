@@ -6,6 +6,77 @@
 
 ---
 
+## ADR-026 — Never `kubectl apply` the output of `helm template`: `lookup()` returns nothing there
+
+**Date:** 2026-10-12
+
+**Context:** an accidental `kubectl apply -f <(helm template …)` during the LLM bring-up.
+`helm template` renders with **no cluster connection**, so every `lookup` in
+`helm/templates/secrets.yaml` returns empty and every lookup-guarded value falls through
+to `randAlphaNum` — fresh randoms for `FERNET_KEY`, `SESSION_SECRET`, the MariaDB/Postgres
+passwords, the notes token and both admin passwords. The apply then **overwrote the live
+Secrets with those throwaway randoms** while the running pods kept the values they
+started with and the databases kept the passwords their volumes were initialised with.
+`helm upgrade` cannot repair this: `lookup` faithfully reuses whatever the Secret holds
+*now*, so the regenerated values become the new truth.
+
+**The only safe use of `helm template` output is reading it (lint, CI diff). To apply
+this chart, use `helm upgrade` (i.e. `make helm-local`) — it performs the real lookups
+and re-applies identical bytes.**
+
+What that one pipe actually cost, measured in the post-incident verification pass:
+- `gateway-llm` key wiped (empty) → chat dead until the operator re-set the key.
+- `pg-secret` vs `gateway-secrets(DATABASE_URL)` drift → the gateway could not
+  authenticate to Postgres; `mariadb-secret`/`wordpress-secret` regenerated → the
+  `wp-setup` hook failed with *"Error establishing a database connection"* and every
+  `helm upgrade` died at the post-upgrade hook.
+- **`FERNET_KEY` regenerated → the stored notes credential no longer decrypts
+  ("key mismatch")** → the notes server is `Unreachable` → **no `notes__` tools in the
+  gateway fan-out** → `make verify-gateway` fails the notes-prefix check. Note the trap:
+  secret value == pod env (the pod restarted *after* the regeneration), so a value
+  comparison looks healthy; only a functional check (a tool call through the gateway,
+  where the credential is actually decrypted) catches it.
+- `demo-notes-token` regenerated → Secret vs notes pod env MISMATCH. The pod still
+  accepts the original token (200) and rejects the Secret value (401) — again only
+  visible by probing, not by diffing values.
+
+**Detection recipe for this failure mode** (what the post-incident pass used): compare
+each Secret against (a) its consumer pod's env, and (b) a live login/call with the
+Secret's value — never trust (a) alone, and never only compare values. Proof that
+`helm upgrade` is idempotent for credentials: sha256 of every Secret was identical
+across two consecutive `make helm-local` runs (revs 38 → 39, and again post-fix).
+
+**The Fernet key must never be regenerated silently.** `FERNET_KEY` is not a session
+salt: it **encrypts the stored upstream credentials** (`servers.credential_encrypted`),
+so replacing it turns every existing credential into ciphertext that fails to decrypt —
+the notes server goes `Unreachable` and its tools silently disappear from the fan-out
+while the rest of the system looks healthy (woo/time use no stored credential, so only
+notes breaks). A `helm template | kubectl apply` regenerates it by construction, and
+**rotating the key on purpose means re-encrypting, not swapping**: decrypt every stored
+credential under the old key, then re-encrypt under the new one (that is a data
+migration, not a Secret patch).
+
+**Decision (the fix that came out of the incident):** the seeded internal upstreams
+(woo/time/notes) are treated as **authoritative from the environment/Secret**. On every
+gateway start, `registry/crud.resync_internal_credentials` re-applies the Secret-derived
+credential to those slugs, encrypted with the **current** Fernet key, logging only
+`re-synced credential for <slug>`. A credential that already matches is left
+byte-identical (no churn on ordinary restarts), and servers an admin added (any other
+slug) are never touched — an admin's own credential is theirs to manage. Combined with
+the secret-checksum annotations that roll a pod when its Secret changes (demo-notes
+`urumi.io/notes-secret-checksum`, gateway `urumi.io/notes-token-checksum`, woo-mcp
+`urumi.io/woo-secret-checksum`), a rotated token now converges on the next restart
+instead of 401-ing forever.
+
+**Evidence:** post-fix restart logged `re-synced credential for notes`; `servers` row
+went to `Connected` with a credential that decrypts under the current key; `tools/list`
+through the gateway returned **11 tools including the three `notes__`** and
+`notes__list_notes` succeeded; `make verify-gateway` green again. Unit tests pin the
+contract (`tests/test_internal_credential_resync.py`): re-encrypt on decrypt failure,
+no rewrite when the stored value already matches, admin-added servers untouched.
+
+---
+
 ## ADR-025 — API keys store ONLY their SHA-256 digest; argon2id is for passwords only (supersedes ADR-024)
 
 **Date:** 2026-10-12
