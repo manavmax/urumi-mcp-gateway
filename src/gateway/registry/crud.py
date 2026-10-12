@@ -140,21 +140,21 @@ async def set_server_status(db: AsyncSession, server_id: uuid.UUID, status: str,
     await db.flush()
 
 
+INTERNAL_DEFAULTS = [
+    {"slug": "woo", "url": "http://urumi-woo-mcp:8000/mcp", "auth_type": "none"},
+    {"slug": "time", "url": "http://urumi-demo-time:8000/mcp", "auth_type": "none"},
+    {"slug": "notes", "url": "http://urumi-demo-notes:8000/mcp", "auth_type": "bearer"},
+]
+
+
 async def seed_default_servers(db: AsyncSession):
     """Ensure woo-mcp + time + notes are present (idempotent).
 
-    Uses in-cluster DNS names; these match helm service names.
+    Uses in-cluster DNS names; these match helm service names. Credentials are NOT
+    seeded here: `resync_internal_credentials` applies the Secret/env value (encrypted
+    with the CURRENT Fernet key) on every start, so a rotated Secret or key self-heals.
     """
-    from config import get_settings
-    # Determine suffix-aware URLs — use full helm fullname pattern
-    # helm fullname is usually urumi (release) — services are urumi-*
-    # Support both urumi-* and bare names via env override if needed.
-    defaults = [
-        {"slug": "woo", "url": "http://urumi-woo-mcp:8000/mcp", "auth_type": "none"},
-        {"slug": "time", "url": "http://urumi-demo-time:8000/mcp", "auth_type": "none"},
-        {"slug": "notes", "url": "http://urumi-demo-notes:8000/mcp", "auth_type": "bearer"},
-    ]
-    for d in defaults:
+    for d in INTERNAL_DEFAULTS:
         existing = await get_server_by_slug(db, d["slug"])
         if not existing:
             try:
@@ -168,19 +168,63 @@ async def seed_default_servers(db: AsyncSession):
                     status="Unknown",
                     timeout_ms=10000,
                 )
-                # For notes, try to pull token from env/secret if available
-                if d["slug"] == "notes":
-                    token = (get_settings().openai_api_key or "")  # not correct; actually NOTES_API_TOKEN env
-                    # Try NOTES_API_TOKEN env
-                    import os
-
-                    notes_token = os.environ.get("NOTES_API_TOKEN") or os.environ.get("notes_api_token") or ""
-                    if notes_token:
-                        from registry.crypto import encrypt
-
-                        srv.credential_encrypted = encrypt(notes_token)
-                        srv.auth_type = "bearer"
                 db.add(srv)
             except Exception:
                 pass
     await db.flush()
+
+
+async def resync_internal_credentials(db: AsyncSession) -> list[str]:
+    """Re-apply the Secret/env credentials to the SEEDED internal servers (idempotent).
+
+    The seeded upstreams (woo/time/notes) are authoritative: their credential comes from
+    the environment/Secret, encrypted with the CURRENT Fernet key. A stored value that
+    was encrypted under a different key, or a Secret that rotated, is re-encrypted here
+    on start instead of failing every tool call with "failed to decrypt credential (key
+    mismatch)" - the drift an accidental `helm template | kubectl apply` causes
+    (docs/DECISIONS.md ADR-026). Servers an admin added (any slug outside the seed list)
+    are never touched, and the caller logs the slug only, never the value.
+
+    Returns the slugs whose stored credential changed.
+    """
+    import os
+
+    notes_token = os.environ.get("NOTES_API_TOKEN") or os.environ.get("notes_api_token") or ""
+    desired = {d["slug"]: (notes_token if d["slug"] == "notes" else "") for d in INTERNAL_DEFAULTS}
+
+    resynced: list[str] = []
+    for slug, want in desired.items():
+        if not want:
+            # nothing in the environment to enforce (or the server takes no auth):
+            # leave whatever is stored alone.
+            continue
+        srv = await get_server_by_slug(db, slug)
+        if not srv:
+            continue  # seeding runs first; a missing row is not a credential problem
+        if await _assure_credential(srv, want):
+            resynced.append(srv.slug)
+    if resynced:
+        await db.flush()
+    return resynced
+
+
+async def _assure_credential(srv: Server, want: str) -> bool:
+    """Make srv's stored credential decrypt to `want` under the current key.
+
+    Returns True when the row changed (the caller flushes and logs the slug only).
+    """
+    from registry.crypto import decrypt
+
+    current = None
+    if srv.credential_encrypted:
+        try:
+            current = decrypt(srv.credential_encrypted)
+        except ValueError:
+            current = None  # encrypted under a different key: re-encrypt below
+    if (current or None) == (want or None):
+        return False  # already the Secret's value under the current key: no churn
+    srv.credential_encrypted = encrypt(want) if want else None
+    if want:
+        srv.auth_type = "bearer"
+    srv.updated_at = datetime.now(timezone.utc)
+    return True

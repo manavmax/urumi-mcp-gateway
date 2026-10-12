@@ -54,6 +54,12 @@ class FakeDB:
             slug = None
         return FakeResult(self.servers.get(slug))
 
+    async def flush(self):
+        pass
+
+    async def commit(self):
+        pass
+
 
 def make_server(*, slug: str, enabled: bool = True, timeout_ms: int = 500):
     return SimpleNamespace(

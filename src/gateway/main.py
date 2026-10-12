@@ -79,9 +79,16 @@ async def lifespan(app: FastAPI):
         factory = get_session_factory()
         async with factory() as db:
             # seed servers
-            from registry.crud import seed_default_servers
+            from registry.crud import resync_internal_credentials, seed_default_servers
 
             await seed_default_servers(db)
+            # Seeded internal upstreams are authoritative: their credential comes from
+            # the environment/Secret, re-encrypted with the CURRENT Fernet key, so a
+            # rotated Secret or key self-heals on this start instead of failing every
+            # tool call with a key mismatch (docs/DECISIONS.md ADR-026). Admin-added
+            # servers are never touched; only the slug is logged, never the value.
+            for slug in await resync_internal_credentials(db):
+                logger.info("re-synced credential for %s", slug)
             # seed / rotate the administrator. The password comes from the
             # `gateway-admin` Secret (env GATEWAY_ADMIN_PASSWORD) which the chart generates
             # at install (docs/DECISIONS.md ADR-019/021). There is deliberately no default
@@ -119,23 +126,6 @@ async def lifespan(app: FastAPI):
             await db.commit()
     except Exception as exc:
         logger.warning("seeding failed: %s", exc)
-
-    # Notes token injection: if NOTES_API_TOKEN env present and notes server has no cred, set it
-    try:
-        token = os.environ.get("NOTES_API_TOKEN") or os.environ.get("notes_api_token") or ""
-        if token:
-            from db.models import Server
-            from registry.crypto import encrypt
-
-            res = await db.execute(select(Server).where(Server.slug == "notes"))
-            srv = res.scalars().first()
-            if srv and not srv.credential_encrypted:
-                srv.credential_encrypted = encrypt(token)
-                srv.auth_type = "bearer"
-                await db.commit()
-                logger.info("injected NOTES_API_TOKEN into notes server")
-    except Exception as exc:
-        logger.warning("notes token injection failed: %s", exc)
 
     # background tasks
     audit_task = None
