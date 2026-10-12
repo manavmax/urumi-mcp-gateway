@@ -6,7 +6,54 @@
 
 ---
 
----
+## ADR-024 — Passwords use argon2id; API keys store argon2id *and* a SHA-256 lookup column
+
+**Date:** 2026-10-12
+**Context:** `auth.rbac.hash_password`/`verify_password` (users) and `auth.keys.hash_key`/
+`verify_hash` (API keys) both hash with argon2id, yet `ApiKey` also stores a `sha256`
+hex digest column. Reviewer question: is that inconsistent? Should keys be "just SHA-256"
+or passwords "just SHA-256"?
+
+**Decision: keep argon2id for both, keep the extra sha256 column for keys only — they do
+different jobs.**
+
+- **User passwords are low-entropy, human-chosen.** An attacker who steals the DB gets
+  `admin@urumi.local`'s hash and can try every guess offline. argon2id is *designed* for
+  exactly this: memory-hard + GPU/ASIC-resistant + salted, with verification performed in
+  constant time, so a wrong guess costs the attacker real work and a stolen hash cannot be
+  re-verified faster than the defender's own check. `verify_password` is also fail-closed:
+  wrong, tampered or garbage hashes return `False`, never raise (pinned by tests).
+- **API keys are 256-bit random** (`secrets.token_urlsafe(32)`, prefix `urumi_sk_`). There
+  is nothing to brute-force — the key space is 2^256 and uniform — so a fast hash is not a
+  weakness here. But verification needs a *lookup*: `/mcp` authenticates every request by
+  finding the key row for the presented raw key. Argon2 hashes cannot serve as a lookup key
+  (each hash embeds a fresh random salt, so hashing the same raw key twice gives different
+  values — see the two-hashes-differ test). SHA-256 is deterministic, so
+  `WHERE sha256 = sha256(raw)` finds the row via a unique index in O(1), and the stored
+  argon2 hash is then verified once as the actual credential check.
+- Consequences of the split:
+  1. the `sha256` column alone is worthless to an attacker: inverting sha256 of a 256-bit
+     random key is infeasible, and `verify_api_key` still runs the argon2 check before
+     accepting, so a leaked `sha256` column alone grants nothing (pinned by
+     `test_sha256_lookup_hash_is_not_a_working_password`);
+  2. passwords get **no** sha256 column — there is no lookup need (login is by email), and
+     adding one would create a second, cheaper offline target for exactly the secret class
+     argon2id exists to protect;
+  3. keys are 43+ chars of uniform entropy, so timing-side-channel concerns that dominate
+     password comparison do not apply to the indexed equality match; the actual credential
+     comparison is argon2's constant-time verify.
+
+**Rejected:** hashing API keys with only sha256 (stateless lookup is faster, but then a
+database leak would expose keys that are trivially precomputed if a key ever had low
+entropy, and there is no second factor in the check); hashing passwords with plain
+sha256+salt (GPU brute-forceable, which is precisely what argon2id exists to prevent);
+looking keys up by scanning all rows and running argon2 per row (constant ~100ms per row
+times N rows on every `/mcp` call — a self-inflicted DoS).
+
+**Evidence:** `make test` pins the contract (`test_password_hashing.py`: argon2id prefix,
+salt uniqueness, fails-closed cases, `sha256 is not a working password`, key roundtrip);
+`auth/keys.verify_api_key` looks up by `ApiKey.sha256` (indexed) and then verifies the
+argon2 `hash` column — DB-dump-only attacks fail on the second step.
 
 ---
 
