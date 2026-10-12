@@ -1,4 +1,13 @@
 {{- if .Values.demoNotes.enabled }}
+{{- /* A secretKeyRef is resolved by the kubelet at container start, so editing the
+       demo-notes-token Secret does NOT restart the pod: the server would keep serving
+       the old bearer token while the gateway re-syncs to the new one, and every
+       notes__ call would 401. This checksum changes only when the token's contents
+       change, so a rotation is what forces the restart - same mechanism as the
+       woo-mcp checksum (and the gateway's own notes-token-checksum). */}}
+{{- $notesSecret := lookup "v1" "Secret" .Release.Namespace "demo-notes-token" }}
+{{- $notesChecksum := "" }}
+{{- if $notesSecret }}{{- $notesChecksum = index ($notesSecret.data | default dict) "NOTES_API_TOKEN" | default "" | sha256sum }}{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,6 +24,10 @@ spec:
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
+      annotations:
+        # Changes only when the demo-notes-token contents change -> forces a rollout so
+        # the pod always authenticates with the token that is actually in the Secret.
+        urumi.io/notes-secret-checksum: {{ $notesChecksum }}
       labels:
         app: demo-notes
         app.kubernetes.io/name: {{ include "urumi.name" . }}
