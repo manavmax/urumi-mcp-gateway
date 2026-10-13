@@ -94,19 +94,27 @@ def _assistant_message_with_tool_calls(content: str, tool_calls) -> dict:
     `extra_content` (google.thought_signature) or the follow-up request is rejected with
     `400 "Function call is missing a thought_signature"`. extra_content is copied through
     verbatim; for plain OpenAI endpoints it is simply absent and this is a no-op.
+
+    The key is OMITTED when the model returned no signature: Gemini attaches
+    thought_signature to the first function-call part of a turn and leaves the rest null,
+    and a literal `"extra_content": null` is rejected with
+    `400 "Value is not a struct: null"` (nothing can be echoed that was never returned).
     """
+    echoed = []
+    for tc in tool_calls:
+        entry = {
+            "id": tc.id,
+            "type": "function",
+            "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+        }
+        extra = getattr(tc, "extra_content", None)
+        if extra is not None:
+            entry["extra_content"] = extra
+        echoed.append(entry)
     return {
         "role": "assistant",
         "content": content or "",
-        "tool_calls": [
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                "extra_content": getattr(tc, "extra_content", None),
-            }
-            for tc in tool_calls
-        ],
+        "tool_calls": echoed,
     }
 
 

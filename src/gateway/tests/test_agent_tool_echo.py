@@ -34,13 +34,31 @@ def test_echo_preserves_gemini_thought_signature():
 
 def test_echo_is_noop_when_no_extra_content():
     # Plain OpenAI endpoints never attach extra_content: the echo must still be well-formed
-    # and simply carry extra_content: None (the SDK drops it when serializing).
+    # and must NOT carry an extra_content key. Gemini attaches thought_signature only to
+    # the first function-call part of a turn and leaves the rest null; a literal
+    # "extra_content": null is rejected with 400 "Value is not a struct: null", so the
+    # key is omitted entirely when the model returned no signature.
     tc = _make_tool_call()
     msg = _assistant_message_with_tool_calls("thinking", [tc])
     assert msg["content"] == "thinking"
     echo = msg["tool_calls"][0]
-    assert echo["extra_content"] is None
+    assert "extra_content" not in echo
     assert echo["function"]["name"] == "woo__list_products"
+
+
+def test_echo_omits_null_signature_but_keeps_real_one():
+    # The exact live multi-step failure: a turn with two tool calls where only the first
+    # carries a google.thought_signature. Echoing the null second one produces
+    # 400 "Value is not a struct: null"; omitting it keeps the request valid.
+    tcs = [
+        _make_tool_call(id_="call_1", extra={"google": {"thought_signature": "sig-abc"}}),
+        _make_tool_call(id_="call_2", name="woo__list_orders", extra=None),
+    ]
+    msg = _assistant_message_with_tool_calls("", tcs)
+    first, second = msg["tool_calls"]
+    assert first["extra_content"] == {"google": {"thought_signature": "sig-abc"}}
+    assert "extra_content" not in second
+    assert second["function"]["name"] == "woo__list_orders"
 
 
 def test_echo_keeps_role_and_shape():
@@ -53,5 +71,6 @@ def test_echo_keeps_role_and_shape():
     assert call["id"] == "call_9"
     assert call["function"]["name"] == "woo__get_order"
     assert call["function"]["arguments"] == '{"id": 1}'
-    # provider-neutral: an OpenAI-only endpoint never sees extra_content
-    assert "extra_content" in call
+    # provider-neutral: an OpenAI-only endpoint never sees extra_content, and the key is
+    # absent rather than echoed as null (Gemini rejects null with a 400)
+    assert "extra_content" not in call
