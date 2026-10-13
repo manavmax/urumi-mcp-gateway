@@ -6,6 +6,35 @@
 
 ---
 
+## ADR-028 — `make deploy` restarts pods so a same-tag image import always lands
+
+**Date:** 2026-10-13
+
+**Context:** a member logged into the dashboard and STILL saw Edit / Delete /
+Enable-Disable on the Servers page. The source already hid/disabled them
+(commit `9f710b1`), the dashboard pod was Running and `/review`-green — yet the 403
+was all a member ever saw. The code was fine; the **running pod was stale**: both
+`make gateway-image`/`dashboard-image` build `urumi/*:0.1.0` and `ctr` import it into
+the kind node under the SAME tag. An import replaces the image bytes in containerd,
+but kubelet keeps the running pod's original imageID until the pod is recreated.
+Evidence: pod `started=2026-10-13T09:14:21Z` (before commit `9f710b1` at
+09:27Z), so it could not contain the fix. The gateway had the same latent issue
+(only a manual `rollout restart` after the Issue-1 fix made it land).
+
+**Decision:** add a `make deploy` target that builds + imports the Layer 3 images
+(gateway, dashboard) and then `kubectl rollout restart`s their Deployments and
+waits for rollout status. `gateway-image`/`dashboard-image` now print a REMINDER
+that an import alone does not restart pods. A per-build tag was considered but
+rejected: the chart pins `urumi/*:0.1.0` in `values-local.yaml`, so a dynamic tag
+would force helm values churn on every iteration; a rollout restart is cheaper and
+guarantees the running image matches the freshly built bytes.
+
+**Main residual failure mode:** a developer runs only `make gateway-image` and
+forgets `make deploy` — the REMINDER prints, but nothing forces correctness; the
+verify targets print pod start times so a stale pod is visible in the output.
+
+---
+
 ## ADR-027 — tools/call results are rebuilt into minimal wire-valid content blocks, never `model_dump()`-ed
 
 **Date:** 2026-10-13

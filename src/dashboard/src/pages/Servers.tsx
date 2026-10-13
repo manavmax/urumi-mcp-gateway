@@ -151,15 +151,18 @@ export default function Servers() {
                 {s.last_error && <div className="small muted">{s.last_error.slice(0, 120)}</div>}
               </td>
               <td>
-                <label className="switch" title={isAdmin ? undefined : "Admin only"}>
-                  <input
-                    type="checkbox"
-                    checked={s.enabled}
-                    disabled={!isAdmin}
-                    onChange={() => toggleEnable(s)}
-                  />
+                {isAdmin ? (
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={s.enabled}
+                      onChange={() => toggleEnable(s)}
+                    />
+                    <span>{s.enabled ? "yes" : "no"}</span>
+                  </label>
+                ) : (
                   <span>{s.enabled ? "yes" : "no"}</span>
-                </label>
+                )}
               </td>
               <td>
                 <button className="secondary small" onClick={() => loadTools(s.slug)}>
@@ -177,22 +180,18 @@ export default function Servers() {
                 )}
               </td>
               <td className="row gap">
-                <button
-                  className="secondary small"
-                  disabled={!isAdmin}
-                  title={isAdmin ? undefined : "Admin only"}
-                  onClick={() => setEditing(s)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="danger small"
-                  disabled={!isAdmin}
-                  title={isAdmin ? undefined : "Admin only"}
-                  onClick={() => remove(s)}
-                >
-                  Delete
-                </button>
+                {isAdmin ? (
+                  <>
+                    <button className="secondary small" onClick={() => setEditing(s)}>
+                      Edit
+                    </button>
+                    <button className="danger small" onClick={() => remove(s)}>
+                      Delete
+                    </button>
+                  </>
+                ) : (
+                  <span className="muted small">Admin only</span>
+                )}
               </td>
             </tr>
           ))}

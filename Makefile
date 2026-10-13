@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard test
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard deploy test
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -109,15 +109,34 @@ verify-demo:
 	echo ""; echo "token used for authenticated checks: $${TOKEN%%????}... (full value stays in the Secret)"
 
 # Layer 3 — gateway + dashboard images (local Kind: build + import into node)
+# NOTE: importing an image under the SAME tag does NOT restart running pods — an
+# existing pod keeps its old imageID until it is recreated. `make deploy` is the
+# target that rebuilds AND restarts; use it (not these two alone) when the fix is
+# in code, otherwise the running pod is silently stale (docs/DECISIONS.md ADR-028).
 gateway-image:
 	docker build -t urumi/gateway:0.1.0 src/gateway
 	docker save urumi/gateway:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/gateway:0.1.0 into kind node"
+	@echo "REMINDER: pods are NOT restarted by an import - run 'make deploy' to restart"
 
 dashboard-image:
 	docker build -t urumi/dashboard:0.1.0 src/dashboard
 	docker save urumi/dashboard:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/dashboard:0.1.0 into kind node"
+	@echo "REMINDER: pods are NOT restarted by an import - run 'make deploy' to restart"
+
+# Rebuild Layer 3 images, import them into the kind node, then RESTART the pods so
+# the new build actually lands. Without the rollout restart, `ctr images import`
+# replaces the image bytes under the same tag but existing pods keep running the
+# previous image (their imageID is unchanged) - the stale-dashboard/pod bug.
+# A chart change still needs `make helm-local`; this is the code-change deploy path.
+deploy: gateway-image dashboard-image
+	@echo "== restarting gateway + dashboard so the new builds land =="
+	kubectl rollout restart deployment/urumi-gateway deployment/urumi-dashboard -n $(NAMESPACE)
+	kubectl rollout status deployment/urumi-gateway -n $(NAMESPACE) --timeout=150s
+	kubectl rollout status deployment/urumi-dashboard -n $(NAMESPACE) --timeout=150s
+	@echo "== deploy done; pods on new image =="
+	kubectl get pods -n $(NAMESPACE) -l 'app in (gateway, dashboard)' -o jsonpath='{range .items[*]}{.metadata.name} image={.spec.containers[0].image} imageID={.status.containerStatuses[0].imageID}{"\n"}{end}'
 
 # Verify gateway: handshake, tools/list fan-out (3 servers), tools/call routing, SSRF deny, audit, RBAC
 verify-gateway:
