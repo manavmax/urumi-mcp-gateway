@@ -281,7 +281,7 @@ def test_cap_counts_the_models_already_tried_this_turn():
 def test_cap_is_independent_of_the_tool_call_cap():
     from chat import agent
 
-    assert agent.MAX_MODELS_PER_TURN == fb.MAX_MODELS_PER_TURN
+    assert agent.MAX_MODELS_PER_TURN == MAX_MODELS_PER_TURN
     assert agent.MAX_MODELS_PER_TURN != agent.MAX_TOOL_CALLS  # separate budgets (docs/05 §2)
 
 
