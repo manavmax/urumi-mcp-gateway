@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chat.llm_fallback import (
     CATEGORY_UNKNOWN,
+    MAX_MODELS_PER_TURN,
     MODEL_COOLDOWNS,
     LLMBusyError,
     _create_with_fallback,
@@ -31,8 +32,11 @@ Rules:
 """
 
 MAX_ITERS = 8
-# How much a model may DO to the store in one turn (docs/05 §2). Independent of the
-# model-fallback budget in chat.llm_fallback.
+# Two independent per-turn budgets (docs/05 §2):
+#   MAX_TOOL_CALLS      - how much a model may DO to the store in one turn.
+#   MAX_MODELS_PER_TURN - how many models one turn may try while failing over
+#                         (defined in chat.llm_fallback, so the loop reads the module
+#                         global and a test can shrink it).
 MAX_TOOL_CALLS = 20
 OVERALL_TIMEOUT = 60
 MAX_TOOL_OUTPUT = 20_000
@@ -186,6 +190,9 @@ async def chat_loop(
     total_calls = 0
     start = time.monotonic()
     producer_model: str | None = None  # model that produced the last assistant tool_calls
+    # Per-turn model budget: every model this turn tries is recorded here and handed to
+    # the fallback, so the cap holds ACROSS the tool-loop iterations (not per LLM call).
+    models_tried: list[str] = []
 
     for iteration in range(MAX_ITERS):
         if time.monotonic() - start > OVERALL_TIMEOUT:
@@ -210,6 +217,8 @@ async def chat_loop(
                 producer_model=producer_model,
                 request_id=str(request_id),
                 remaining_budget=OVERALL_TIMEOUT - (time.monotonic() - start),
+                max_models=MAX_MODELS_PER_TURN,
+                models_tried=models_tried,
             )
             producer_model = serving_model  # this model produced the tool_calls we echo
             yield {"type": "model", "model": serving_model}
@@ -220,6 +229,7 @@ async def chat_loop(
                 "request_id": str(request_id),
                 "category": exc.category,
                 "detail": exc.detail,
+                "models_tried": models_tried,
             }))
             yield {"type": "text", "content": exc.message, "category": exc.category}
             return

@@ -33,6 +33,16 @@ errors keep the provider's message, prefixed with the category: `LLM error (auth
 phrases an overload as "quota" (or a quota as "unavailable") is misreported, so the
 status stays authoritative and the text only refines within a status class.
 
+**Per-turn model cap:** `MAX_MODELS_PER_TURN` (4, `chat/llm_fallback.py`) bounds how many
+models ONE chat turn may try, counted across that turn's tool-loop iterations
+(`chat_loop` owns the counter and passes it in). It is a separate budget from
+`MAX_TOOL_CALLS` (20): that one limits how much a model may DO to the store, this one
+limits how much of a configured chain a single turn may burn — a 9-model chain (the
+Gemini flash family) would otherwise re-probe the whole list on every iteration and eat
+the 60s turn budget. Cooldown-skipped models are not counted: they cost nothing. When
+the cap is reached the turn ends with the real category message plus an operator-visible
+note ("model fallback cap: N models tried this turn") instead of silently failing.
+
 ---
 
 ## ADR-029 — LLM model fallback chain: transient errors only, per-model cooldown

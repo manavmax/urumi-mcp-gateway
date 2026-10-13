@@ -15,6 +15,11 @@ Design (docs/DECISIONS.md ADR-029, extended by ADR-030):
   chat-turn budget (docs/05 §2 OVERALL_TIMEOUT).
 - per-model cooldown: a model that just failed transiently is skipped for
   MODEL_COOLDOWN_SECONDS so every chat turn does not re-hit the dead model.
+- MAX_MODELS_PER_TURN caps how many models one chat turn may try, counted ACROSS the
+  tool-loop iterations of that turn. It is deliberately independent of the agent's
+  MAX_TOOL_CALLS: that limit bounds how much a model may DO to the store, this one
+  bounds how much of the configured chain a single turn may burn (a 9-model chain
+  would otherwise re-probe the whole list on every iteration and eat the turn budget).
 - the chat error message names the real failure category (quota / busy / auth /
   model-not-found / bad-request / unknown) instead of always saying "busy".
 - logs are JSON, no secrets; the serving model is surfaced to the chat UI as a
@@ -35,6 +40,9 @@ logger = logging.getLogger("gateway.chat.llm_fallback")
 MODEL_COOLDOWN_SECONDS = 45.0
 TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
 MAX_ATTEMPT_SECONDS = 30.0
+
+# Models tried per chat turn (shared across that turn's tool-loop iterations).
+MAX_MODELS_PER_TURN = 4
 
 # module-level so cooldowns survive across chat turns (single-replica dev pod).
 MODEL_COOLDOWNS: dict[str, float] = {}
@@ -76,7 +84,7 @@ NOT_FOUND_MARKERS = ("is not found for api version", "model not found", "unknown
 
 
 class LLMBusyError(Exception):
-    """Every model in the chain failed transiently.
+    """Every model in the chain failed, or the per-turn model cap was reached.
 
     Carries the real failure `category` (quota / busy / auth / model-not-found /
     bad-request / unknown) and a short `detail`, so the chat turn can name the cause
@@ -192,6 +200,8 @@ async def _create_with_fallback(
     producer_model: str | None,
     request_id: str,
     remaining_budget: float,
+    max_models: int = MAX_MODELS_PER_TURN,
+    models_tried: list[str] | None = None,
 ) -> tuple[object, str]:
     """Try models in priority order; move to the next on transient errors.
 
@@ -199,11 +209,25 @@ async def _create_with_fallback(
     transiently (or was in cooldown), carrying the real failure category. Raises the
     original exception for non-transient errors (400/401/403) - no fallback, surface
     the bug clearly.
+
+    `models_tried` is the caller's per-turn counter (the agent passes one list for the
+    whole chat turn): every model this turn has already tried is counted, so the loop
+    stops after `max_models` of them and never burns the entire configured chain on a
+    single turn.
     """
+    tried = models_tried if models_tried is not None else []
     skipped: list[dict] = []
     categories: set[str] = set()
     last_transient: BaseException | None = None
     for model in model_chain:
+        if len(tried) >= max_models:
+            category = _pick_category(categories) if categories else CATEGORY_BUSY
+            raise LLMBusyError(
+                category_message(category, f"model fallback cap: {max_models} models tried this turn"),
+                category=category,
+                detail="cap reached",
+            ) from last_transient
+
         now = time.monotonic()
         cool_until = cooldowns.get(model, 0.0)
         if now < cool_until:
@@ -212,6 +236,7 @@ async def _create_with_fallback(
             logger.info(json.dumps({"event": "llm_model_skipped", "model": model, "request_id": request_id, **info}))
             continue
 
+        tried.append(model)
         stripped = producer_model is not None and model != producer_model
         send_messages = _strip_tool_signatures(kwargs["messages"]) if stripped else kwargs["messages"]
         attempt_kwargs = {**kwargs, "messages": send_messages}
