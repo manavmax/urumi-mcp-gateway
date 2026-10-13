@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from typing import Any
@@ -177,6 +178,11 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
         try:
             result = await call_tool_routed(db, name, arguments)
             duration_ms = int((time.monotonic() - start) * 1000)
+            # An upstream tool that ran but failed comes back isError=true inside a
+            # 200 envelope: MCP maps every tool exception to CallToolResult. Auditing
+            # that as "success" would hide tool-level failures (e.g. WOO_AUTH_FAILED,
+            # schema rejections) from the audit trail, so classify it here.
+            upstream_error_code = _upstream_error_code(result)
             await log_audit(
                 user_id=user.id,
                 api_key_id=api_key_id,
@@ -186,7 +192,8 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 tool_upstream_name=upstream,
                 request_id=request_id,
                 duration_ms=duration_ms,
-                outcome="success",
+                outcome="success" if upstream_error_code is None else "upstream_error",
+                error_code=upstream_error_code,
                 client_ip=client_ip,
             )
             # MCP spec: tools/call success is result.content + isError
@@ -267,6 +274,28 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 # ---- RBAC hooks (extend for per-tool permissions) ----
+
+def _upstream_error_code(result: dict | None) -> str | None:
+    """Return a stable error code when a proxied tool ran but failed.
+
+    Upstream tool exceptions arrive as a 200 JSON-RPC envelope with
+    `isError: true` and a text payload (MCP maps every tool exception to
+    CallToolResult). The payload usually starts with a stable machine-readable
+    code (`WOO_AUTH_FAILED: ...`, `Error executing tool ...`); extract it so the
+    audit row says more than "upstream_error". Returns None for plain success.
+    """
+
+    if not isinstance(result, dict) or not result.get("isError"):
+        return None
+    text = ""
+    for block in result.get("content") or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            text = block.get("text") or ""
+            break
+    match = re.match(r"([A-Z][A-Z0-9_]{2,})\s*:", text)
+    if match:
+        return match.group(1)
+    return "upstream_error"
 
 def _filter_tools_by_rbac(user, tools: list[dict]) -> list[dict]:
     # Placeholder: all tools visible. Future: filter by permissions table.
