@@ -15,9 +15,16 @@ export default function Members() {
   async function load() {
     setErr("");
     try {
-      const [u, k] = await Promise.all([api.listUsers(), api.listKeys()]);
-      setUsers(u.users);
+      // /api/users is admin-only: a member requesting it gets 403, which used to
+      // fail this whole load() and hide the member's own keys behind an error.
+      const k = await api.listKeys();
       setKeys(k.keys);
+      if (user?.role === "admin") {
+        const u = await api.listUsers();
+        setUsers(u.users);
+      } else {
+        setUsers([]);
+      }
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));
     }

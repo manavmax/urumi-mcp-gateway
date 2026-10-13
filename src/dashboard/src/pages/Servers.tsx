@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { api, type Server, type Tool } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { StatusBadge } from "../components/StatusBadge";
 import { ServerForm, type ServerFormValues } from "../components/ServerForm";
 
 export default function Servers() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [servers, setServers] = useState<Server[]>([]);
   const [tools, setTools] = useState<Record<string, Tool[]>>({});
   const [err, setErr] = useState("");
@@ -94,17 +97,21 @@ export default function Servers() {
     <div>
       <div className="row between">
         <h2>Servers</h2>
-        <button onClick={() => setShowAdd(true)}>Add server</button>
+        {isAdmin ? (
+          <button onClick={() => setShowAdd(true)}>Add server</button>
+        ) : (
+          <span className="muted small">Only admins can add or modify servers</span>
+        )}
       </div>
       {err && <div className="alert alert-error">{err}</div>}
 
-      {showAdd && (
+      {showAdd && isAdmin && (
         <div className="card">
           <h3>Add server</h3>
           <ServerForm onSubmit={handleCreate} onCancel={() => setShowAdd(false)} submitLabel="Create" />
         </div>
       )}
-      {editing && (
+      {editing && isAdmin && (
         <div className="card">
           <h3>Edit {editing.slug}</h3>
           <ServerForm
@@ -144,8 +151,13 @@ export default function Servers() {
                 {s.last_error && <div className="small muted">{s.last_error.slice(0, 120)}</div>}
               </td>
               <td>
-                <label className="switch">
-                  <input type="checkbox" checked={s.enabled} onChange={() => toggleEnable(s)} />
+                <label className="switch" title={isAdmin ? undefined : "Admin only"}>
+                  <input
+                    type="checkbox"
+                    checked={s.enabled}
+                    disabled={!isAdmin}
+                    onChange={() => toggleEnable(s)}
+                  />
                   <span>{s.enabled ? "yes" : "no"}</span>
                 </label>
               </td>
@@ -165,10 +177,20 @@ export default function Servers() {
                 )}
               </td>
               <td className="row gap">
-                <button className="secondary small" onClick={() => setEditing(s)}>
+                <button
+                  className="secondary small"
+                  disabled={!isAdmin}
+                  title={isAdmin ? undefined : "Admin only"}
+                  onClick={() => setEditing(s)}
+                >
                   Edit
                 </button>
-                <button className="danger small" onClick={() => remove(s)}>
+                <button
+                  className="danger small"
+                  disabled={!isAdmin}
+                  title={isAdmin ? undefined : "Admin only"}
+                  onClick={() => remove(s)}
+                >
                   Delete
                 </button>
               </td>
