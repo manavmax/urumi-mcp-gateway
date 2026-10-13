@@ -166,7 +166,10 @@ async def main() -> int:
                 check("chat streams SSE events", "token" in types or "text" in types, f"types={types[:10]}")
                 check("chat ends with [DONE]", "[DONE]" in r.text, "no [DONE] sentinel")
                 reply = collect_text(events).lower()
-                check("chat replied (no LLM error)", "error" not in reply, reply[:200])
+                # "llm timed out." / "llm error:" are yielded as text events, so the reply
+                # must be non-empty AND free of error markers, not just missing "error".
+                bad = not reply or "error" in reply or "timed out" in reply or "failed" in reply
+                check("chat replied (no LLM error)", not bad, reply[:200])
                 if ("token" in types or "text" in types) and "[DONE]" in r.text:
                     seen_stream[0] = True
 
@@ -191,7 +194,9 @@ async def main() -> int:
                 check("multi-step loop ran >=1 tool call", len(calls) >= 1, f"tools={[e.get('tool') for e in calls]}")
                 check("all tool outcomes success", bool(calls) and all(o == "success" for o in outcomes), f"outcomes={outcomes}")
                 finals = [e for e in events if e.get("type") in ("token", "text")]
-                check("multi-step produced a final answer", bool(finals), f"events={[e.get('type') for e in events][:6]}")
+                final_text = collect_text(events).lower()
+                failed = not finals or "error" in final_text or "timed out" in final_text
+                check("multi-step produced a final answer", not failed, final_text[:200])
 
         # Deterministic create -> list through /mcp (same audited router the chat loop uses).
         if not api_key:
