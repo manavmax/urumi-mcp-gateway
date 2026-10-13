@@ -84,6 +84,9 @@ spec:
               value: {{ .Values.gateway.llm.baseUrl | quote }}
             - name: OPENAI_MODEL
               value: {{ .Values.gateway.llm.model | quote }}
+            # Comma-separated priority-ordered fallback chain, first entry = model.
+            - name: OPENAI_MODELS
+              value: {{ concat (list .Values.gateway.llm.model) (.Values.gateway.llm.models | default list) | uniq | join "," | quote }}
 {{- end }}
             # Gateway administrator bootstrap. Always present because the chart always
             # renders the Secret (ADR-019); the gateway refuses to invent a password, so a

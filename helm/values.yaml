@@ -88,6 +88,12 @@ gateway:
     enabled: true
     baseUrl: "https://api.openai.com/v1"
     model: "gpt-4o-mini"
+    # Optional priority-ordered fallback chain, tried on TRANSIENT LLM errors
+    # (429/500/502/503/504/timeout/connection) - e.g. Gemini's frequent 503 "high demand"
+    # or 429. gateway.llm.model is always tried FIRST (back-compat); these are the
+    # additional models to fail over to, in order. Set via Helm values only; no model
+    # names are hardcoded in code. A model that just failed is cooled down for ~45s.
+    models: []
     # Optional prod override: name of a pre-created Secret holding key OPENAI_API_KEY.
     # When set, the chart does NOT render its own `gateway-llm` Secret.
     existingSecret: ""

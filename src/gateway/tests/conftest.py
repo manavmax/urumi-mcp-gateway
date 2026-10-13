@@ -16,6 +16,41 @@ GW_ROOT = Path(__file__).resolve().parents[1]
 if str(GW_ROOT) not in sys.path:
     sys.path.insert(0, GW_ROOT)
 
+# uvloop is pulled in by uvicorn[standard] (a gateway runtime dep). Its event-loop
+# policy raises "There is no current event loop" in asyncio.get_event_loop() instead of
+# creating one on demand, which breaks pytest-asyncio's main-thread loop handling. The
+# unit tests never need uvloop; reset to the default asyncio policy here. Production
+# (uvicorn in the pod) is unaffected.
+try:
+    import uvloop  # noqa: F401  (presence check; policy reset below covers it)
+except ImportError:
+    uvloop = None  # type: ignore[assignment]
+
+import asyncio
+
+asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
+
+def sqlite_ready_metadata():
+    """Prepare the shared metadata for embedded sqlite before create_all.
+
+    sqlite cannot compile the postgres-only regex CHECK on `servers.slug` (dropped,
+    as before) NOR the postgres `JSONB` type (swapped for the generic JSON type, which
+    is what sqlite uses for JSON columns). Every other constraint/type stays intact, so
+    the harness still tests the REAL schema. Mutating the shared metadata is fine: the
+    existing CHECK-stripping already does it, and tests only ever target sqlite.
+    """
+    from sqlalchemy import JSON, CheckConstraint
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    from db.models import Base
+
+    for table in Base.metadata.tables.values():
+        table.constraints = {c for c in table.constraints if not isinstance(c, CheckConstraint)}
+        for column in table.columns:
+            if isinstance(column.type, JSONB):
+                column.type = JSON()
+
 
 class FakeScalars:
     def __init__(self, item):

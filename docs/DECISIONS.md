@@ -6,6 +6,33 @@
 
 ---
 
+## ADR-029 — LLM model fallback chain: transient errors only, per-model cooldown
+
+**Date:** 2026-10-13
+
+**Context:** Gemini models often answer 503 "high demand" / 429; each failure currently
+ends the chat turn with an LLM error, and the OpenAI client's internal retry makes it
+slow too.
+
+**Decision:** a priority-ordered model chain (`gateway.llm.model` first, plus
+`gateway.llm.models` — Helm values only, nothing hardcoded) is tried per LLM call:
+transient errors (429/500/502/503/504/timeout/connection) move to the next model,
+while 400/401/403 surface unchanged (config/schema bugs must not be masked). The
+client runs with `max_retries=0` so a failure returns in seconds; each attempt is
+capped by the remaining 60s turn budget so fallback never exceeds the overall gateway
+LLM timeout. A model that failed is cooled down for ~45s so subsequent turns skip it.
+Gemini `thought_signature` is model-specific, so signatures are stripped from echoed
+tool_calls whenever the serving model differs from the one that produced them. Serving
+model and skips are logged as JSON (no secrets) and surfaced to the chat UI; if every
+model fails, the turn returns "AI models are busy, try again in a minute".
+
+**Main failure mode:** a truly dead primary model costs one full per-attempt timeout
+per turn before the fallback answers, and cooldown is per-pod-process (not shared
+across replicas), so under multi-replica load two replicas can independently probe the
+same dead model within the cooldown window.
+
+---
+
 ## ADR-028 — `make deploy` restarts pods so a same-tag image import always lands
 
 **Date:** 2026-10-13

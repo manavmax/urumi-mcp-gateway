@@ -57,8 +57,11 @@ class UvicornHolder:
 
     def __init__(self, app):
         self.port = _free_port()
+        # loop="asyncio": uvicorn otherwise auto-selects uvloop, whose install() sets the
+        # GLOBAL event-loop policy and breaks pytest-asyncio's main-thread loop handling
+        # ("There is no current event loop in thread 'MainThread'").
         self._server = uvicorn.Server(
-            uvicorn.Config(app, host="127.0.0.1", port=self.port, log_level="error")
+            uvicorn.Config(app, host="127.0.0.1", port=self.port, log_level="error", loop="asyncio")
         )
         self._thread = threading.Thread(target=self._server.run, daemon=True)
         self._thread.start()
@@ -191,10 +194,10 @@ async def upstream_url():
 @pytest.fixture()
 async def running_gateway(upstream_url):
     """REAL FastAPI app + REAL sqlite DB + uvicorn on a local port (real sockets, real SDK client)."""
+    from tests.conftest import sqlite_ready_metadata
+
+    sqlite_ready_metadata()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
-    for table in Base.metadata.tables.values():
-        # the Postgres-only regex CHECK cannot compile on sqlite
-        table.constraints = {c for c in table.constraints if not isinstance(c, CheckConstraint)}
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     SessionLocal = async_sessionmaker(engine, expire_on_commit=False)

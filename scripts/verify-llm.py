@@ -164,6 +164,9 @@ async def main() -> int:
             if ok:
                 types = [e.get("type") for e in events]
                 check("chat streams SSE events", "token" in types or "text" in types, f"types={types[:10]}")
+                # the fallback chain (ADR-029) must announce the serving model
+                model_events = [e.get("model") for e in events if e.get("type") == "model"]
+                check("chat emits a 'model' event (serving model)", bool(model_events), f"model_events={model_events}")
                 check("chat ends with [DONE]", "[DONE]" in r.text, "no [DONE] sentinel")
                 reply = collect_text(events).lower()
                 # "llm timed out." / "llm error:" are yielded as text events, so the reply

@@ -8,6 +8,7 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [servingModel, setServingModel] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
   async function send(e: React.FormEvent) {
@@ -47,7 +48,9 @@ export default function Chat() {
             if (payload === "[DONE]") break;
             try {
               const evt = JSON.parse(payload);
-              if (evt.type === "token") {
+              if (evt.type === "model") {
+                setServingModel(evt.model || null);
+              } else if (evt.type === "token") {
                 assistant += evt.content || "";
                 setMessages((prev) => {
                   const copy = [...prev];
@@ -94,6 +97,7 @@ export default function Chat() {
   return (
     <div className="chat">
       <h2>Chat — store assistant</h2>
+      {servingModel && <p className="muted small mono">serving model: {servingModel}</p>}
       <p className="muted small">Chat uses server-side tool loop; upstream credentials never reach the browser. Tool calls are audited as your user.</p>
       {err && <div className="alert alert-error">{err}</div>}
       <div ref={logRef} className="chat-log">

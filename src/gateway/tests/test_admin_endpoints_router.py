@@ -40,11 +40,10 @@ MEMBER = {"email": "member-router@urumi.local", "password": "member-router-pass-
 @pytest.fixture()
 async def harness():
     """Real app + real sqlite DB seeded with an admin, a member and one server."""
+    from tests.conftest import sqlite_ready_metadata
+
+    sqlite_ready_metadata()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
-    for table in Base.metadata.tables.values():
-        # the Postgres-only regex CHECK (slug ~ '...') cannot compile on sqlite;
-        # every other constraint stays in place.
-        table.constraints = {c for c in table.constraints if not isinstance(c, CheckConstraint)}
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     SessionLocal = async_sessionmaker(engine, expire_on_commit=False)

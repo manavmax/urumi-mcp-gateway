@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o-mini"
+    # Priority-ordered fallback chain (comma-separated, e.g. "gemini-3.5-flash,gemini-3-pro").
+    # gateway.llm.models. The FIRST model is always gateway.llm.model (kept for
+    # back-compat); remaining entries are tried in order on transient LLM errors
+    # (429/5xx/timeout/connection) so a "high demand" model fails over to the next one.
+    openai_models: str = ""
 
     # gateway administrator bootstrap (password comes from the chart-generated
     # `gateway-admin` Secret - never from a values file or a source default).
@@ -82,6 +87,20 @@ class Settings(BaseSettings):
             return []
         return [s.strip().lower() for s in self.allowed_domains.split(",") if s.strip()]
 
+    def model_chain(self) -> list[str]:
+        """Priority-ordered LLM model fallback chain, first = openai_model (back-compat).
+
+        `gateway.llm.model` is the first/default model; `gateway.llm.models` (comma-separated)
+        extends it. Entries are deduplicated keeping the first occurrence so a model listed
+        both as the default and in the chain is only tried once, and the default always
+        wins the first slot.
+        """
+        chain: list[str] = []
+        for m in [self.openai_model, *[x.strip() for x in self.openai_models.split(",") if x.strip()]]:
+            if m and m not in chain:
+                chain.append(m)
+        return chain or [self.openai_model]
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -97,6 +116,7 @@ def get_settings() -> Settings:
         "OPENAI_API_KEY": "openai_api_key",
         "OPENAI_BASE_URL": "openai_base_url",
         "OPENAI_MODEL": "openai_model",
+        "OPENAI_MODELS": "openai_models",
         "SESSION_SECRET": "session_secret",
         "GATEWAY_ADMIN_PASSWORD": "admin_password",
     }

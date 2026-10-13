@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
+from chat.llm_fallback import LLMBusyError, MODEL_COOLDOWNS, _create_with_fallback
 
 logger = logging.getLogger("gateway.chat")
 
@@ -163,13 +164,20 @@ async def chat_loop(
 
         # base_url lets any OpenAI-compatible endpoint (groq, together, vllm, ...) be used
         # by editing gateway.llm.baseUrl - no code change and no new secret.
-        client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url or None)
+        # max_retries=0: we implement fallback via the model chain, so a failed attempt
+        # must return in seconds instead of after the client's internal 2-retry backoff.
+        client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url or None, max_retries=0)
     except Exception as exc:
         yield {"type": "text", "content": f"LLM client init failed: {exc}"}
         return
 
+    # Priority-ordered model chain: first = gateway.llm.model (back-compat), then any
+    # gateway.llm.models extras. Configurable via Helm values only - no model name is
+    # hardcoded here.
+    model_chain = settings.model_chain()
     total_calls = 0
     start = time.monotonic()
+    producer_model: str | None = None  # model that produced the last assistant tool_calls
 
     for iteration in range(MAX_ITERS):
         if time.monotonic() - start > OVERALL_TIMEOUT:
@@ -179,7 +187,6 @@ async def chat_loop(
         # Use non-streaming chat, then stream tokens pseudo? For simplicity we do non-stream.
         # We expose tokens as one chunk; SSE still shows tool chips progressively.
         kwargs: dict = {
-            "model": settings.openai_model,
             "messages": messages,  # type: ignore[arg-type]
         }
         if openai_tools:
@@ -187,7 +194,20 @@ async def chat_loop(
             kwargs["tool_choice"] = "auto"
 
         try:
-            resp = await asyncio.wait_for(client.chat.completions.create(**kwargs), timeout=30)  # type: ignore[call-overload]
+            resp, serving_model = await _create_with_fallback(
+                client.chat.completions.create,
+                model_chain,
+                kwargs,
+                cooldowns=MODEL_COOLDOWNS,
+                producer_model=producer_model,
+                request_id=str(request_id),
+                remaining_budget=OVERALL_TIMEOUT - (time.monotonic() - start),
+            )
+            producer_model = serving_model  # this model produced the tool_calls we echo
+            yield {"type": "model", "model": serving_model}
+        except LLMBusyError:
+            yield {"type": "text", "content": "AI models are busy, try again in a minute"}
+            return
         except asyncio.TimeoutError:
             yield {"type": "text", "content": "LLM timed out."}
             return
