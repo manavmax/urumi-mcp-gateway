@@ -6,7 +6,7 @@
 
 ---
 
-## ADR-031 — the per-turn model cap counts FAILURES only, and the serving model is sticky
+## ADR-031 — per-turn model cap counts FAILURES, the serving model is sticky, and a half-done write is announced
 
 **Date:** 2026-10-14
 
@@ -30,6 +30,12 @@ including the one that had just served — so 3 busy models plus 1 healthy one s
    (ADR-029's `producer_model` is now the chain head). A healthy model keeps the turn
    instead of being abandoned as soon as an earlier chain entry leaves its cooldown; when
    the sticky model itself fails, the chain is walked in normal priority order.
+3. When a turn ends early after a write tool already succeeded, the message names it:
+   "notes__create_note already succeeded, so nothing was rolled back - a retry may repeat
+   it. Check the store before you retry", plus a machine-readable `writes` field on the
+   SSE event for the dashboard. Read tools never trigger it, and neither does a write that
+   failed.
+
 **Main failure mode:** a long, uniformly dead chain still spends the whole cap (6 failed
 attempts at up to 30s each) before the turn gives up - the cap bounds work per turn, not
 latency. A retry after an announced write can still duplicate it: the message warns, it

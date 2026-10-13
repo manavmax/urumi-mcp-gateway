@@ -38,6 +38,24 @@ MAX_TOOL_CALLS = 20
 OVERALL_TIMEOUT = 60
 MAX_TOOL_OUTPUT = 20_000
 
+# Tool-name verbs that change the store. A turn that dies after one of these succeeded
+# must say so, so a retry does not silently duplicate the write.
+WRITE_VERBS = {
+    "create", "add", "update", "edit", "set", "delete", "remove", "write", "insert",
+    "post", "put", "patch", "import", "export", "send", "upload", "copy", "duplicate",
+    "rename", "move", "archive", "restore", "enable", "disable", "assign", "revoke",
+    "clear", "reset", "purge", "register", "cancel", "refund", "transfer", "generate",
+}
+
+
+def _is_write_tool(name: str) -> bool:
+    """True when the exposed tool name starts with a write verb (`woo__create_product`,
+    `notes__delete_note`). Reads (`woo__list_products`, `time__get_current_time`) are not
+    writes, so a turn that only read never triggers the "nothing was rolled back" note.
+    """
+    upstream = name.split("__", 1)[-1]
+    return upstream.split("_", 1)[0].lower() in WRITE_VERBS
+
 
 def _sanitize_llm_schema(schema):
     """Reduce an MCP tool JSON Schema to the subset the common function-calling
@@ -189,13 +207,28 @@ async def chat_loop(
     # next step can still be served by the same (sticky) model. Independent of
     # MAX_TOOL_CALLS, which bounds how much a model may DO to the store.
     models_failed: list[str] = []
+    # Write tools that already SUCCEEDED in this turn: if the turn dies afterwards the
+    # user must be told, so a retry does not silently duplicate a note or a product.
+    writes_done: list[str] = []
     total_calls = 0
     start = time.monotonic()
     producer_model: str | None = None  # model that produced the last assistant tool_calls
 
+    def _end_turn(message: str, category: str) -> dict:
+        """Final SSE event for a turn that stopped early, possibly after a write."""
+        content = message
+        if writes_done:
+            names = ", ".join(sorted(set(writes_done)))
+            content += (f" {names} already succeeded, so nothing was rolled back - "
+                        f"a retry may repeat it. Check the store before you retry.")
+        event = {"type": "text", "content": content, "category": category}
+        if writes_done:
+            event["writes"] = sorted(set(writes_done))
+        return event
+
     for iteration in range(MAX_ITERS):
         if time.monotonic() - start > OVERALL_TIMEOUT:
-            yield {"type": "text", "content": "Chat timed out (60s). Please try a shorter request.", "category": CATEGORY_UNKNOWN}
+            yield _end_turn("Chat timed out (60s). Please try a shorter request.", CATEGORY_UNKNOWN)
             return
 
         # Use non-streaming chat, then stream tokens pseudo? For simplicity we do non-stream.
@@ -229,8 +262,9 @@ async def chat_loop(
                 "category": exc.category,
                 "detail": exc.detail,
                 "models_failed": models_failed,
+                "writes_done": writes_done,
             }))
-            yield {"type": "text", "content": exc.message, "category": exc.category}
+            yield _end_turn(exc.message, exc.category)
             return
         except asyncio.TimeoutError:
             yield {"type": "text", "content": "LLM timed out.", "category": CATEGORY_UNKNOWN}
@@ -259,7 +293,7 @@ async def chat_loop(
         for tc in tool_calls:
             total_calls += 1
             if total_calls > MAX_TOOL_CALLS:
-                yield {"type": "text", "content": "Maximum tool calls reached.", "category": "unknown"}
+                yield _end_turn("Maximum tool calls reached.", "unknown")
                 return
             name = tc.function.name
             raw_args = tc.function.arguments or "{}"
@@ -337,5 +371,7 @@ async def chat_loop(
             content = _sanitize(json.dumps(result, default=str))
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
             yield {"type": "tool_call", "tool": name, "outcome": outcome, "output": result}
+            if outcome == "success" and _is_write_tool(name):
+                writes_done.append(name)  # the turn may still die: remember what changed
 
         # loop continues: LLM sees tool outputs
