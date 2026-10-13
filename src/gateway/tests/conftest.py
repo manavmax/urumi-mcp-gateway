@@ -22,7 +22,7 @@ if str(GW_ROOT) not in sys.path:
 # unit tests never need uvloop; reset to the default asyncio policy here. Production
 # (uvicorn in the pod) is unaffected.
 try:
-    import uvloop  # noqa: F401  (presence check; policy reset below covers it)
+    import uvloop  # presence check only; the policy reset below is what matters
 except ImportError:
     uvloop = None  # type: ignore[assignment]
 
@@ -40,10 +40,9 @@ def sqlite_ready_metadata():
     the harness still tests the REAL schema. Mutating the shared metadata is fine: the
     existing CHECK-stripping already does it, and tests only ever target sqlite.
     """
+    from db.models import Base
     from sqlalchemy import JSON, CheckConstraint
     from sqlalchemy.dialects.postgresql import JSONB
-
-    from db.models import Base
 
     for table in Base.metadata.tables.values():
         table.constraints = {c for c in table.constraints if not isinstance(c, CheckConstraint)}

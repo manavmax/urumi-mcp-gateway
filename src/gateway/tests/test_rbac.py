@@ -10,10 +10,10 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
-
 from auth.rbac import require_admin, require_member, verify_csrf
 from auth.session import create_session_cookie, verify_session_cookie
+from fastapi import HTTPException
+
 from tests.conftest import make_user
 
 

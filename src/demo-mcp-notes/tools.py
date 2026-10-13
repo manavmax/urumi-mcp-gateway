@@ -9,11 +9,11 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Annotated
 
 from mcp.types import ToolAnnotations
 from pydantic import Field
-from typing import Annotated
 
 logger = logging.getLogger("demo-notes.tools")
 
@@ -36,7 +36,7 @@ class NoteStore:
                 "id": self._next_id,
                 "title": title,
                 "body": body,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
             }
             self._next_id += 1
             self._notes.append(note)

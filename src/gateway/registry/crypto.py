@@ -7,11 +7,9 @@ Cipher is stored as LargeBinary in servers.credential_encrypted.
 from __future__ import annotations
 
 import base64
-from functools import lru_cache
-
-from cryptography.fernet import Fernet, InvalidToken
 
 from config import get_settings
+from cryptography.fernet import Fernet, InvalidToken
 
 
 def _get_fernet() -> Fernet:

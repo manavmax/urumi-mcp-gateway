@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
@@ -266,7 +265,7 @@ async def chat_loop(
             }))
             yield _end_turn(exc.message, exc.category)
             return
-        except asyncio.TimeoutError:
+        except TimeoutError:
             yield {"type": "text", "content": "LLM timed out.", "category": CATEGORY_UNKNOWN}
             return
         except Exception as exc:

@@ -3,25 +3,23 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.models import ApiKey, User
-from db.session import get_db
+from auth.keys import create_api_key, revoke_api_key
 from auth.rbac import (
     get_current_user_via_session,
+    hash_password,
     require_admin,
     verify_csrf,
-    hash_password,
     verify_password,
 )
-from auth.session import create_session_cookie, verify_session_cookie, set_session_cookie, clear_session_cookie
-from auth.keys import create_api_key, revoke_api_key
+from auth.session import clear_session_cookie, create_session_cookie, set_session_cookie, verify_session_cookie
 from config import get_settings
+from db.models import ApiKey, User
+from db.session import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["users"])
 
@@ -38,7 +36,7 @@ class UserCreate(BaseModel):
 
 
 class KeyCreate(BaseModel):
-    expires_at: Optional[str] = None  # ISO8601
+    expires_at: str | None = None  # ISO8601
 
 
 @router.post("/api/auth/login")

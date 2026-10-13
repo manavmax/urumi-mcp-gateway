@@ -8,13 +8,12 @@ import uuid
 from typing import Any
 
 import httpx
+from db.models import Server, Tool
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.models import Server, Tool
 from registry.crypto import decrypt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("gateway.aggregator")
 
@@ -51,8 +50,9 @@ def _auth_headers(server: Server) -> dict[str, str]:
 
 async def _fetch_tools_for_server(server: Server, timeout_seconds: float = 8.0) -> list[dict[str, Any]]:
     """Call tools/list on one upstream via MCP SDK; return list of tool dicts."""
-    from config import get_settings
     from urllib.parse import urlparse as _urlparse
+
+    from config import get_settings
 
     # Internal service names bypass SSRF DNS block at proxy time; fan-out also skips it here
     # so health-check/aggregation can reach ClusterIP services (10.x).

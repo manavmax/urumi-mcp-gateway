@@ -8,13 +8,11 @@ from __future__ import annotations
 
 import uuid
 
+import gw_mcp.router as router
 import pytest
-
 from gw_mcp.breaker import CircuitBreaker
 
-import gw_mcp.router as router
 from tests.conftest import FakeDB, make_server
-
 
 
 def test_breaker_opens_after_threshold_and_resets_on_success():

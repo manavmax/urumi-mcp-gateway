@@ -16,10 +16,10 @@ import uuid
 
 import pytest
 from cryptography.fernet import Fernet
-
 from db.models import Server
 from registry.crud import resync_internal_credentials
 from registry.crypto import decrypt, encrypt
+
 from tests.conftest import FakeDB
 
 

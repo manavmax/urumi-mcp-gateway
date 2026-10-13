@@ -5,10 +5,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from db.models import AuditLog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.models import AuditLog
 
 
 async def query_audit(

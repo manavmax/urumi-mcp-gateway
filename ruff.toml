@@ -1,0 +1,59 @@
+# Ruff configuration for the Python sources in this repo: the gateway
+# (src/gateway), the MCP servers (src/woo-mcp, src/demo-mcp-*) and the crash-safe
+# scripts/ helpers that are exec'd inside the cluster pods.
+#
+# There was no config before, so every `ruff check` run used ruff's built-in
+# defaults: the same findings appeared and vanished with the ruff version and the
+# selected rules were never a decision. This file makes the ruleset reproducible.
+#
+# What it deliberately does NOT enable:
+#   E501 (line length)      prose comments and one-line CLI commands in these files
+#                           are written to be read, not wrapped at 120; the longest
+#                           is 285 columns.
+#   ANN / D / EM / TRY / N   docstrings, annotation coverage, error-message style and
+#                           try/except ergonomics are author judgement; adding them
+#                           now would be churn with no behaviour change.
+#   `ruff format`           the codebase was never reformatted, so a format pass
+#                           would rewrite every file and bury real diffs.
+#
+# target-version is the OLDEST interpreter the code must run on: the local test
+# suite runs on the system python3 (3.11) while the images are python:3.12-slim.
+# Keeping py311 means every auto-fix is valid on both, so `make test` cannot break.
+target-version = "py311"
+line-length = 120
+
+[lint]
+# E4/E7/E9  pycodestyle: import placement, statements, runtime errors
+# F         pyflakes:   unused imports/variables, undefined names
+# I         isort:      import order
+# UP        pyupgrade:  modern syntax
+# B         bugbear:    real bugs (mutable defaults, raise ... from, loop vars)
+# SIM       simplify:   obvious rewrites
+# RUF       ruff-specific hygiene
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+# FastAPI's dependency injection IS a function call in an argument default - that is
+# the documented API, not a mutable-default bug, so B008 is a false positive for the
+# whole routes/ tree. Declaring the injected callables once keeps bugbear active for
+# everything else.
+[lint.flake8-bugbear]
+extend-immutable-calls = [
+  "fastapi.Depends",
+  "fastapi.Query",
+  "fastapi.Body",
+  "fastapi.Header",
+  "fastapi.Cookie",
+  "fastapi.File",
+  "fastapi.Form",
+  "fastapi.Security",
+]
+
+[lint.per-file-ignores]
+# Alembic's env.py runs its config code before it can import the models (that is
+# how alembic writes it), and it reads the lower-case env alias as a deliberate
+# fallback next to the chart's upper-case one.
+"src/gateway/alembic/env.py" = ["E402", "SIM112"]
+# conftest.py must put src/gateway on sys.path before it can import the modules
+# under test, so its imports cannot all sit at the top of the file.
+"src/gateway/tests/conftest.py" = ["E402"]

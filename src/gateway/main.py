@@ -6,16 +6,13 @@ import asyncio
 import logging
 import os
 import uuid
-
 from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from config import get_settings
 from db.session import get_session_factory
-from sqlalchemy import select, text
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
 
 LOG_FORMAT = '{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}'
 
@@ -54,8 +51,8 @@ async def lifespan(app: FastAPI):
 
     # Auto-migrate + seed on startup (K8s: gateway starts after postgres is ready)
     try:
-        from alembic.config import Config
         from alembic import command
+        from alembic.config import Config
 
         alembic_ini = os.path.join(os.path.dirname(__file__), "alembic.ini")
         if os.path.exists(alembic_ini):
@@ -94,8 +91,8 @@ async def lifespan(app: FastAPI):
             # at install (docs/DECISIONS.md ADR-019/021). There is deliberately no default
             # in this file: an empty value skips the bootstrap instead of inventing a
             # credential.
-            from db.models import User
             from auth.rbac import hash_password, verify_password
+            from db.models import User
 
             res = await db.execute(select(User).where(User.email == settings.admin_email))
             user = res.scalars().first()
@@ -184,13 +181,13 @@ def create_app() -> FastAPI:
         )
 
     # routes
+    from routes.audit import router as audit_router
+    from routes.chat import router as chat_router
     from routes.health import router as health_router
     from routes.mcp import router as mcp_router
     from routes.servers import router as servers_router
-    from routes.users import router as users_router
-    from routes.audit import router as audit_router
     from routes.tools import router as tools_router
-    from routes.chat import router as chat_router
+    from routes.users import router as users_router
 
     app.include_router(health_router)
     app.include_router(mcp_router)
@@ -211,7 +208,8 @@ def create_app() -> FastAPI:
 app = create_app()
 
 if __name__ == "__main__":
-    import uvicorn
     import os
+
+    import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))

@@ -14,9 +14,8 @@ import asyncio
 import time
 from types import SimpleNamespace
 
-import pytest
-
 import chat.llm_fallback as fb
+import pytest
 from chat.llm_fallback import (
     CATEGORY_AUTH,
     CATEGORY_BAD_REQUEST,
@@ -25,8 +24,8 @@ from chat.llm_fallback import (
     CATEGORY_QUOTA,
     CATEGORY_UNKNOWN,
     DEFAULT_MAX_MODELS_PER_TURN,
-    LLMBusyError,
     MODEL_COOLDOWNS,
+    LLMBusyError,
     _create_with_fallback,
     _pick_category,
     _status_of,
@@ -73,7 +72,7 @@ def test_config_bugs_are_not_transient():
 def test_timeouts_and_connection_errors_are_transient():
     import httpx
 
-    assert is_transient(asyncio.TimeoutError()) is True
+    assert is_transient(TimeoutError()) is True
     assert is_transient(httpx.ConnectError("boom")) is True
     assert is_transient(httpx.ReadTimeout("boom")) is True
 
@@ -400,9 +399,8 @@ async def _run_chat(monkeypatch, behaviors, tools=None, max_models=None, chain=N
     The test-only knobs live here, never in production code: `max_models` overrides the
     per-turn cap, `chain` the model order.
     """
-    import openai
-
     import chat.agent as agent
+    import openai
 
     class Settings(_FakeSettings):
         def model_chain(self):

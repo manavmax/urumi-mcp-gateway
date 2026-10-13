@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
-from fastapi import Depends, Header, HTTPException, Request
+from db.models import User
+from db.session import get_db
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import ApiKey, User
-from db.session import get_db
 from auth.keys import verify_api_key
 from auth.session import verify_session_cookie
 
@@ -80,7 +79,7 @@ def require_member(user: User = Depends(get_current_user_via_session)) -> User:
 async def get_optional_session_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> Optional[User]:
+) -> User | None:
     """Try session, return None if absent (for mixed routes)."""
     try:
         return await get_current_user_via_session(request, db)

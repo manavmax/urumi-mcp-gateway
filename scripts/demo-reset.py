@@ -353,10 +353,11 @@ async def verify() -> int:
 
     # Force an immediate health probe so the just-restarted notes upstream is re-checked
     # now, instead of waiting for the background loop's interval.
+    # Blind except on purpose: report, then let the per-server checks speak.
     try:
         await probe_once()
         print("health probe: forced run done")
-    except Exception as exc:  # noqa: BLE001 - report, then let the per-server checks speak
+    except Exception as exc:
         print(f"health probe: forced run failed ({exc.__class__.__name__}: {exc})")
 
     state = await gateway_state()

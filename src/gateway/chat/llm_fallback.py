@@ -281,7 +281,10 @@ async def _create_with_fallback(
                 "skipped": skipped,
             }))
             return resp, model
-        except BaseException as exc:  # noqa: BLE001 - deliberate; see is_transient
+        # BaseException on purpose: an httpx transport error, a timeout and an OpenAI
+        # APIStatusError all arrive as different classes, and is_transient() below is
+        # what decides which ones may fall back (raise re-raises the rest).
+        except BaseException as exc:
             if not is_transient(exc):
                 raise  # 400/401/403 etc: config/schema bug, never fall back
             category = error_category(exc)

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from auth.rbac import get_current_user_via_session
 from db.models import Server
 from db.session import get_db
-from auth.rbac import get_current_user_via_session
+from fastapi import APIRouter, Depends, Request
 from gw_mcp.aggregator import fanout_list_tools, list_cached_tools
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 

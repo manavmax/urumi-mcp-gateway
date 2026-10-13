@@ -5,13 +5,12 @@ from __future__ import annotations
 import logging
 import os
 
+from auth import BearerTokenMiddleware
+from config import get_settings
 from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
-
-from auth import BearerTokenMiddleware
-from config import get_settings
 from tools import NoteStore, register_tools
 
 settings = get_settings()

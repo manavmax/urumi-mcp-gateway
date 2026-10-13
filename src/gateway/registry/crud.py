@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
+from db.models import Server
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Server
 from registry.crypto import encrypt
 from registry.validator import validate_url
 
@@ -30,12 +29,12 @@ async def list_servers(db: AsyncSession, include_disabled: bool = True) -> list[
     return list(res.scalars().all())
 
 
-async def get_server(db: AsyncSession, server_id: uuid.UUID) -> Optional[Server]:
+async def get_server(db: AsyncSession, server_id: uuid.UUID) -> Server | None:
     res = await db.execute(select(Server).where(Server.id == server_id))
     return res.scalars().first()
 
 
-async def get_server_by_slug(db: AsyncSession, slug: str) -> Optional[Server]:
+async def get_server_by_slug(db: AsyncSession, slug: str) -> Server | None:
     res = await db.execute(select(Server).where(Server.slug == slug))
     return res.scalars().first()
 
@@ -119,7 +118,7 @@ async def update_server(
         server.timeout_ms = int(timeout_ms)
     if enabled is not None:
         server.enabled = bool(enabled)
-    server.updated_at = datetime.now(timezone.utc)
+    server.updated_at = datetime.now(UTC)
     await db.flush()
     return server
 
@@ -136,7 +135,7 @@ async def set_server_status(db: AsyncSession, server_id: uuid.UUID, status: str,
         return
     srv.status = status
     srv.last_error = last_error
-    srv.updated_at = datetime.now(timezone.utc)
+    srv.updated_at = datetime.now(UTC)
     await db.flush()
 
 
@@ -189,7 +188,8 @@ async def resync_internal_credentials(db: AsyncSession) -> list[str]:
     """
     import os
 
-    notes_token = os.environ.get("NOTES_API_TOKEN") or os.environ.get("notes_api_token") or ""
+    # lower-case is the pydantic field name, kept as a fallback alias on purpose
+    notes_token = os.environ.get("NOTES_API_TOKEN") or os.environ.get("notes_api_token") or ""  # noqa: SIM112
     desired = {d["slug"]: (notes_token if d["slug"] == "notes" else "") for d in INTERNAL_DEFAULTS}
 
     resynced: list[str] = []
@@ -226,5 +226,5 @@ async def _assure_credential(srv: Server, want: str) -> bool:
     srv.credential_encrypted = encrypt(want) if want else None
     if want:
         srv.auth_type = "bearer"
-    srv.updated_at = datetime.now(timezone.utc)
+    srv.updated_at = datetime.now(UTC)
     return True

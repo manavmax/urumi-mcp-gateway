@@ -14,12 +14,11 @@ import hashlib
 import hmac
 import secrets
 import uuid
-from datetime import datetime, timezone
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime
 
 from db.models import ApiKey, User
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 PREFIX = "urumi_sk_"
 
@@ -78,12 +77,11 @@ async def verify_api_key(db: AsyncSession, raw: str) -> tuple[User, ApiKey] | No
         return None
     if key_row.expires_at is not None:
         # compare aware
-        from datetime import datetime as _dt
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         exp = key_row.expires_at
         if exp.tzinfo is None:
-            exp = exp.replace(tzinfo=timezone.utc)
+            exp = exp.replace(tzinfo=UTC)
         if exp < now:
             return None
     # fetch user
@@ -101,6 +99,6 @@ async def revoke_api_key(db: AsyncSession, key_id: uuid.UUID) -> bool:
         return False
     if row.revoked_at is not None:
         return True
-    row.revoked_at = datetime.now(timezone.utc)
+    row.revoked_at = datetime.now(UTC)
     await db.flush()
     return True

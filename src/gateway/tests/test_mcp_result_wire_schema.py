@@ -28,20 +28,18 @@ import time
 import httpx
 import pytest
 import uvicorn
-from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
-from mcp.server.fastmcp import FastMCP
-from mcp.types import EmbeddedResource, ResourceLink, TextContent, TextResourceContents
-from sqlalchemy import CheckConstraint
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
-
 from auth.keys import create_api_key
 from auth.rbac import hash_password
 from db.models import Base, Server, User
 from db.session import get_db
 from gw_mcp.router import _assert_wire_content, _rebuild_content
 from main import create_app
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+from mcp.server.fastmcp import FastMCP
+from mcp.types import EmbeddedResource, ResourceLink, TextContent, TextResourceContents
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 MEMBER = {"email": "wire-member@urumi.local", "password": "member-wire-pass-123"}
 

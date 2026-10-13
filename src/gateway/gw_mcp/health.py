@@ -8,11 +8,11 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from sqlalchemy import select
-
 from config import get_settings
 from db.models import Server
 from db.session import get_session_factory
+from sqlalchemy import select
+
 from gw_mcp.aggregator import fetch_and_cache_tools
 
 logger = logging.getLogger("gateway.health")

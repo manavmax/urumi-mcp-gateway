@@ -5,3 +5,5 @@ pytest==8.*
 pytest-asyncio==0.24.*
 # embedded real DB for the router-level RBAC tests (tests/test_admin_endpoints_router.py)
 aiosqlite==0.22.*
+# Linter (ruleset in ./ruff.toml). Pure wheel, no build step, no cluster, no network.
+ruff==0.17.*

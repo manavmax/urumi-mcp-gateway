@@ -227,8 +227,8 @@ async def main() -> int:
 
     # --- (4) wrong key -> clear error (isolated probe, in-pod, never prints the key) ---
     try:
-        from openai import AsyncOpenAI
         from config import get_settings
+        from openai import AsyncOpenAI
 
         s = get_settings()
         bad = AsyncOpenAI(api_key="sk-wrong-key-for-llm-probe-not-the-real-one", base_url=s.openai_base_url or None)

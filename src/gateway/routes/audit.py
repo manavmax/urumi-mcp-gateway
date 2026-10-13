@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
 
+from audit.crud import query_audit
+from auth.rbac import get_current_user_via_session
+from db.session import get_db
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.session import get_db
-from auth.rbac import get_current_user_via_session
-from audit.crud import query_audit
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
@@ -21,14 +19,14 @@ async def get_audit(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user_via_session),
-    server: Optional[str] = Query(default=None),
-    tool: Optional[str] = Query(default=None),
-    outcome: Optional[str] = Query(default=None),
-    from_ts: Optional[str] = Query(default=None, alias="from"),
-    to_ts: Optional[str] = Query(default=None, alias="to"),
+    server: str | None = Query(default=None),
+    tool: str | None = Query(default=None),
+    outcome: str | None = Query(default=None),
+    from_ts: str | None = Query(default=None, alias="from"),
+    to_ts: str | None = Query(default=None, alias="to"),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
-    user_id: Optional[str] = Query(default=None),
+    user_id: str | None = Query(default=None),
 ):
     # parse timestamps
     from_dt = None

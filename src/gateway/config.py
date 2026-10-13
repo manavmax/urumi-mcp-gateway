@@ -127,7 +127,8 @@ def get_settings() -> Settings:
     # Support FERNET_KEY / DATABASE_URL env names from the chart (upper-case)
     # in addition to lower-case pydantic names.
     overrides: dict[str, str] = {}
-    if not os.environ.get("DATABASE_URL") and os.environ.get("database_url"):
+    # lower-case is the pydantic field name, kept as a fallback alias on purpose
+    if not os.environ.get("DATABASE_URL") and os.environ.get("database_url"):  # noqa: SIM112
         pass
     # Map upper-case Secrets to settings fields when lower-case not set
     mapping = {

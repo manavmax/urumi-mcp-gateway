@@ -22,16 +22,15 @@ import uuid
 
 import httpx
 import pytest
-from httpx import ASGITransport
-from sqlalchemy import CheckConstraint, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
-
 from auth.keys import create_api_key
 from auth.rbac import hash_password
 from db.models import ApiKey, AuditLog, Base, Server, User
 from db.session import get_db
+from httpx import ASGITransport
 from main import create_app
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 ADMIN = {"email": "admin-router@urumi.local", "password": "admin-router-pass-123"}
 MEMBER = {"email": "member-router@urumi.local", "password": "member-router-pass-123"}
@@ -225,7 +224,9 @@ async def test_member_cannot_mint_key_for_another_user(harness):
     # the spoofed user_id must be ignored: the row belongs to the member
     # read back through the same dependency the app uses (real DB row)
     from db.session import get_db as _g
-    override = client._transport.app.dependency_overrides[_g]  # noqa: SLF001
+    # reaching into the dependency override is the point of this test (private attr
+    # on the httpx Transport, not on the code under test)
+    override = client._transport.app.dependency_overrides[_g]
     agen = override()
     session = await agen.__anext__()
     try:

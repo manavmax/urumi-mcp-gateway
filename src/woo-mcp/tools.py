@@ -24,9 +24,12 @@ from typing import Annotated, Literal
 
 from mcp.types import ToolAnnotations
 from pydantic import BeforeValidator, Field
-
-from woo_client import WooApiError, WooUnreachableError, WooRestClient
-from woo_client import _NOT_FOUND_MARKERS  # reuse the "unknown id" markers
+from woo_client import (
+    _NOT_FOUND_MARKERS,  # reuse the "unknown id" markers
+    WooApiError,
+    WooRestClient,
+    WooUnreachableError,
+)
 
 logger = logging.getLogger("woo-mcp.tools")
 

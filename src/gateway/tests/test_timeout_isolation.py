@@ -10,13 +10,11 @@ from __future__ import annotations
 import asyncio
 import time
 
+import gw_mcp.router as router
 import pytest
-
 from gw_mcp.breaker import CircuitBreaker
 
-import gw_mcp.router as router
 from tests.conftest import FakeDB, make_server
-
 
 
 async def test_slow_upstream_times_out_at_server_timeout(monkeypatch):

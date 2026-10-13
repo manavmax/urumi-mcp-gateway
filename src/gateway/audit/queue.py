@@ -9,9 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime
 
 from config import get_settings
 from db.models import AuditLog
@@ -47,7 +45,7 @@ async def log_audit(
         outcome=outcome,
         error_code=error_code,
         client_ip=client_ip,
-        ts=datetime.now(timezone.utc),
+        ts=datetime.now(UTC),
     )
     try:
         audit_queue.put_nowait(item)
@@ -107,7 +105,7 @@ async def audit_worker():
                     to_flush = batch
                     batch = []
                     await flush(to_flush)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if batch:
                     to_flush = batch
                     batch = []

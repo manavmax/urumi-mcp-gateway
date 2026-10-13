@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -65,7 +65,7 @@ def register_tools(mcp) -> None:
         now_local = datetime.now(tz)
         return _serialise(
             {
-                "now_utc": datetime.now(timezone.utc).isoformat(),
+                "now_utc": datetime.now(UTC).isoformat(),
                 "timezone": tz_name,
                 "now_local": now_local.isoformat(),
                 "utc_offset_minutes": int(now_local.utcoffset().total_seconds() // 60),

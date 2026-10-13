@@ -16,19 +16,16 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import JSONResponse
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from audit.queue import log_audit
+from config import get_settings
 from db.models import Server
 from db.session import get_db
-from auth.rbac import get_current_user_via_api_key
-from audit.queue import log_audit
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse
 from gw_mcp.aggregator import fanout_list_tools, list_cached_tools, split_exposed
 from gw_mcp.router import call_tool_routed
-from gw_mcp.breaker import breaker
-from config import get_settings
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("gateway.mcp")
 

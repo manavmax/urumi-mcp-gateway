@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.models import Server
-from db.session import get_db
 from auth.rbac import get_current_user_via_session, require_admin, verify_csrf
 from config import get_settings
-from registry.crud import create_server, delete_server, get_server, get_server_by_slug, list_servers, update_server
-from registry.validator import validate_url
+from db.models import Server
+from db.session import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
+from registry.crud import create_server, delete_server, get_server, list_servers, update_server
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/servers", tags=["servers"])
 
@@ -24,20 +20,20 @@ class ServerCreate(BaseModel):
     slug: str = Field(pattern=r"^[a-z0-9-]+$")
     url: str
     auth_type: str = Field(default="none", pattern=r"^(none|bearer|header)$")
-    header_name: Optional[str] = None
-    credential: Optional[str] = None  # plaintext, encrypted server-side
+    header_name: str | None = None
+    credential: str | None = None  # plaintext, encrypted server-side
     timeout_ms: int = Field(default=10000, ge=1000, le=60000)
     enabled: bool = True
 
 
 class ServerUpdate(BaseModel):
-    slug: Optional[str] = Field(default=None, pattern=r"^[a-z0-9-]+$")
-    url: Optional[str] = None
-    auth_type: Optional[str] = Field(default=None, pattern=r"^(none|bearer|header)$")
-    header_name: Optional[str] = None
-    credential: Optional[str] = None
-    timeout_ms: Optional[int] = Field(default=None, ge=1000, le=60000)
-    enabled: Optional[bool] = None
+    slug: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
+    url: str | None = None
+    auth_type: str | None = Field(default=None, pattern=r"^(none|bearer|header)$")
+    header_name: str | None = None
+    credential: str | None = None
+    timeout_ms: int | None = Field(default=None, ge=1000, le=60000)
+    enabled: bool | None = None
 
 
 def _server_out(s: Server) -> dict:

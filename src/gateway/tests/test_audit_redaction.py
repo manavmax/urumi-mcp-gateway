@@ -11,12 +11,9 @@ import inspect
 import json
 import uuid
 
-import pytest
-
 import audit.queue as audit_queue_module
 from audit.queue import log_audit
 from db.models import AuditLog
-
 
 # columns/fields that would make the audit trail a credential or tool-payload sink
 BANNED = {

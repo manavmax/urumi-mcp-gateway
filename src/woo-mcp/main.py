@@ -12,13 +12,12 @@ from __future__ import annotations
 import logging
 import os
 
+from config import get_settings
 from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
-
-from config import get_settings
 from tools import register_tools
 from woo_client import WooRestClient
 

@@ -16,9 +16,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
-import time
-import uuid
 
 import httpx
 
@@ -53,11 +50,10 @@ async def minted_or_existing_api_key() -> tuple[str, str]:
     """Return (api_key_plaintext, api_key_id_str). Tries env/config first, else mints via DB."""
     # Try env-passed key? Gateway pod may not have one; try to load from DB/in-app mint.
     # We do in-process DB import so this file is self-contained.
-    from sqlalchemy import select
-
-    from db.session import get_session_factory
-    from db.models import ApiKey, User
     from auth.keys import create_api_key as mint_api_key
+    from db.models import ApiKey, User
+    from db.session import get_session_factory
+    from sqlalchemy import select
 
     factory = get_session_factory()
     async with factory() as db:
@@ -215,9 +211,9 @@ async def main() -> int:
         # raw JSON-RPC the client received with the router's own strict wire checker, so
         # a regression that a lenient client would swallow fails this script.
         try:
+            from gw_mcp.router import _assert_wire_content
             from mcp import ClientSession
             from mcp.client.streamable_http import streamablehttp_client
-            from gw_mcp.router import _assert_wire_content
 
             raw_bodies: list[str] = []
 
@@ -386,10 +382,9 @@ async def main() -> int:
         # --- audit row written (best-effort; allow flush interval) ---
         await asyncio.sleep(1.5)
         try:
-            from sqlalchemy import select, func
-
-            from db.session import get_session_factory
             from db.models import AuditLog
+            from db.session import get_session_factory
+            from sqlalchemy import func, select
 
             factory = get_session_factory()
             async with factory() as db:

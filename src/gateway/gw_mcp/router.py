@@ -5,20 +5,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
-import uuid
 
 import httpx
+from config import get_settings
+from db.models import Server
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.models import Server
-from gw_mcp.aggregator import split_exposed
-from gw_mcp.breaker import breaker
 from registry.crypto import decrypt
 from registry.validator import resolve_and_validate
-from config import get_settings
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from gw_mcp.aggregator import split_exposed
+from gw_mcp.breaker import breaker
 
 logger = logging.getLogger("gateway.router")
 
@@ -265,7 +263,7 @@ async def call_tool_routed(
         server.status = "Connected"
         server.last_error = None
         return result
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         breaker.record_failure(server.id)
         server.status = "Unreachable"
         server.last_error = "timeout"

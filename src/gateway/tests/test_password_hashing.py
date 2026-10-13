@@ -8,10 +8,7 @@ tampered or garbage hash fails *without raising*; hashes are never reproducible
 
 from __future__ import annotations
 
-import pytest
-
 from auth.rbac import hash_password, verify_password
-
 
 
 async def test_hash_is_argon2id_with_random_salt():

@@ -7,16 +7,12 @@ concrete error (never a silent success).
 
 from __future__ import annotations
 
-import uuid
-
+import gw_mcp.router as router
 import pytest
-
 from gw_mcp.aggregator import exposed_name, split_exposed
 from gw_mcp.breaker import CircuitBreaker
 
-import gw_mcp.router as router
 from tests.conftest import FakeDB, make_server
-
 
 # ---- exposed name <-> slug split ----
 

@@ -9,10 +9,9 @@ from __future__ import annotations
 import secrets
 import uuid
 
-from itsdangerous import BadSignature, SignatureExpired, TimestampSigner, URLSafeTimedSerializer
-from fastapi import Request, Response
-
 from config import get_settings
+from fastapi import Response
+from itsdangerous import BadSignature, SignatureExpired, TimestampSigner, URLSafeTimedSerializer
 
 
 def _serializer() -> URLSafeTimedSerializer:

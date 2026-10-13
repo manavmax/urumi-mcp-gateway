@@ -12,21 +12,19 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from auth.keys import PREFIX, create_api_key, generate_raw_key, hash_key, revoke_api_key, verify_api_key
 from db.models import ApiKey, User
-from tests.conftest import FakeResult
 
+from tests.conftest import FakeResult
 
 # every column an ApiKey row may have - and none of them can hold the raw key
 SAFE_KEY_COLUMNS = {"id", "user_id", "prefix", "sha256", "last4", "revoked_at", "expires_at", "created_at"}
 
 
 def now():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _user(*, active=True) -> User:

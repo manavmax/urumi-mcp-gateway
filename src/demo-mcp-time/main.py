@@ -9,12 +9,11 @@ from __future__ import annotations
 import logging
 import os
 
+from config import get_settings
 from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
-
-from config import get_settings
 from tools import register_tools
 
 settings = get_settings()

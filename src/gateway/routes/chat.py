@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse, JSONResponse
-from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.session import get_db
 from auth.rbac import get_current_user_via_session
 from config import get_settings
+from db.session import get_db
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
