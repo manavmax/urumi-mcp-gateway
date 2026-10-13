@@ -9,11 +9,24 @@ from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from mcp.types import ToolAnnotations
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 logger = logging.getLogger("demo-time.tools")
 
 TZ_NAME = Annotated[str, Field(min_length=1, max_length=64, description="IANA timezone name, e.g. Europe/Berlin")]
+
+
+def blank_to_none(value):
+    """Treat a blank optional string as "not provided".
+
+    The MCP Inspector renders a text input for every string parameter and submits ""
+    for empty ones, so an unfilled timezone must behave like an omitted one
+    (default UTC) instead of failing the min_length=1 schema check.
+    """
+
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
 
 
 def _serialise(payload) -> str:
@@ -44,7 +57,9 @@ def register_tools(mcp) -> None:
             title="Get current time", readOnlyHint=True, destructiveHint=False, idempotentHint=True
         ),
     )
-    async def get_current_time(timezone_name: TZ_NAME | None = None) -> str:
+    async def get_current_time(
+        timezone_name: Annotated[TZ_NAME | None, BeforeValidator(blank_to_none)] = None,
+    ) -> str:
         tz_name = timezone_name or "UTC"
         tz = _resolve(tz_name)
         now_local = datetime.now(tz)

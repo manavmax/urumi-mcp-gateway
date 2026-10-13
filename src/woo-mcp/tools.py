@@ -23,14 +23,37 @@ import logging
 from typing import Annotated, Literal
 
 from mcp.types import ToolAnnotations
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 from woo_client import WooApiError, WooUnreachableError, WooRestClient
 from woo_client import _NOT_FOUND_MARKERS  # reuse the "unknown id" markers
 
 logger = logging.getLogger("woo-mcp.tools")
 
+
+def blank_to_none(value):
+    """Treat a blank optional string as "not provided".
+
+    The MCP Inspector renders a text input for every string-ish parameter and submits
+    "" for the ones the user leaves empty, so an unfilled filter must arrive here as
+    "" rather than being absent. Every optional parameter below must behave the same
+    for both shapes, otherwise `list_orders`/`list_products` fail schema validation
+    (Literal / max_length) on a call the user considers empty.
+    """
+
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+# Optional string/enum parameter that tolerates "" as "not provided". Any pydantic
+# constraint is nested INSIDE the union so a blank converts to None before the
+# constraint could be applied to a null value.
+def blank_optional(inner=str) -> object:
+    return Annotated[inner | None, BeforeValidator(blank_to_none)]
+
 PRODUCT_TYPE = Literal["simple", "variable", "grouped", "external"]
+PRODUCT_STATUS_FILTER = Literal["publish", "draft", "pending", "private"]
 ORDER_STATUS = Literal[
     "pending", "processing", "on-hold", "completed", "cancelled", "refunded", "failed"
 ]
@@ -92,9 +115,9 @@ def register_tools(mcp, client: WooRestClient) -> None:
         ),
     )
     async def list_products(
-        search: Annotated[str | None, Field(description="Free-text search")] = None,
-        status: Literal["publish", "draft", "pending", "private"] | None = None,
-        sku: Annotated[str | None, Field(max_length=100)] = None,
+        search: blank_optional(Annotated[str, Field(description="Free-text search")]) = None,
+        status: blank_optional(PRODUCT_STATUS_FILTER) = None,
+        sku: blank_optional(Annotated[str, Field(max_length=100)]) = None,
         per_page: PER_PAGE = 10,
         page: PAGE = 1,
     ) -> str:
@@ -161,8 +184,8 @@ def register_tools(mcp, client: WooRestClient) -> None:
     async def create_product(
         name: Annotated[str, Field(min_length=1, max_length=200)],
         regular_price: Annotated[str, Field(pattern=r"^\d+(\.\d{1,2})?$")],
-        description: Annotated[str | None, Field(description="Long description")] = None,
-        sku: Annotated[str | None, Field(max_length=100)] = None,
+        description: blank_optional(Annotated[str, Field(description="Long description")]) = None,
+        sku: blank_optional(Annotated[str, Field(max_length=100)]) = None,
         type: PRODUCT_TYPE = "simple",
     ) -> str:
         body: dict = {
@@ -199,9 +222,9 @@ def register_tools(mcp, client: WooRestClient) -> None:
         ),
     )
     async def list_orders(
-        after: Annotated[str | None, Field(description="ISO-8601 lower bound")] = None,
-        before: Annotated[str | None, Field(description="ISO-8601 upper bound")] = None,
-        status: ORDER_STATUS_FILTER | None = None,
+        after: blank_optional(Annotated[str, Field(description="ISO-8601 lower bound")]) = None,
+        before: blank_optional(Annotated[str, Field(description="ISO-8601 upper bound")]) = None,
+        status: blank_optional(ORDER_STATUS_FILTER) = None,
         per_page: PER_PAGE = 10,
         page: PAGE = 1,
     ) -> str:
