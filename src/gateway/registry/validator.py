@@ -61,9 +61,8 @@ def validate_url(url: str, *, allowed_host_suffixes: list[str] | None = None, al
         # If host is cluster-internal (suffix allow), skip domain check
         suffixes = allowed_host_suffixes or []
         is_internal = any(host_lower == s.lstrip(".") or host_lower.endswith(s.lower()) for s in suffixes)
-        if not is_internal:
-            if not any(host_lower == d or host_lower.endswith("." + d) for d in allowed_domains):
-                raise ValueError(f"Host {host} not in allowed domains")
+        if not is_internal and not any(host_lower == d or host_lower.endswith("." + d) for d in allowed_domains):
+            raise ValueError(f"Host {host} not in allowed domains")
     # block literal private IPs without DNS (fast path)
     try:
         ip = ipaddress.ip_address(host)
@@ -100,7 +99,7 @@ async def resolve_and_validate(host: str):
         infos = await asyncio.to_thread(socket.getaddrinfo, host, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
         raise ValueError(f"DNS resolution failed for {host}: {exc}") from exc
-    for family, _, _, _, sockaddr in infos:
+    for _family, _, _, _, sockaddr in infos:
         ip_str = sockaddr[0]
         try:
             ip_obj = ipaddress.ip_address(ip_str)

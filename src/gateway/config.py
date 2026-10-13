@@ -124,13 +124,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    # Support FERNET_KEY / DATABASE_URL env names from the chart (upper-case)
-    # in addition to lower-case pydantic names.
-    overrides: dict[str, str] = {}
-    # lower-case is the pydantic field name, kept as a fallback alias on purpose
-    if not os.environ.get("DATABASE_URL") and os.environ.get("database_url"):  # noqa: SIM112
-        pass
-    # Map upper-case Secrets to settings fields when lower-case not set
+    # Map the upper-case Secret/env the chart injects onto the lower-case pydantic
+    # field name, but never overwrite a lower-case value the operator already set.
     mapping = {
         "FERNET_KEY": "fernet_key",
         "DATABASE_URL": "database_url",

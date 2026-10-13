@@ -104,10 +104,8 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
         return Response(status_code=202)
 
     if method == "initialize":
-        # Echo protocol version, return capabilities
-        params = payload.get("params", {}) or {}
-        client_version = params.get("protocolVersion", PROTOCOL_VERSION)
-        # Always answer with our version
+        # Echo protocol version, return capabilities. The version the CLIENT asked
+        # for is deliberately not echoed: this gateway answers with its own.
         result = {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {"tools": {"listChanged": True}},

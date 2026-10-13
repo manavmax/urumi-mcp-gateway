@@ -85,7 +85,6 @@ def rpc_result(body: dict) -> dict:
 async def main() -> int:
     # Be resilient: this script lives in the gateway pod, so imports from src/gateway are on PYTHONPATH (/app)
     api_key = ""
-    api_key_label = "( minted )"
     try:
         api_key, _ = await minted_or_existing_api_key()
     except Exception as exc:
@@ -101,7 +100,7 @@ async def main() -> int:
         except Exception:
             body = {"_raw": r.text[:300]}
         err = (body.get("error") or {}).get("message", "") + str(body.get("_raw", ""))
-        check("mcp unauth -> 401 (missing bearer)", r.status_code in (401, 403), f"status={r.status_code} body={json.dumps(body)[:200]}")
+        check("mcp unauth -> 401 (missing bearer)", r.status_code in (401, 403), f"status={r.status_code} err={err[:200]}")
 
         if not api_key:
             print("no api key available — stopping after unauth check")
@@ -225,35 +224,37 @@ async def main() -> int:
                 return httpx.AsyncClient(**{**kwargs, "headers": h, "event_hooks": {"response": [_cap]}})
 
             sdk_targets = [n for n in ("woo__list_products", "time__get_current_time", "notes__list_notes") if n in names]
-            async with streamablehttp_client(f"{BASE}/mcp", httpx_client_factory=_factory) as (sread, swrite, _meta):
-                async with ClientSession(sread, swrite) as session:
-                    init = await session.initialize()
-                    check("SDK client initialize", init.protocolVersion == "2025-03-26", str(init.protocolVersion))
-                    if not sdk_targets:
-                        check("SDK client: have a target tool to call", False, f"names={sorted(names)[:12]}")
-                    for tool_name in sdk_targets:
-                        call_args = {}
-                        if tool_name == "time__get_current_time":
-                            call_args = {"timezone": "UTC"}
-                        try:
-                            sres = await session.call_tool(tool_name, call_args)
-                            check(f"SDK call_tool {tool_name} parsed by official client", True, f"isError={sres.isError}")
-                        except Exception as exc:
-                            check(f"SDK call_tool {tool_name} parsed by official client", False, f"{type(exc).__name__}: {str(exc)[:220]}")
-                            continue
-                        # strict wire check on the raw bytes the client actually received
-                        try:
-                            for body in reversed(raw_bodies):
-                                parsed = json.loads(body)
-                                resj = parsed.get("result")
-                                if isinstance(resj, dict) and isinstance(resj.get("content"), list):
-                                    _assert_wire_content(resj["content"])
-                                    check(f"SDK {tool_name} raw result wire-valid", True, "")
-                                    break
-                            else:
-                                check(f"SDK {tool_name} raw result wire-valid", False, "no tools/call result captured")
-                        except ValueError as exc:
-                            check(f"SDK {tool_name} raw result wire-valid", False, str(exc))
+            async with (
+                streamablehttp_client(f"{BASE}/mcp", httpx_client_factory=_factory) as (sread, swrite, _meta),
+                ClientSession(sread, swrite) as session,
+            ):
+                init = await session.initialize()
+                check("SDK client initialize", init.protocolVersion == "2025-03-26", str(init.protocolVersion))
+                if not sdk_targets:
+                    check("SDK client: have a target tool to call", False, f"names={sorted(names)[:12]}")
+                for tool_name in sdk_targets:
+                    call_args = {}
+                    if tool_name == "time__get_current_time":
+                        call_args = {"timezone": "UTC"}
+                    try:
+                        sres = await session.call_tool(tool_name, call_args)
+                        check(f"SDK call_tool {tool_name} parsed by official client", True, f"isError={sres.isError}")
+                    except Exception as exc:
+                        check(f"SDK call_tool {tool_name} parsed by official client", False, f"{type(exc).__name__}: {str(exc)[:220]}")
+                        continue
+                    # strict wire check on the raw bytes the client actually received
+                    try:
+                        for body in reversed(raw_bodies):
+                            parsed = json.loads(body)
+                            resj = parsed.get("result")
+                            if isinstance(resj, dict) and isinstance(resj.get("content"), list):
+                                _assert_wire_content(resj["content"])
+                                check(f"SDK {tool_name} raw result wire-valid", True, "")
+                                break
+                        else:
+                            check(f"SDK {tool_name} raw result wire-valid", False, "no tools/call result captured")
+                    except ValueError as exc:
+                        check(f"SDK {tool_name} raw result wire-valid", False, str(exc))
         except Exception as exc:
             check("SDK client run (imports/wiring)", False, f"{type(exc).__name__}: {str(exc)[:220]}")
 

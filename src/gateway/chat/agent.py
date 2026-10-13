@@ -182,7 +182,7 @@ async def chat_loop(
 
     allowed_tools = await _get_allowed_tools(db)
     openai_tools = _to_openai_tools(allowed_tools)
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}] + conversation
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}, *conversation]
 
     # Lazy import openai so gateway runs without key
     try:
@@ -225,7 +225,7 @@ async def chat_loop(
             event["writes"] = sorted(set(writes_done))
         return event
 
-    for iteration in range(MAX_ITERS):
+    for _iteration in range(MAX_ITERS):
         if time.monotonic() - start > OVERALL_TIMEOUT:
             yield _end_turn("Chat timed out (60s). Please try a shorter request.", CATEGORY_UNKNOWN)
             return

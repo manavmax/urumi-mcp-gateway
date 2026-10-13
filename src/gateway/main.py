@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import uuid
@@ -144,10 +145,9 @@ async def lifespan(app: FastAPI):
     for t in [audit_task, health_task]:
         if t:
             t.cancel()
-            try:
+            # awaiting a cancelled task re-raises CancelledError, which is expected
+            with contextlib.suppress(asyncio.CancelledError):
                 await t
-            except asyncio.CancelledError:
-                pass
     try:
         from db.session import dispose_engine
 

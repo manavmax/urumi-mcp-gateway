@@ -53,7 +53,8 @@ async def get_current_user_via_session(
     try:
         uid = uuid.UUID(data["uid"])
     except Exception:
-        raise HTTPException(status_code=401, detail="invalid session")
+        # from None: the ValueError payload says nothing the client may see
+        raise HTTPException(status_code=401, detail="invalid session") from None
     result = await db.execute(select(User).where(User.id == uid))
     user = result.scalars().first()
     if not user or not user.is_active:

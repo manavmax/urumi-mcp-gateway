@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from datetime import datetime
 
@@ -28,19 +29,15 @@ async def get_audit(
     offset: int = Query(default=0, ge=0),
     user_id: str | None = Query(default=None),
 ):
-    # parse timestamps
+    # parse timestamps (best-effort: an unparseable filter is dropped, not a 500)
     from_dt = None
     to_dt = None
     if from_ts:
-        try:
+        with contextlib.suppress(Exception):
             from_dt = datetime.fromisoformat(from_ts.replace("Z", "+00:00"))
-        except Exception:
-            pass
     if to_ts:
-        try:
+        with contextlib.suppress(Exception):
             to_dt = datetime.fromisoformat(to_ts.replace("Z", "+00:00"))
-        except Exception:
-            pass
     uid_filter = None
     if user_id:
         try:

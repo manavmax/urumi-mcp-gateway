@@ -74,21 +74,23 @@ async def _fetch_tools_for_server(server: Server, timeout_seconds: float = 8.0) 
         # SDK may pass headers= / timeout= / etc — accept and ignore; we set timeout ourselves
         return httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds), follow_redirects=False)
 
-    async with streamablehttp_client(server.url, headers=headers, httpx_client_factory=_factory) as (read, write, _meta):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.list_tools()
-                out = []
-                for t in result.tools:
-                    out.append(
-                        {
-                            "name": t.name,
-                            "description": t.description or "",
-                            "inputSchema": t.inputSchema if isinstance(t.inputSchema, dict) else (t.inputSchema or {}),
-                            "annotations": getattr(t, "annotations", None),
-                        }
-                    )
-                return out
+    async with (
+        streamablehttp_client(server.url, headers=headers, httpx_client_factory=_factory) as (read, write, _meta),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        result = await session.list_tools()
+        out = []
+        for t in result.tools:
+            out.append(
+                {
+                    "name": t.name,
+                    "description": t.description or "",
+                    "inputSchema": t.inputSchema if isinstance(t.inputSchema, dict) else (t.inputSchema or {}),
+                    "annotations": getattr(t, "annotations", None),
+                }
+            )
+        return out
 
 
 async def fetch_and_cache_tools(db: AsyncSession, server: Server, timeout_seconds: float = 8.0) -> list[Tool]:

@@ -60,10 +60,8 @@ def _rebuild_content_block(block) -> dict | None:
     Unrecognised block types degrade to a text block (the JSON payload is kept in
     the text) so a client never sees a block it cannot parse.
     """
-    if isinstance(block, dict):  # tolerate already-serialised upstream dicts
-        btype = block.get("type")
-    else:
-        btype = getattr(block, "type", None)
+    # tolerate already-serialised upstream dicts as well as SDK models
+    btype = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
 
     def _get(key, default=None):
         if isinstance(block, dict):
@@ -200,33 +198,35 @@ async def proxy_call(
     def _factory(**_kwargs):
         return httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds), follow_redirects=False)
 
-    async with streamablehttp_client(server.url, headers=headers, httpx_client_factory=_factory) as (read, write, _meta):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(upstream_tool, arguments or {})
-                # result is CallToolResult: content + isError (+ optional structuredContent)
-                # Rebuild into minimal, spec-valid dicts — never model_dump() upstream
-                # models, which leaks `"annotations": null` / `"meta": null` and breaks
-                # strict MCP clients (MCP Inspector / TypeScript SDK).
-                content = _rebuild_content(result.content)
-                structured_content = getattr(result, "structuredContent", None)
-                if not isinstance(structured_content, dict):
-                    # null / non-object structuredContent is invalid on the wire (TS SDK:
-                    # "expected record, received null"); only a JSON object is forwarded.
-                    structured_content = None
-                payload = {"content": content, "isError": bool(getattr(result, "isError", False))}
-                if structured_content is not None:
-                    payload["structuredContent"] = structured_content
-                try:
-                    _assert_wire_content(payload["content"])
-                except ValueError as exc:
-                    # Belt and braces: never let an invalid block reach the client.
-                    logger.warning("rebuilt tools/call content failed wire check (%s); degrading to text", exc)
-                    payload = {
-                        "content": [{"type": "text", "text": json.dumps(payload, default=str)}],
-                        "isError": bool(payload.get("isError")),
-                    }
-                return payload
+    async with (
+        streamablehttp_client(server.url, headers=headers, httpx_client_factory=_factory) as (read, write, _meta),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        result = await session.call_tool(upstream_tool, arguments or {})
+        # result is CallToolResult: content + isError (+ optional structuredContent)
+        # Rebuild into minimal, spec-valid dicts — never model_dump() upstream
+        # models, which leaks `"annotations": null` / `"meta": null` and breaks
+        # strict MCP clients (MCP Inspector / TypeScript SDK).
+        content = _rebuild_content(result.content)
+        structured_content = getattr(result, "structuredContent", None)
+        if not isinstance(structured_content, dict):
+            # null / non-object structuredContent is invalid on the wire (TS SDK:
+            # "expected record, received null"); only a JSON object is forwarded.
+            structured_content = None
+        payload = {"content": content, "isError": bool(getattr(result, "isError", False))}
+        if structured_content is not None:
+            payload["structuredContent"] = structured_content
+        try:
+            _assert_wire_content(payload["content"])
+        except ValueError as exc:
+            # Belt and braces: never let an invalid block reach the client.
+            logger.warning("rebuilt tools/call content failed wire check (%s); degrading to text", exc)
+            payload = {
+                "content": [{"type": "text", "text": json.dumps(payload, default=str)}],
+                "isError": bool(payload.get("isError")),
+            }
+        return payload
 
 
 async def call_tool_routed(

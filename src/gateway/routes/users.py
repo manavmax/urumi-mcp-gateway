@@ -148,7 +148,8 @@ async def create_key(body: KeyCreate, request: Request, db: AsyncSession = Depen
         try:
             target_user_id = uuid.UUID(raw["user_id"])
         except Exception:
-            raise HTTPException(status_code=400, detail="invalid user_id")
+            # from None: the ValueError payload says nothing the client may see
+            raise HTTPException(status_code=400, detail="invalid user_id") from None
     row, raw_key = await create_api_key(db, target_user_id)
     await db.commit()
     return {
@@ -170,6 +171,8 @@ async def revoke_key(key_id: uuid.UUID, request: Request, db: AsyncSession = Dep
     # only owner or admin can revoke
     if row.user_id != user.id and user.role != "admin":
         raise HTTPException(status_code=403, detail="not allowed to revoke this key")
-    ok = await revoke_api_key(db, key_id)
+    # revoke_api_key() returns False only for an unknown id, already 404'd above,
+    # so this stays idempotent and the result is not a new response field.
+    await revoke_api_key(db, key_id)
     await db.commit()
     return {"revoked": True}

@@ -162,10 +162,7 @@ def _all_required(schema):
 
 
 def _has_null_branch(schema):
-    for k, v in _walk(schema):
-        if k == "type" and v == "null":
-            return True
-    return False
+    return any(k == "type" and v == "null" for k, v in _walk(schema))
 
 
 def test_no_const_keyword_in_any_sanitized_schema():

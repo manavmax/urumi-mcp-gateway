@@ -129,7 +129,7 @@ async def test_authenticates_a_valid_key():
 
 async def test_verify_fails_closed():
     user = _user()
-    row, raw = _key(user_id=user.id)
+    row, _raw = _key(user_id=user.id)
     db = _AuthDB(keys=[row], user=user)
     # empty / whitespace-only keys are rejected before any lookup
     assert await verify_api_key(db, "") is None

@@ -20,6 +20,7 @@ fields, no null values anywhere (spec-optional means absent, never null).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import socket
 import threading
@@ -259,40 +260,40 @@ async def test_tools_call_results_are_wire_valid_through_real_sdk_client(upstrea
         async def _capture(response: httpx.Response):
             body = await response.aread()
             if response.request.url.path == "/mcp" and response.status_code == 200:
-                try:
+                with contextlib.suppress(ValueError):
                     captured.append(json.loads(body))
-                except Exception:
-                    pass
 
         kwargs.setdefault("timeout", 30)
         return httpx.AsyncClient(**{**kwargs, "event_hooks": {"response": [_capture]}})
 
-    async with streamablehttp_client(gw_url, headers={"Authorization": f"Bearer {member_key}"}, httpx_client_factory=outer_factory) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
+    async with (
+        streamablehttp_client(gw_url, headers={"Authorization": f"Bearer {member_key}"}, httpx_client_factory=outer_factory) as (read, write, _),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
 
-            listing = await session.list_tools()
-            names = [t.name for t in listing.tools]
-            assert "up__echo" in names, f"tools/list via gateway: {names}"
+        listing = await session.list_tools()
+        names = [t.name for t in listing.tools]
+        assert "up__echo" in names, f"tools/list via gateway: {names}"
 
-            # success result: the real SDK client must parse it, and the raw JSON-RPC
-            # bytes must survive the strict (TS-SDK-style) wire check.
-            res = await session.call_tool("up__echo", {"msg": "hello"})
-            assert res.isError is False
-            texts = [b.text for b in res.content if b.type == "text"]
-            assert any("echo:hello" in t for t in texts), texts
-            raw = _captured_tool_result(captured, "up__echo")
-            strict_wire_check(raw, "up__echo success")
-            # EXACT minimal wire shape: no annotations/meta keys, no degraded
-            # JSON-dump fallback block (a regression to model_dump() must fail here).
-            assert raw["content"][0] == {"type": "text", "text": "echo:hello"}
+        # success result: the real SDK client must parse it, and the raw JSON-RPC
+        # bytes must survive the strict (TS-SDK-style) wire check.
+        res = await session.call_tool("up__echo", {"msg": "hello"})
+        assert res.isError is False
+        texts = [b.text for b in res.content if b.type == "text"]
+        assert any("echo:hello" in t for t in texts), texts
+        raw = _captured_tool_result(captured, "up__echo")
+        strict_wire_check(raw, "up__echo success")
+        # EXACT minimal wire shape: no annotations/meta keys, no degraded
+        # JSON-dump fallback block (a regression to model_dump() must fail here).
+        assert raw["content"][0] == {"type": "text", "text": "echo:hello"}
 
-            # upstream tool failure (isError=true) is ALSO a CallToolResult: same rules.
-            res2 = await session.call_tool("up__fail", {})
-            assert res2.isError is True
-            err_text = " ".join(b.text for b in res2.content if b.type == "text")
-            assert "UPSTREAM_BOOM" in err_text, err_text
-            raw_err = captured[-1]["result"]
-            strict_wire_check(raw_err, "up__fail isError")
-            # error results must carry the readable tool error, not a degraded JSON dump
-            assert not raw_err["content"][0]["text"].lstrip().startswith("{"), raw_err
+        # upstream tool failure (isError=true) is ALSO a CallToolResult: same rules.
+        res2 = await session.call_tool("up__fail", {})
+        assert res2.isError is True
+        err_text = " ".join(b.text for b in res2.content if b.type == "text")
+        assert "UPSTREAM_BOOM" in err_text, err_text
+        raw_err = captured[-1]["result"]
+        strict_wire_check(raw_err, "up__fail isError")
+        # error results must carry the readable tool error, not a degraded JSON dump
+        assert not raw_err["content"][0]["text"].lstrip().startswith("{"), raw_err

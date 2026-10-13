@@ -20,9 +20,14 @@ ingress:
 	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=180s
 
+# Chart lint (both value files) + Python lint (ruleset: ruff.toml). ruff ships in
+# requirements-dev.txt and is installed by the .venv that `make test` bootstraps,
+# so the pin in that file is the pin lint runs with.
 lint:
 	helm lint ./helm -f helm/values-local.yaml
 	helm lint ./helm -f helm/values-prod.yaml
+	@if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check .; \
+	  else echo "ERROR: .venv/bin/ruff missing - run 'make test' once to bootstrap .venv from requirements-dev.txt" >&2; exit 1; fi
 
 template:
 	helm template $(RELEASE) ./helm -n $(NAMESPACE) -f helm/values-local.yaml

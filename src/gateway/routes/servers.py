@@ -87,7 +87,7 @@ async def create_server_route(
         )
         await db.commit()
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _server_out(srv)
 
 
@@ -133,7 +133,7 @@ async def patch_server_route(
         )
         await db.commit()
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _server_out(srv)
 
 
