@@ -1,7 +1,31 @@
 import { useState, useRef } from "react";
 import { api } from "../lib/api";
 
-type Msg = { role: "user" | "assistant" | "tool"; content: string; tool?: string; outcome?: string };
+type Msg = { role: "user" | "assistant" | "tool"; content: string; tool?: string; outcome?: string; truncated?: boolean };
+
+// Tool output is JSON from the MCP server, so it must be pretty-printed for a human to
+// read it. It is collapsed by default (a <details> block) and truncated when long, so a
+// 500-product listing cannot take over the chat log.
+const MAX_TOOL_OUTPUT = 2000;
+
+function prettyJson(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function toolOutput(output: unknown): { text: string; truncated: boolean } {
+  const raw = prettyJson(output);
+  if (!raw || raw.length <= MAX_TOOL_OUTPUT) return { text: raw, truncated: false };
+  return {
+    text: `${raw.slice(0, MAX_TOOL_OUTPUT)}\n… truncated (${raw.length} chars, showing first ${MAX_TOOL_OUTPUT})`,
+    truncated: true,
+  };
+}
 
 export default function Chat() {
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -31,8 +55,17 @@ export default function Chat() {
         // SSE streaming
         const reader = res.body?.getReader();
         const decoder = new TextDecoder();
+        // No empty assistant bubble is created up front: until the model actually emits
+        // a token (or finishes), the log shows the user message and the tool chips only.
         let assistant = "";
-        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+        const commitAssistant = () =>
+          setMessages((prev) => {
+            const copy = [...prev];
+            const last = copy[copy.length - 1];
+            if (last && last.role === "assistant") copy[copy.length - 1] = { ...last, content: assistant };
+            else copy.push({ role: "assistant", content: assistant });
+            return copy;
+          });
         if (!reader) throw new Error("no stream");
         let buf = "";
         while (true) {
@@ -52,23 +85,13 @@ export default function Chat() {
                 setServingModel(evt.model || null);
               } else if (evt.type === "token") {
                 assistant += evt.content || "";
-                setMessages((prev) => {
-                  const copy = [...prev];
-                  copy[copy.length - 1] = { role: "assistant", content: assistant };
-                  return copy;
-                });
+                commitAssistant();
               } else if (evt.type === "tool_call") {
-                setMessages((prev) => [...prev, { role: "tool", content: evt.output ? String(evt.output).slice(0, 2000) : "", tool: evt.tool || evt.name, outcome: evt.outcome || evt.status }]);
-                if (evt.output) assistant += "";
+                const out = toolOutput(evt.output);
+                setMessages((prev) => [...prev, { role: "tool", content: out.text, truncated: out.truncated, tool: evt.tool || evt.name, outcome: evt.outcome || evt.status }]);
               } else if (evt.type === "text") {
                 assistant += evt.content || "";
-                setMessages((prev) => {
-                  const copy = [...prev];
-                  const last = copy[copy.length - 1];
-                  if (last.role === "assistant") copy[copy.length - 1] = { role: "assistant", content: assistant };
-                  else copy.push({ role: "assistant", content: assistant });
-                  return copy;
-                });
+                commitAssistant();
               }
             } catch {
               // ignore
@@ -78,12 +101,16 @@ export default function Chat() {
       } else {
         const data = await res.json();
         const content = data.content || data.message || JSON.stringify(data).slice(0, 4000);
-        const toolCalls: Msg[] = (data.tool_calls || []).map((tc: { tool: string; outcome: string; output: unknown }) => ({
-          role: "tool" as const,
-          content: typeof tc.output === "string" ? tc.output.slice(0, 2000) : JSON.stringify(tc.output).slice(0, 2000),
-          tool: tc.tool,
-          outcome: tc.outcome,
-        }));
+        const toolCalls: Msg[] = (data.tool_calls || []).map((tc: { tool: string; outcome: string; output: unknown }) => {
+          const out = toolOutput(tc.output);
+          return {
+            role: "tool" as const,
+            content: out.text,
+            truncated: out.truncated,
+            tool: tc.tool,
+            outcome: tc.outcome,
+          };
+        });
         setMessages((prev) => [...prev, ...toolCalls, { role: "assistant", content: String(content) }]);
       }
     } catch (e: unknown) {
@@ -109,14 +136,14 @@ export default function Chat() {
                 <span className="mono">{m.tool}</span> <span className={`badge ${m.outcome === "success" ? "badge-connected" : "badge-unreachable"}`}>{m.outcome || "tool"}</span>
                 {m.content && (
                   <details>
-                    <summary>output</summary>
+                    <summary>output{m.truncated ? " (truncated)" : ""}</summary>
                     <pre className="small">{m.content}</pre>
                   </details>
                 )}
               </div>
-            ) : (
+            ) : m.content ? (
               <div className={`bubble ${m.role}`}>{m.content}</div>
-            )}
+            ) : null}
           </div>
         ))}
       </div>
