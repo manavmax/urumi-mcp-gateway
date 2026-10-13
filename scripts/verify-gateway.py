@@ -207,6 +207,60 @@ async def main() -> int:
             ok = isinstance(out, dict) and ("result" in out or "error" in out)
             check(f"gateway tools/call {target_notes} -> proxied (result or error)", ok, body_txt[:220])
 
+        # --- REAL MCP SDK client (protocol-level validation of tools/call results) ---
+        # The gateway's OLD serialization emitted `"annotations": null` / `"meta": null`
+        # on every block: the Python SDK 1.12.x client accepted it, but the MCP
+        # TypeScript SDK (MCP Inspector) rejects it as "content.0: Invalid input".
+        # Here we drive the OFFICIAL Python SDK client end-to-end AND re-validate the
+        # raw JSON-RPC the client received with the router's own strict wire checker, so
+        # a regression that a lenient client would swallow fails this script.
+        try:
+            from mcp import ClientSession
+            from mcp.client.streamable_http import streamablehttp_client
+            from gw_mcp.router import _assert_wire_content
+
+            raw_bodies: list[str] = []
+
+            def _factory(**kwargs):
+                async def _cap(response: httpx.Response):
+                    raw_bodies.append(await response.aread())
+
+                kwargs.setdefault("timeout", 30)
+                return httpx.AsyncClient(**{**kwargs, "headers": h, "event_hooks": {"response": [_cap]}})
+
+            sdk_targets = [n for n in ("woo__list_products", "time__get_current_time", "notes__list_notes") if n in names]
+            async with streamablehttp_client(f"{BASE}/mcp", httpx_client_factory=_factory) as (sread, swrite, _meta):
+                async with ClientSession(sread, swrite) as session:
+                    init = await session.initialize()
+                    check("SDK client initialize", init.protocolVersion == "2025-03-26", str(init.protocolVersion))
+                    if not sdk_targets:
+                        check("SDK client: have a target tool to call", False, f"names={sorted(names)[:12]}")
+                    for tool_name in sdk_targets:
+                        call_args = {}
+                        if tool_name == "time__get_current_time":
+                            call_args = {"timezone": "UTC"}
+                        try:
+                            sres = await session.call_tool(tool_name, call_args)
+                            check(f"SDK call_tool {tool_name} parsed by official client", True, f"isError={sres.isError}")
+                        except Exception as exc:
+                            check(f"SDK call_tool {tool_name} parsed by official client", False, f"{type(exc).__name__}: {str(exc)[:220]}")
+                            continue
+                        # strict wire check on the raw bytes the client actually received
+                        try:
+                            for body in reversed(raw_bodies):
+                                parsed = json.loads(body)
+                                resj = parsed.get("result")
+                                if isinstance(resj, dict) and isinstance(resj.get("content"), list):
+                                    _assert_wire_content(resj["content"])
+                                    check(f"SDK {tool_name} raw result wire-valid", True, "")
+                                    break
+                            else:
+                                check(f"SDK {tool_name} raw result wire-valid", False, "no tools/call result captured")
+                        except ValueError as exc:
+                            check(f"SDK {tool_name} raw result wire-valid", False, str(exc))
+        except Exception as exc:
+            check("SDK client run (imports/wiring)", False, f"{type(exc).__name__}: {str(exc)[:220]}")
+
         # --- negative: validation / unknown tool maps to a concrete error (not silent success) ---
         r = await c.post(f"{BASE}/mcp", headers=h, json={"jsonrpc": "2.0", "id": 99, "method": "tools/call", "params": {"name": "unknown__does_not_exist", "arguments": {}}})
         try:

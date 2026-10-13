@@ -6,6 +6,51 @@
 
 ---
 
+## ADR-027 — tools/call results are rebuilt into minimal wire-valid content blocks, never `model_dump()`-ed
+
+**Date:** 2026-10-13
+
+**Context:** MCP Inspector (the official TypeScript SDK client) called `woo__list_products`
+through the gateway and failed every time with
+`Tool Call Failed: Invalid result for tools/call: content.0: Invalid input`.
+
+**Root cause:** the gateway re-serialised upstream `CallToolResult`s with
+`TextContent.model_dump()`, which emits `"annotations": null` / `"meta": null` on every
+block (pydantic serialises default-`None` fields). The Python SDK 1.12.x client accepts
+that (its models `extra="allow"`), so every earlier verify run and unit test looked green.
+But the **TypeScript SDK** (what MCP Inspector runs) types `annotations`/`_meta` as
+*optional* — `undefined` only, never `null` — inside a non-discriminated `z.union`. One
+`null` field therefore fails the whole content-block union and the client reports
+`content.0: Invalid input` (reproduced locally with `@modelcontextprotocol/sdk`: the
+minimal shape `{"type":"text","text":...}` is ACCEPTED; adding `annotations: null`,
+`_meta: null`, or `structuredContent: null` is REJECTED). A secondary defect: `model_dump()`
+dropped upstream `structuredContent`, and would have leaked `structuredContent: null`
+had the upstream emitted one (TS SDK: "expected record, received null").
+
+**Decision:** `gw_mcp/router.py` no longer passes upstream models through `model_dump()`.
+Each content block is **rebuilt field-by-field** from a per-type whitelist
+(`text`/`image`/`audio`/`resource_link`/`resource`) into a minimal spec-valid dict that
+never contains a `null` value; unknown block types degrade to a `text` block (JSON dump),
+never an invalid one. `structuredContent` is forwarded only when it is a JSON object.
+The rebuilt result is then run through a **strict wire check** (`_assert_wire_content`)
+that mirrors the TS SDK's zod rules (known block types, whitelisted keys, no nulls);
+if it ever fails, the result is degraded to a single `text` block rather than emitted
+invalid. The same check runs on every tools/call result in `verify-gateway.py` /
+`verify-mcp.py` and in a new pytest (`test_mcp_result_wire_schema.py`) that drives the
+real FastAPI app + sqlite DB + the real MCP SDK client against a real in-process FastMCP
+upstream and asserts the exact minimal wire shape for both success and `isError` results.
+
+**Why not "just strip nulls"?** Rebuilding by whitelist is also a defense-in-depth against
+future SDK version drift (e.g. a newer SDK adding a new block field we don't want to leak)
+and against hostile/odd upstream blocks. The strict re-validation makes the guarantee
+enforced at runtime, not just by convention.
+
+**Main residual failure mode:** an upstream block type we don't whitelist is silently
+degraded to a `text` JSON dump — the result stays *valid* but the LLM-visible content is
+uglier; it is logged as a warning so it can be promoted to a first-class block later.
+
+---
+
 ## ADR-026 — Never `kubectl apply` the output of `helm template`: `lookup()` returns nothing there
 
 **Date:** 2026-10-12

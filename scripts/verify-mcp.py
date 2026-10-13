@@ -20,6 +20,7 @@ H = {
     "MCP-Protocol-Version": "2025-03-26",
 }
 FAILURES = []
+_tool_results: list[dict] = []  # every tools/call result, for the strict wire check below
 
 
 def check(label, cond, detail=""):
@@ -31,13 +32,57 @@ def check(label, cond, detail=""):
 def rpc(client, payload):
     r = client.post(BASE, json=payload, headers=H)
     body = r.text
-    return r.status_code, (json.loads(body) if body.strip() else {})
+    parsed = json.loads(body) if body.strip() else {}
+    if payload.get("method") == "tools/call":
+        _tool_results.append(parsed.get("result", {}))
+    return r.status_code, parsed
 
 
 def tool_text(result):
     """First text block of a tools/call result ('' when absent)."""
 
     return (result.get("content") or [{}])[0].get("text", "")
+
+
+# Strict MCP wire-shape check (source of truth: gw_mcp/router.py in the gateway).
+# The gateway's old serialization emitted `"annotations": null` / `"meta": null` on
+# every block, which the MCP TypeScript SDK (MCP Inspector) rejects as
+# "content.0: Invalid input" — while the Python SDK 1.12.x client tolerated it.
+# Spec-optional means ABSENT, never null. This raises on any violation so a run
+# that would have been green on null-poisoned content now fails loudly.
+_BLOCK_KEYS = {
+    "text": {"type", "text"},
+    "image": {"type", "data", "mimeType"},
+    "audio": {"type", "data", "mimeType"},
+    "resource_link": {"type", "uri", "name", "description", "mimeType"},
+    "resource": {"type", "resource"},
+}
+
+
+def strict_wire_check(result, label):
+    if not isinstance(result, dict):
+        raise ValueError(f"{label}: result is not an object")
+    content = result.get("content")
+    if not isinstance(content, list) or not content:
+        raise ValueError(f"{label}: result.content missing/not a list")
+    for i, b in enumerate(content):
+        if not isinstance(b, dict):
+            raise ValueError(f"{label}: content[{i}] is not an object")
+        btype = b.get("type")
+        if btype not in _BLOCK_KEYS:
+            raise ValueError(f"{label}: content[{i}] unknown type {btype!r}")
+        extra = set(b) - _BLOCK_KEYS[btype]
+        if extra:
+            raise ValueError(f"{label}: content[{i}] unknown fields {sorted(extra)}")
+        for k, v in b.items():
+            if v is None:
+                raise ValueError(f"{label}: content[{i}].{k} is null (strict clients reject explicit null)")
+        if btype == "text" and (not isinstance(b["text"], str) or not b["text"]):
+            raise ValueError(f"{label}: content[{i}] empty text")
+        if btype == "resource" and not isinstance(b["resource"], dict):
+            raise ValueError(f"{label}: content[{i}].resource must be an object")
+    if "structuredContent" in result and not isinstance(result["structuredContent"], dict):
+        raise ValueError(f"{label}: structuredContent must be an object when present (got {result['structuredContent']!r})")
 
 
 with httpx.Client(timeout=30) as c:
@@ -239,6 +284,15 @@ r = httpx.get("http://127.0.0.1:8000/healthz", timeout=15)
 check("probe /healthz", r.status_code == 200, r.text[:60])
 r = httpx.get("http://127.0.0.1:8000/readyz", timeout=15)
 check("probe /readyz (Woo reachable)", r.status_code == 200, r.text[:70])
+
+# Every tools/call result — success AND isError — must survive the strict wire check
+# that mirrors what the MCP TypeScript SDK (Inspector) enforces. This is the check the
+# old model_dump() serialization failed (content.0: Invalid input).
+for i, res in enumerate(_tool_results, start=1):
+    try:
+        strict_wire_check(res, f"tools/call #{i}")
+    except ValueError as exc:
+        check(f"tools/call #{i} wire-valid", False, str(exc))
 
 print("=== FAILURES:", FAILURES if FAILURES else "none", "===")
 raise SystemExit(1 if FAILURES else 0)

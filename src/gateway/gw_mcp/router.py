@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
@@ -22,6 +23,139 @@ from config import get_settings
 logger = logging.getLogger("gateway.router")
 
 ALLOWED_OUTCOMES = {"success", "upstream_error", "permission_denied", "timeout", "circuit_open", "validation_error"}
+
+
+# ---- MCP wire-shape safety net -----------------------------------------------------
+#
+# The gateway re-serialises upstream CallToolResults into plain JSON dicts. A
+# naive `TextContent.model_dump()` emits schema-invalid wire shapes like
+# `"annotations": null` and `"meta": null`: the MCP TypeScript SDK (what MCP
+# Inspector and many real clients run) types `annotations`/`_meta` as *optional*
+# (undefined only, never null) inside a non-discriminated z.union, so ONE null
+# field fails the whole content block union and the client reports
+# "Invalid result for tools/call: content.0: Invalid input". The Python SDK
+# 1.12.x accepts its own output (models allow extra keys), which is exactly why
+# earlier verify runs looked green. Rule: emit only the fields the spec defines,
+# never a None value, and strictly re-validate before returning anything.
+
+_TEXT_KEYS = {"type", "text"}
+_DATA_KEYS = {"type", "data", "mimeType"}
+_RESOURCE_LINK_KEYS = {"type", "uri", "name", "description", "mimeType"}
+_EMBEDDED_KEYS = {"type", "resource"}
+
+
+def _no_nulls(obj) -> bool:
+    """True when the JSON value contains no None anywhere (None ≠ a spec-optional field)."""
+    if obj is None:
+        return False
+    if isinstance(obj, dict):
+        return all(_no_nulls(v) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return all(_no_nulls(v) for v in obj)
+    return True
+
+
+def _rebuild_content_block(block) -> dict | None:
+    """Rebuild one upstream content block as a minimal, spec-valid content dict.
+
+    Field-whitelisted per block type: no None-valued fields, no unknown fields.
+    Unrecognised block types degrade to a text block (the JSON payload is kept in
+    the text) so a client never sees a block it cannot parse.
+    """
+    if isinstance(block, dict):  # tolerate already-serialised upstream dicts
+        btype = block.get("type")
+    else:
+        btype = getattr(block, "type", None)
+
+    def _get(key, default=None):
+        if isinstance(block, dict):
+            return block.get(key, default)
+        return getattr(block, key, None)
+
+    if btype == "text":
+        text = _get("text")
+        if isinstance(text, str):
+            return {"type": "text", "text": text}
+    elif btype in ("image", "audio"):
+        data, mime = _get("data"), _get("mimeType")
+        if isinstance(data, str) and isinstance(mime, str):
+            return {"type": btype, "data": data, "mimeType": mime}
+    elif btype == "resource_link":
+        uri, name = _get("uri"), _get("name")
+        uri = str(uri) if uri is not None else None  # AnyUrl -> str
+        if isinstance(uri, str) and isinstance(name, str):
+            out = {"type": "resource_link", "uri": uri, "name": name}
+            if isinstance(_get("description"), str):
+                out["description"] = _get("description")
+            if isinstance(_get("mimeType"), str):
+                out["mimeType"] = _get("mimeType")
+            return out
+    elif btype == "resource":
+        res = _get("resource")
+        if isinstance(res, dict):
+            ruri, rmime = res.get("uri"), res.get("mimeType")
+            rtext, rblob = res.get("text"), res.get("blob")
+        else:
+            ruri = getattr(res, "uri", None)
+            rmime = getattr(res, "mimeType", None)
+            rtext = getattr(res, "text", None)
+            rblob = getattr(res, "blob", None)
+        # uri arrives as pydantic AnyUrl (a str subclass in the SDK dump but a
+        # pydantic_core.Url instance in-memory), so coerce explicitly.
+        ruri = str(ruri) if ruri is not None else None
+        if isinstance(ruri, str) and (isinstance(rtext, str) or isinstance(rblob, str)):
+            rdict: dict = {"uri": ruri}
+            if isinstance(rmime, str):
+                rdict["mimeType"] = rmime
+            if isinstance(rtext, str):
+                rdict["text"] = rtext
+            else:
+                rdict["blob"] = rblob
+            return {"type": "resource", "resource": rdict}
+    return None
+
+
+def _rebuild_content(content) -> list[dict]:
+    """Rebuild every upstream content block; unknown/degraded blocks become text."""
+    out: list[dict] = []
+    for c in content or []:
+        rebuilt = _rebuild_content_block(c)
+        if rebuilt is None:
+            try:
+                payload = c.model_dump(mode="json", by_alias=True) if hasattr(c, "model_dump") else c
+            except Exception:
+                payload = str(c)
+            logger.warning("unsupported MCP content block degraded to text: %s", str(payload)[:200])
+            rebuilt = {"type": "text", "text": json.dumps(payload, default=str)}
+        out.append(rebuilt)
+    return out
+
+
+def _assert_wire_content(content: list) -> None:
+    """Strict wire check: every block must be a spec content type with no nulls."""
+    for i, b in enumerate(content):
+        if not isinstance(b, dict):
+            raise ValueError(f"content[{i}] is not an object")
+        btype = b.get("type")
+        if btype == "text":
+            keys, req = _TEXT_KEYS, ("text",)
+        elif btype in ("image", "audio"):
+            keys, req = _DATA_KEYS, ("data", "mimeType")
+        elif btype == "resource_link":
+            keys, req = _RESOURCE_LINK_KEYS, ("uri", "name")
+        elif btype == "resource":
+            keys, req = _EMBEDDED_KEYS, ("resource",)
+        else:
+            raise ValueError(f"content[{i}] has unknown type {btype!r}")
+        if set(b) - keys:
+            raise ValueError(f"content[{i}] has unknown fields {sorted(set(b) - keys)}")
+        for k in req:
+            if b.get(k) is None or b.get(k) == "":
+                raise ValueError(f"content[{i}].{k} missing/empty")
+        if not _no_nulls(b):
+            raise ValueError(f"content[{i}] contains a null field")
+        if btype == "resource" and not isinstance(b["resource"], dict):
+            raise ValueError(f"content[{i}].resource must be an object")
 
 
 def _auth_headers(server: Server) -> dict[str, str]:
@@ -72,19 +206,29 @@ async def proxy_call(
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.call_tool(upstream_tool, arguments or {})
-                # result is CallToolResult: content + isError
-                # Normalize to dict for gateway response
-                content = []
-                for c in (result.content or []):
-                    # c may be TextContent etc.
-                    if hasattr(c, "model_dump"):
-                        content.append(c.model_dump())
-                    elif isinstance(c, dict):
-                        content.append(c)
-                    else:
-                        # fallback: treat as text
-                        content.append({"type": "text", "text": str(c)})
-                return {"content": content, "isError": bool(getattr(result, "isError", False))}
+                # result is CallToolResult: content + isError (+ optional structuredContent)
+                # Rebuild into minimal, spec-valid dicts — never model_dump() upstream
+                # models, which leaks `"annotations": null` / `"meta": null` and breaks
+                # strict MCP clients (MCP Inspector / TypeScript SDK).
+                content = _rebuild_content(result.content)
+                structured_content = getattr(result, "structuredContent", None)
+                if not isinstance(structured_content, dict):
+                    # null / non-object structuredContent is invalid on the wire (TS SDK:
+                    # "expected record, received null"); only a JSON object is forwarded.
+                    structured_content = None
+                payload = {"content": content, "isError": bool(getattr(result, "isError", False))}
+                if structured_content is not None:
+                    payload["structuredContent"] = structured_content
+                try:
+                    _assert_wire_content(payload["content"])
+                except ValueError as exc:
+                    # Belt and braces: never let an invalid block reach the client.
+                    logger.warning("rebuilt tools/call content failed wire check (%s); degrading to text", exc)
+                    payload = {
+                        "content": [{"type": "text", "text": json.dumps(payload, default=str)}],
+                        "isError": bool(payload.get("isError")),
+                    }
+                return payload
 
 
 async def call_tool_routed(
