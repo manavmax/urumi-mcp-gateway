@@ -6,6 +6,35 @@
 
 ---
 
+## ADR-030 — the chat LLM error names the real failure category, not always "busy"
+
+**Date:** 2026-10-14
+
+**Context:** ADR-029 failed over the model chain correctly, but when every model in the
+chain had failed the turn always said "AI models are busy, try again in a minute" —
+whether the endpoint had answered 429 (spent daily quota), 503 (high demand), 401
+(rejected key) or 404 (a Helm value naming a model the provider does not serve). Those
+four cases need four different operator actions, and a single message sent the operator
+looking for the wrong thing (retrying a spent quota, or blaming the provider for a
+typo'd model name).
+
+**Decision:** `chat/llm_fallback.py` classifies the failure with `error_category()` into
+one real category and `LLMBusyError` carries it: the status decides first, the response
+text only refines it (a 429/5xx whose text spells out a spent quota is "quota" —
+retrying cannot help — while a plain 429/503 is "busy"; 401/403 are "auth"; 404 or any
+text naming the model as absent is "model-not-found"; 400/422 are "bad-request"; a
+transport failure with no status at all is honestly "unknown"). When several models
+failed differently the most actionable one wins (`_pick_category`: wrong name or bad key
+before quota before busy). `chat_loop` streams `exc.message` plus a machine-readable
+`category` field on the text event, so the dashboard shows the same cause. Non-transient
+errors keep the provider's message, prefixed with the category: `LLM error (auth): ...`.
+
+**Main failure mode:** categorising from text alone is unreliable — a provider that
+phrases an overload as "quota" (or a quota as "unavailable") is misreported, so the
+status stays authoritative and the text only refines within a status class.
+
+---
+
 ## ADR-029 — LLM model fallback chain: transient errors only, per-model cooldown
 
 **Date:** 2026-10-13

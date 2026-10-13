@@ -8,11 +8,17 @@ import logging
 import time
 import uuid
 
+from config import get_settings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import get_settings
-from chat.llm_fallback import LLMBusyError, MODEL_COOLDOWNS, _create_with_fallback
+from chat.llm_fallback import (
+    CATEGORY_UNKNOWN,
+    MODEL_COOLDOWNS,
+    LLMBusyError,
+    _create_with_fallback,
+    error_category,
+)
 
 logger = logging.getLogger("gateway.chat")
 
@@ -25,6 +31,8 @@ Rules:
 """
 
 MAX_ITERS = 8
+# How much a model may DO to the store in one turn (docs/05 §2). Independent of the
+# model-fallback budget in chat.llm_fallback.
 MAX_TOOL_CALLS = 20
 OVERALL_TIMEOUT = 60
 MAX_TOOL_OUTPUT = 20_000
@@ -205,14 +213,24 @@ async def chat_loop(
             )
             producer_model = serving_model  # this model produced the tool_calls we echo
             yield {"type": "model", "model": serving_model}
-        except LLMBusyError:
-            yield {"type": "text", "content": "AI models are busy, try again in a minute"}
+        except LLMBusyError as exc:
+            # ADR-030: name the real cause (quota / busy / auth / model-not-found / ...).
+            logger.info(json.dumps({
+                "event": "llm_chain_exhausted",
+                "request_id": str(request_id),
+                "category": exc.category,
+                "detail": exc.detail,
+            }))
+            yield {"type": "text", "content": exc.message, "category": exc.category}
             return
         except asyncio.TimeoutError:
-            yield {"type": "text", "content": "LLM timed out."}
+            yield {"type": "text", "content": "LLM timed out.", "category": CATEGORY_UNKNOWN}
             return
         except Exception as exc:
-            yield {"type": "text", "content": f"LLM error: {exc}"}
+            # 400/401/403 and friends reach here unchanged - the category tells the
+            # operator which of them it was without reading a provider stack trace.
+            category = error_category(exc)
+            yield {"type": "text", "content": f"LLM error ({category}): {exc}", "category": category}
             return
 
         msg = resp.choices[0].message
@@ -253,9 +271,10 @@ async def chat_loop(
             # Route via gateway (impersonate user)
             outcome = "success"
             try:
-                from gw_mcp.router import call_tool_routed
-                from audit.queue import log_audit
                 import time as _time
+
+                from audit.queue import log_audit
+                from gw_mcp.router import call_tool_routed
 
                 t0 = _time.monotonic()
                 # We need to parse slug__tool already validated
@@ -271,8 +290,8 @@ async def chat_loop(
                 # Resolve server_id for audit (best-effort)
                 srv_id = None
                 try:
-                    from sqlalchemy import select as _select
                     from db.models import Server as _Server
+                    from sqlalchemy import select as _select
                     _r = await db.execute(_select(_Server.id).where(_Server.slug == slug))
                     srv_id = _r.scalar_one_or_none()
                 except Exception:

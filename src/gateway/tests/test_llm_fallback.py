@@ -1,10 +1,10 @@
-"""LLM model fallback (docs/DECISIONS.md ADR-029).
+"""LLM model fallback (docs/DECISIONS.md ADR-029, extended by ADR-030).
 
 Gemini's OpenAI-compatible endpoint frequently answers 503 "high demand" / 429. The
 gateway must fail over to the next model in the configured chain on TRANSIENT errors
-only, keep a per-model cooldown, never fall back on 400/401/403, and surface a clear
-"busy" message when every model failed. Tested against a MOCK LLM so every branch is
-deterministic.
+only, keep a per-model cooldown, never fall back on 400/401/403, and name the REAL
+failure category (quota / busy / auth / model-not-found / ...) instead of always
+saying "busy". Tested against a MOCK LLM so every branch is deterministic.
 """
 
 from __future__ import annotations
@@ -17,11 +17,19 @@ import pytest
 
 import chat.llm_fallback as fb
 from chat.llm_fallback import (
+    CATEGORY_AUTH,
+    CATEGORY_BAD_REQUEST,
+    CATEGORY_BUSY,
+    CATEGORY_MODEL_NOT_FOUND,
+    CATEGORY_QUOTA,
+    CATEGORY_UNKNOWN,
     LLMBusyError,
     MODEL_COOLDOWNS,
     _create_with_fallback,
+    _pick_category,
     _status_of,
     _strip_tool_signatures,
+    error_category,
     is_transient,
 )
 
@@ -70,6 +78,47 @@ def test_timeouts_and_connection_errors_are_transient():
 
 def test_status_of_extracts_http_status():
     assert _status_of(StatusError(503)) == 503
+
+
+# ---------------- error_category (ADR-030: the real category, not always "busy") ----
+
+def test_quota_is_named_when_the_provider_says_quota():
+    # a 429 that spells out a spent quota is terminal: retrying cannot help, so it must
+    # NOT be reported as "busy, try again in a minute".
+    exc = StatusError(429, "Quota exceeded for quota metric 'generate requests free tier'")
+    assert error_category(exc) == CATEGORY_QUOTA
+
+
+def test_plain_429_and_5xx_are_busy_not_quota():
+    assert error_category(StatusError(429, "Too many requests / rate limit")) == CATEGORY_BUSY
+    assert error_category(StatusError(503, "This model is currently experiencing high demand")) == CATEGORY_BUSY
+    assert error_category(StatusError(504, "deadline exceeded")) == CATEGORY_BUSY
+
+
+def test_auth_failures_are_named_auth():
+    assert error_category(StatusError(401, "API key not valid")) == CATEGORY_AUTH
+    assert error_category(StatusError(403, "permission denied")) == CATEGORY_AUTH
+
+
+def test_missing_model_is_named_model_not_found():
+    assert error_category(StatusError(404, "models/gemini-x is not found for API version v1beta")) == CATEGORY_MODEL_NOT_FOUND
+
+
+def test_400_is_named_bad_request():
+    assert error_category(StatusError(400, "Function call is missing a thought_signature")) == CATEGORY_BAD_REQUEST
+
+
+def test_transport_failure_without_status_is_unknown():
+    import httpx
+
+    assert error_category(httpx.ReadTimeout("no response in 30s")) == CATEGORY_UNKNOWN
+
+
+def test_pick_category_prefers_the_actionable_cause():
+    assert _pick_category({CATEGORY_BUSY, CATEGORY_QUOTA}) == CATEGORY_QUOTA
+    assert _pick_category({CATEGORY_BUSY, CATEGORY_AUTH}) == CATEGORY_AUTH
+    assert _pick_category({CATEGORY_UNKNOWN, CATEGORY_BUSY}) == CATEGORY_BUSY
+    assert _pick_category(set()) == CATEGORY_UNKNOWN
 
 
 # ---------------- signature stripping (Gemini thought_signature on failover) ----------------
@@ -147,6 +196,48 @@ def test_all_fail_raises_busy():
             create, ["gemini-a", "gemini-b"], {"messages": []},
             cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r3", remaining_budget=60,
         ))
+
+
+def test_all_fail_busy_keeps_the_busy_message():
+    create = _fake_create(
+        {"gemini-a": StatusError(503, "high demand"), "gemini-b": StatusError(429, "too many requests")}, []
+    )
+    with pytest.raises(LLMBusyError) as ei:
+        asyncio.run(_create_with_fallback(
+            create, ["gemini-a", "gemini-b"], {"messages": []},
+            cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r3b", remaining_budget=60,
+        ))
+    assert ei.value.category == CATEGORY_BUSY
+    assert str(ei.value) == "AI models are busy, try again in a minute"
+
+
+def test_all_fail_quota_names_the_real_category():
+    create = _fake_create(
+        {"gemini-a": StatusError(429, "Quota exceeded for quota metric 'generate requests'"),
+         "gemini-b": StatusError(503, "high demand")},
+        [],
+    )
+    with pytest.raises(LLMBusyError) as ei:
+        asyncio.run(_create_with_fallback(
+            create, ["gemini-a", "gemini-b"], {"messages": []},
+            cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r3c", remaining_budget=60,
+        ))
+    assert ei.value.category == CATEGORY_QUOTA
+    assert "quota" in str(ei.value).lower()
+    assert str(ei.value) != "AI models are busy, try again in a minute"
+
+
+def test_all_in_cooldown_raises_busy_without_calling_any_model():
+    calls: list = []
+    create = _fake_create({"gemini-a": lambda kw: FakeResp("a")}, calls)
+    MODEL_COOLDOWNS["gemini-a"] = time.monotonic() + 1000
+    with pytest.raises(LLMBusyError) as ei:
+        asyncio.run(_create_with_fallback(
+            create, ["gemini-a"], {"messages": []},
+            cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r3d", remaining_budget=60,
+        ))
+    assert ei.value.category == CATEGORY_BUSY
+    assert calls == []
 
 
 def test_cooldown_skips_just_failed_model():
@@ -260,6 +351,38 @@ def test_chat_all_models_busy_returns_clear_message(monkeypatch):
     text = _collect_text(events)
     assert "AI models are busy, try again in a minute" in text
     assert "stack" not in text and "Traceback" not in text
+    assert events[-1]["type"] == "text" and events[-1]["category"] == CATEGORY_BUSY
+
+
+def test_chat_quota_exhaustion_names_the_real_category(monkeypatch):
+    """A spent quota is NOT "busy": the message must say quota so the operator knows
+    retrying will not help (ADR-030)."""
+    behaviors = {
+        "gemini-a": StatusError(429, "Quota exceeded for quota metric 'generate requests free tier'"),
+        "gemini-b": StatusError(503, "high demand"),
+    }
+    events, _ = asyncio.run(_run_chat(monkeypatch, behaviors))
+    text = _collect_text(events)
+    assert "quota" in text.lower()
+    assert "busy" not in text.lower()
+    assert events[-1]["category"] == CATEGORY_QUOTA
+
+
+def test_chat_auth_failure_names_auth_category(monkeypatch):
+    behaviors = {"gemini-a": StatusError(401, "API key not valid. Please pass a valid key.")}
+    events, fake = asyncio.run(_run_chat(monkeypatch, behaviors))
+    text = _collect_text(events)
+    assert "auth" in text
+    assert "LLM error" in text
+    assert [c["model"] for c in fake.calls] == ["gemini-a"]  # no fallback on a config bug
+
+
+def test_chat_model_not_found_names_the_category(monkeypatch):
+    behaviors = {"gemini-a": StatusError(404, "models/gemini-x is not found for API version v1beta")}
+    events, fake = asyncio.run(_run_chat(monkeypatch, behaviors))
+    text = _collect_text(events)
+    assert "model-not-found" in text
+    assert [c["model"] for c in fake.calls] == ["gemini-a"]
 
 
 def test_chat_400_surfaces_without_fallback(monkeypatch):
