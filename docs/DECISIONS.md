@@ -6,6 +6,37 @@
 
 ---
 
+## ADR-031 — the per-turn model cap counts FAILURES only, and the serving model is sticky
+
+**Date:** 2026-10-14
+
+**Context:** a member asked the assistant to "create a note titled test, then list my
+notes". `notes__create_note` succeeded (audit row `63bc16ef-2e15-56af-10bc-79519943d6c9`,
+`notes__create_note success`, 22ms) and then the turn died with "AI models are busy …
+(model fallback cap: 4 models tried this turn)". The pod that served it had logged
+`gemini-3.8-flash`/`3.6-flash`/`3.5-flash` as 503 "high demand" while
+`gemini-3.5-flash-lite` served step 1. The audit table shows `notes__list_notes` was
+never called, and the container logs for that pod are gone (helm upgrade recreated it), so
+the request id was recovered from `audit_logs`. The old cap counted every model TRIED —
+including the one that had just served — so 3 busy models plus 1 healthy one spent a
+4-model budget and killed a turn that was still working.
+
+**Decision:**
+1. The per-turn cap is on models that FAILED (`gateway.llm.maxModelsPerTurn`, default 6,
+   `OPENAI_MAX_MODELS_PER_TURN`). A serve never spends it: the budget bounds the failures
+   a turn may burn, not the models that work. The cap is still counted across that turn's
+   tool-loop iterations and is still independent of `MAX_TOOL_CALLS`.
+2. The chain is walked STICKY: the model that served step N is tried first for step N+1
+   (ADR-029's `producer_model` is now the chain head). A healthy model keeps the turn
+   instead of being abandoned as soon as an earlier chain entry leaves its cooldown; when
+   the sticky model itself fails, the chain is walked in normal priority order.
+**Main failure mode:** a long, uniformly dead chain still spends the whole cap (6 failed
+attempts at up to 30s each) before the turn gives up - the cap bounds work per turn, not
+latency. A retry after an announced write can still duplicate it: the message warns, it
+cannot make the store idempotent.
+
+---
+
 ## ADR-030 — the chat LLM error names the real failure category, not always "busy"
 
 **Date:** 2026-10-14
@@ -33,15 +64,15 @@ errors keep the provider's message, prefixed with the category: `LLM error (auth
 phrases an overload as "quota" (or a quota as "unavailable") is misreported, so the
 status stays authoritative and the text only refines within a status class.
 
-**Per-turn model cap:** `MAX_MODELS_PER_TURN` (4, `chat/llm_fallback.py`) bounds how many
-models ONE chat turn may try, counted across that turn's tool-loop iterations
-(`chat_loop` owns the counter and passes it in). It is a separate budget from
+**Per-turn model cap:** `MAX_MODELS_PER_TURN` (4) bounded how many models ONE chat turn
+could try, counted across that turn's tool-loop iterations. It was a separate budget from
 `MAX_TOOL_CALLS` (20): that one limits how much a model may DO to the store, this one
-limits how much of a configured chain a single turn may burn — a 9-model chain (the
-Gemini flash family) would otherwise re-probe the whole list on every iteration and eat
-the 60s turn budget. Cooldown-skipped models are not counted: they cost nothing. When
-the cap is reached the turn ends with the real category message plus an operator-visible
-note ("model fallback cap: N models tried this turn") instead of silently failing.
+limited how much of a configured chain a single turn may burn. Cooldown-skipped models
+were not counted: they cost nothing. When the cap was reached the turn ended with the real
+category message plus an operator-visible note ("model fallback cap: N models tried this
+turn"). **Superseded by ADR-031**, which found the bug in this paragraph: the cap counted
+every model TRIED - the serving model included - so 3 busy models plus 1 healthy one spent
+a 4-model budget and killed a turn whose write had already succeeded.
 
 ---
 

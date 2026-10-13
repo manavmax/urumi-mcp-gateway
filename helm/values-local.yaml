@@ -9,7 +9,20 @@ gateway:
     # prod stays whatever values.yaml sets). The key lives in the gateway-llm Secret,
     # never here. The deployment passes these through as OPENAI_BASE_URL/OPENAI_MODEL.
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
-    model: "gemini-3.5-flash"
+    model: "gemini-3.5-flash-lite"
+    models:
+      - "gemini-3.5-flash-lite"
+      - "gemini-3.1-flash-lite"
+      - "gemini-3-flash-preview"
+      - "gemini-3.5-flash"
+      - "gemini-3.6-flash"
+      - "gemini-3.8-flash"
+      - "gemini-3.7-flash"
+    # Per-turn cap on FAILED models (values.yaml default is 6). Only failures count, so a
+    # turn where the top of the chain is 503-ing still finishes on a healthy model - the
+    # old behaviour counted the model that served too, which killed a working turn after
+    # 4 models and left a successful write half-finished.
+    maxModelsPerTurn: 6
 
 dashboard:
   enabled: true

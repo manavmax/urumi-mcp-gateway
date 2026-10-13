@@ -24,8 +24,8 @@ from chat.llm_fallback import (
     CATEGORY_MODEL_NOT_FOUND,
     CATEGORY_QUOTA,
     CATEGORY_UNKNOWN,
+    DEFAULT_MAX_MODELS_PER_TURN,
     LLMBusyError,
-    MAX_MODELS_PER_TURN,
     MODEL_COOLDOWNS,
     _create_with_fallback,
     _pick_category,
@@ -168,12 +168,12 @@ def test_first_model_503_second_succeeds():
         {"gemini-a": StatusError(503, "high demand"), "gemini-b": lambda kw: FakeResp("from b")},
         calls,
     )
-    resp, served = asyncio.run(_create_with_fallback(
+    _resp, served = asyncio.run(_create_with_fallback(
         create, ["gemini-a", "gemini-b"], {"messages": []},
         cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r1", remaining_budget=60,
     ))
     assert served == "gemini-b"
-    assert resp.choices[0].message.content == "from b"
+    assert _resp.choices[0].message.content == "from b"
     assert [c["model"] for c in calls] == ["gemini-a", "gemini-b"]
     assert MODEL_COOLDOWNS["gemini-a"] > 0
 
@@ -243,10 +243,15 @@ def test_all_in_cooldown_raises_busy_without_calling_any_model():
     assert calls == []
 
 
-# ---------------- MAX_MODELS_PER_TURN (per-turn model cap, not a tool-call cap) ----
+# ---------------- MAX_MODELS_PER_TURN: per-turn cap on FAILED models (ADR-031) -----
+# The bug this fixes: the cap used to count every model TRIED, so a model that SERVED a
+# step spent the turn's budget. Four models (3 busy + 1 healthy) was enough to kill a
+# still-working multi-step turn - the healthy model served step 1, and the loop died
+# before step 2 with "model fallback cap: 4 models tried this turn".
+# Now ONLY failures count, and the model that served step N is tried first for step N+1.
 
 
-def test_max_models_per_turn_caps_the_chain():
+def test_max_models_per_turn_caps_the_failed_models():
     calls: list = []
     create = _fake_create({f"gemini-{c}": StatusError(503, "high demand") for c in "abcd"}, calls)
     with pytest.raises(LLMBusyError) as ei:
@@ -255,41 +260,81 @@ def test_max_models_per_turn_caps_the_chain():
             cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r7", remaining_budget=60,
             max_models=2,
         ))
-    # the cap is on TRIES, not on the configured chain length
+    # the cap is on FAILURES, not on the configured chain length
     assert [c["model"] for c in calls] == ["gemini-a", "gemini-b"]
     assert ei.value.category == CATEGORY_BUSY
     assert "model fallback cap" in str(ei.value)
-    assert "2" in str(ei.value)
+    assert "2 models failed this turn" in str(ei.value)
 
 
-def test_cap_counts_the_models_already_tried_this_turn():
-    """The counter is the caller's: a turn that already burned its budget must not get
-    a fresh allowance on the next tool-loop iteration."""
+def test_the_model_that_served_does_not_spend_the_turn_budget():
+    """The live bug: 3 busy models + 1 healthy model used to exhaust a 4-model cap,
+    because the serve was counted as a model "tried"."""
     calls: list = []
-    tried = ["gemini-a", "gemini-b"]
-    create = _fake_create({"gemini-c": lambda kw: FakeResp("c")}, calls)
+    behaviors = {f"gemini-{c}": StatusError(503, "high demand") for c in "abc"}
+    create = _fake_create(behaviors, calls)
+    failed: list[str] = []
+    _resp, served = asyncio.run(_create_with_fallback(
+        create, ["gemini-a", "gemini-b", "gemini-c", "gemini-d"], {"messages": []},
+        cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r7b", remaining_budget=60,
+        max_models=4, failed_models=failed,  # 4 = the old cap value
+    ))
+    assert served == "gemini-d"
+    assert failed == ["gemini-a", "gemini-b", "gemini-c"]  # ONLY failures are recorded
+
+    # the same turn now asks for step 2. The old code had counted 4 models "tried" and
+    # killed the turn here; now only 3 failures are charged and the sticky model serves.
+    calls.clear()
+    _resp2, served2 = asyncio.run(_create_with_fallback(
+        create, ["gemini-d"], {"messages": []},
+        cooldowns=MODEL_COOLDOWNS, producer_model="gemini-d", request_id="r7c", remaining_budget=60,
+        max_models=4, failed_models=failed,
+    ))
+    assert served2 == "gemini-d"
+    assert [c["model"] for c in calls] == ["gemini-d"]  # sticky: asked once, served
+
+    # and once the failures DO reach the cap, the turn stops before asking anything new
+    calls.clear()
     with pytest.raises(LLMBusyError) as ei:
         asyncio.run(_create_with_fallback(
-            create, ["gemini-c", "gemini-d"], {"messages": []},
-            cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r8", remaining_budget=60,
-            max_models=2, models_tried=tried,
+            create, ["gemini-d", "gemini-e"], {"messages": []},
+            cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r7e", remaining_budget=60,
+            max_models=3, failed_models=["gemini-a", "gemini-b", "gemini-c"],
         ))
-    assert calls == []  # nothing new was tried
+    assert calls == []  # nothing new was asked
+    assert "model fallback cap" in str(ei.value)
+
+
+def test_cap_charges_each_failure_once():
+    """A failure is charged to the turn's budget exactly once, and the cap is checked
+    BEFORE the next attempt - so N failures means at most N attempts."""
+    calls: list = []
+    failed: list[str] = []
+    create = _fake_create(
+        {"gemini-a": StatusError(503, "high demand"), "gemini-b": lambda kw: FakeResp("b")}, calls
+    )
+    with pytest.raises(LLMBusyError) as ei:
+        asyncio.run(_create_with_fallback(
+            create, ["gemini-a", "gemini-b"], {"messages": []},
+            cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r8", remaining_budget=60,
+            max_models=1, failed_models=failed,
+        ))
+    assert [c["model"] for c in calls] == ["gemini-a"]  # stopped, gemini-b never called
+    assert failed == ["gemini-a"]  # charged once
     assert ei.value.detail == "cap reached"
 
 
-def test_cap_is_independent_of_the_tool_call_cap():
-    from chat import agent
-
-    assert agent.MAX_MODELS_PER_TURN == MAX_MODELS_PER_TURN
-    assert agent.MAX_MODELS_PER_TURN != agent.MAX_TOOL_CALLS  # separate budgets (docs/05 §2)
+def test_sticky_chain_puts_the_serving_model_first():
+    assert fb.sticky_chain(["a", "b", "c"], None) == ["a", "b", "c"]
+    assert fb.sticky_chain(["a", "b", "c"], "c") == ["c", "a", "b"]
+    assert fb.sticky_chain(["a", "b", "c"], "zzz") == ["a", "b", "c"]  # not in chain
 
 
 def test_cooldown_skips_just_failed_model():
     MODEL_COOLDOWNS["gemini-a"] = time.monotonic() + 1000
     calls: list = []
     create = _fake_create({"gemini-b": lambda kw: FakeResp("b")}, calls)
-    resp, served = asyncio.run(_create_with_fallback(
+    _resp, served = asyncio.run(_create_with_fallback(
         create, ["gemini-a", "gemini-b"], {"messages": []},
         cooldowns=MODEL_COOLDOWNS, producer_model=None, request_id="r4", remaining_budget=60,
     ))
@@ -331,6 +376,9 @@ class _FakeSettings:
     def model_chain(self):
         return ["gemini-a", "gemini-b"]
 
+    def max_models_per_turn(self):
+        return DEFAULT_MAX_MODELS_PER_TURN
+
 
 class _FakeCompletions:
     def __init__(self, behaviors):
@@ -346,19 +394,24 @@ class _FakeCompletions:
         return b(kwargs) if callable(b) else FakeResp()
 
 
-async def _run_chat(monkeypatch, behaviors, tools=None, max_models=None):
+async def _run_chat(monkeypatch, behaviors, tools=None, max_models=None, chain=None):
     """Drive chat_loop end-to-end with a mock LLM; return (events, fake_completions).
 
-    `max_models` overrides the per-turn model cap (the test-only knobs for the switch
-    and the cap live here, never in production code).
+    The test-only knobs live here, never in production code: `max_models` overrides the
+    per-turn cap, `chain` the model order.
     """
     import openai
 
     import chat.agent as agent
 
-    monkeypatch.setattr(agent, "get_settings", lambda: _FakeSettings())
-    if max_models is not None:
-        monkeypatch.setattr(agent, "MAX_MODELS_PER_TURN", max_models)
+    class Settings(_FakeSettings):
+        def model_chain(self):
+            return list(chain) if chain else ["gemini-a", "gemini-b"]
+
+        def max_models_per_turn(self):
+            return max_models if max_models is not None else DEFAULT_MAX_MODELS_PER_TURN
+
+    monkeypatch.setattr(agent, "get_settings", lambda: Settings())
 
     async def _fake_allowed(_db):
         return tools or []
@@ -436,30 +489,98 @@ def test_chat_model_not_found_names_the_category(monkeypatch):
     assert [c["model"] for c in fake.calls] == ["gemini-a"]
 
 
-def test_chat_model_cap_is_shared_across_the_tool_loop(monkeypatch):
-    """The cap counts models for the WHOLE turn: once it is reached the turn stops with
-    an operator-visible message instead of trying a fresh model on the next iteration."""
-    steps = {"n": 0}
+# ---- the live bug, end to end: 4-model chain, top 3 busy, 4th serves step 1 (ADR-031)
 
-    def tool_call():
-        return SimpleNamespace(id="call_1", function=SimpleNamespace(name="woo__list_products", arguments="{}"))
 
-    def b_behavior(_kw):
-        steps["n"] += 1
-        if steps["n"] == 1:
-            return FakeResp(content="", tool_calls=[tool_call()])
-        return FakeResp("final answer")
+def _two_step_behaviors(failing, serving, *, fail_at_step: int = 0):
+    """Serving model emits a tool call at step 1 and the final answer at step 2.
 
-    behaviors = {"gemini-a": StatusError(503, "high demand"), "gemini-b": b_behavior}
-    events, fake = asyncio.run(_run_chat(monkeypatch, behaviors, tools=[], max_models=2))
+    `fail_at_step` > 0 makes the serving model itself fail from that step on (the next
+    model of the chain then has to take over).
+    """
+    state = {"step": 0}
 
-    # a failed once (then cooled down), b served the tool step - that is 2 models, the cap
-    assert [c["model"] for c in fake.calls] == ["gemini-a", "gemini-b"]
-    assert len([e for e in events if e.get("type") == "tool_call"]) == 1
+    def behavior(_kw):
+        state["step"] += 1
+        if fail_at_step and state["step"] >= fail_at_step:
+            raise StatusError(503, "This model is currently experiencing high demand")
+        if state["step"] == 1:
+            return FakeResp(content="", tool_calls=[
+                SimpleNamespace(id="call_1", function=SimpleNamespace(name="woo__list_products", arguments="{}"))
+            ])
+        return FakeResp("found 2 products")
+
+    return {**failing, serving: behavior}
+
+
+def test_top_models_busy_healthy_model_completes_both_steps(monkeypatch):
+    """(5a) 3 models busy, the 4th serves step 1 AND step 2 -> the turn completes."""
+    failing = {m: StatusError(503, "high demand") for m in ("gemini-a", "gemini-b", "gemini-c")}
+    behaviors = _two_step_behaviors(failing, "gemini-d")
+    chain = ["gemini-a", "gemini-b", "gemini-c", "gemini-d"]
+    events, fake = asyncio.run(_run_chat(monkeypatch, behaviors, tools=[], chain=chain))
+
+    served = [e["model"] for e in events if e.get("type") == "model"]
     text = _collect_text(events)
-    assert "model fallback cap" in text
-    assert "busy" in text.lower()
-    assert "final answer" not in text  # the turn ended at the cap, it did not keep looping
+    # the healthy model carried the whole turn: it served step 1, and step 2 was asked
+    # of it first again (sticky) instead of walking the chain from the top
+    assert served == ["gemini-d", "gemini-d"]
+    assert [c["model"] for c in fake.calls] == ["gemini-a", "gemini-b", "gemini-c", "gemini-d", "gemini-d"]
+    assert "found 2 products" in text
+    assert "model fallback cap" not in text
+    assert not [e for e in events if e.get("type") == "text"]  # no error text at all
+
+
+def test_serving_model_fails_at_step_two_next_model_takes_over(monkeypatch):
+    """(5b) the model that served step 1 fails at step 2 -> the next model serves step 2."""
+    state = {"step": 0}
+
+    def d_behavior(_kw):
+        state["step"] += 1
+        if state["step"] == 1:
+            return FakeResp(content="", tool_calls=[
+                SimpleNamespace(id="call_1", function=SimpleNamespace(name="woo__list_products", arguments="{}"))
+            ])
+        raise StatusError(503, "This model is currently experiencing high demand")
+
+    behaviors = {"gemini-a": StatusError(503, "high demand"),
+                 "gemini-d": d_behavior,
+                 "gemini-c": lambda kw: FakeResp("found 2 products")}
+    chain = ["gemini-a", "gemini-d", "gemini-c"]
+    events, fake = asyncio.run(_run_chat(monkeypatch, behaviors, tools=[], chain=chain))
+
+    served = [e["model"] for e in events if e.get("type") == "model"]
+    text = _collect_text(events)
+    assert served == ["gemini-d", "gemini-c"]  # d served step 1, failed step 2, c took over
+    assert "found 2 products" in text
+    assert "model fallback cap" not in text
+    # step 2 asked d first (sticky), then walked down the chain to c
+    assert [c["model"] for c in fake.calls] == ["gemini-a", "gemini-d", "gemini-d", "gemini-c"]
+
+
+def test_every_model_busy_gives_a_clear_message(monkeypatch):
+    """(5c) all models busy -> the real category is named, and no cap/stack noise."""
+    chain = ["gemini-a", "gemini-b", "gemini-c"]
+    behaviors = {m: StatusError(503, "high demand") for m in chain}
+    events, _ = asyncio.run(_run_chat(monkeypatch, behaviors, chain=chain))
+
+    text = _collect_text(events)
+    assert "AI models are busy, try again in a minute" in text
+    assert "model fallback cap" not in text  # the cap was never reached: chain < cap
+    assert "Traceback" not in text and "StatusError" not in text
+    assert events[-1]["category"] == CATEGORY_BUSY
+
+
+def test_long_busy_chain_still_names_the_real_category_and_the_cap(monkeypatch):
+    """A chain longer than the cap stops at the cap, naming the category that caused it."""
+    chain = [f"gemini-{c}" for c in "abcdefgh"]
+    behaviors = {m: StatusError(503, "high demand") for m in chain}
+    events, fake = asyncio.run(_run_chat(monkeypatch, behaviors, chain=chain, max_models=4))
+
+    text = _collect_text(events)
+    assert "AI models are busy" in text
+    assert "model fallback cap: 4 models failed this turn" in text
+    assert [c["model"] for c in fake.calls] == chain[:4]  # inspected, then stopped
 
 
 def test_chat_400_surfaces_without_fallback(monkeypatch):
@@ -501,5 +622,5 @@ def test_chat_failover_strips_thought_signature_between_models(monkeypatch):
         for tc in m.get("tool_calls", []):
             assert "extra_content" not in tc
     # A's step-1 echo (same-model continue within its own turn) kept the signature
-    a_call = next(c for c in fake.calls if c["model"] == "gemini-a")
+    assert next(c for c in fake.calls if c["model"] == "gemini-a")
     assert "final answer" in _collect_text(events)

@@ -9,6 +9,10 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
+# Single source of truth for the per-turn model-failure cap default; the Helm value
+# gateway.llm.maxModelsPerTurn overrides it at runtime (OpenAI-compatible env var
+# OPENAI_MAX_MODELS_PER_TURN).
+from chat.llm_fallback import DEFAULT_MAX_MODELS_PER_TURN
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +34,10 @@ class Settings(BaseSettings):
     # back-compat); remaining entries are tried in order on transient LLM errors
     # (429/5xx/timeout/connection) so a "high demand" model fails over to the next one.
     openai_models: str = ""
+    # Models allowed to FAIL in one chat turn before the turn gives up (gateway.llm.
+    # maxModelsPerTurn). Only failures count, never the model that served a step, and the
+    # model that served step N is tried first for step N+1 (sticky) - see llm_fallback.
+    openai_max_models_per_turn: int = DEFAULT_MAX_MODELS_PER_TURN
 
     # gateway administrator bootstrap (password comes from the chart-generated
     # `gateway-admin` Secret - never from a values file or a source default).
@@ -101,6 +109,18 @@ class Settings(BaseSettings):
                 chain.append(m)
         return chain or [self.openai_model]
 
+    def max_models_per_turn(self) -> int:
+        """Live per-turn cap on FAILED models (Helm gateway.llm.maxModelsPerTurn).
+
+        Clamped: a zero/negative or unparsable Helm value must not disable the cap, it
+        falls back to the default instead of letting one turn burn the whole chain.
+        """
+        try:
+            value = int(self.openai_max_models_per_turn)
+        except (TypeError, ValueError):
+            return DEFAULT_MAX_MODELS_PER_TURN
+        return value if value > 0 else DEFAULT_MAX_MODELS_PER_TURN
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -117,6 +137,7 @@ def get_settings() -> Settings:
         "OPENAI_BASE_URL": "openai_base_url",
         "OPENAI_MODEL": "openai_model",
         "OPENAI_MODELS": "openai_models",
+        "OPENAI_MAX_MODELS_PER_TURN": "openai_max_models_per_turn",
         "SESSION_SECRET": "session_secret",
         "GATEWAY_ADMIN_PASSWORD": "admin_password",
     }

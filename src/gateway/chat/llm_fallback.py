@@ -15,13 +15,20 @@ Design (docs/DECISIONS.md ADR-029, extended by ADR-030):
   chat-turn budget (docs/05 §2 OVERALL_TIMEOUT).
 - per-model cooldown: a model that just failed transiently is skipped for
   MODEL_COOLDOWN_SECONDS so every chat turn does not re-hit the dead model.
-- MAX_MODELS_PER_TURN caps how many models one chat turn may try, counted ACROSS the
-  tool-loop iterations of that turn. It is deliberately independent of the agent's
-  MAX_TOOL_CALLS: that limit bounds how much a model may DO to the store, this one
-  bounds how much of the configured chain a single turn may burn (a 9-model chain
-  would otherwise re-probe the whole list on every iteration and eat the turn budget).
+- MAX_MODELS_PER_TURN (Helm `gateway.llm.maxModelsPerTurn`, default 6) caps how many
+  models may FAIL in one chat turn, counted ACROSS the tool-loop iterations of that
+  turn. ONLY failures count - the model that served a step never consumes the budget,
+  because a turn that is working must not be killed by its own success. It is a
+  separate budget from the agent's MAX_TOOL_CALLS: that one bounds how much a model may
+  DO to the store, this one bounds how much of the configured chain a single turn may
+  burn.
+- STICKY serving model: the model that produced the last step is tried FIRST for the
+  next step of the same turn, so a healthy model is not abandoned just because the
+  chain's first entry was busy. If the sticky model fails, the chain is walked in
+  normal priority order from the top.
 - the chat error message names the real failure category (quota / busy / auth /
-  model-not-found / bad-request / unknown) instead of always saying "busy".
+  model-not-found / bad-request / unknown) instead of always saying "busy", and it says
+  so when a write tool already succeeded in that turn (nothing was rolled back).
 - logs are JSON, no secrets; the serving model is surfaced to the chat UI as a
   `model` event.
 """
@@ -41,8 +48,9 @@ MODEL_COOLDOWN_SECONDS = 45.0
 TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
 MAX_ATTEMPT_SECONDS = 30.0
 
-# Models tried per chat turn (shared across that turn's tool-loop iterations).
-MAX_MODELS_PER_TURN = 4
+# Default per-turn cap on FAILED models; the live value is the Helm value
+# gateway.llm.maxModelsPerTurn -> OPENAI_MAX_MODELS_PER_TURN (config.py).
+DEFAULT_MAX_MODELS_PER_TURN = 6
 
 # module-level so cooldowns survive across chat turns (single-replica dev pod).
 MODEL_COOLDOWNS: dict[str, float] = {}
@@ -170,6 +178,19 @@ def category_message(category: str, note: str = "") -> str:
     return f"{msg} ({note})" if note else msg
 
 
+def sticky_chain(model_chain: list[str], producer_model: str | None) -> list[str]:
+    """Order the chain for the next step: the model that just SERVED goes first.
+
+    Without this, a working model is abandoned as soon as one earlier entry of the
+    chain recovers from its cooldown, and the turn pays a fresh 503 for every step.
+    With it, a healthy model keeps the turn; only when the sticky model itself fails
+    does the chain get walked in normal priority order.
+    """
+    if not producer_model or producer_model not in model_chain:
+        return list(model_chain)
+    return [producer_model] + [m for m in model_chain if m != producer_model]
+
+
 def _strip_tool_signatures(messages: list[dict]) -> list[dict]:
     """Remove `extra_content` (Gemini thought_signature) from echoed tool_calls.
 
@@ -200,30 +221,33 @@ async def _create_with_fallback(
     producer_model: str | None,
     request_id: str,
     remaining_budget: float,
-    max_models: int = MAX_MODELS_PER_TURN,
-    models_tried: list[str] | None = None,
+    max_models: int = DEFAULT_MAX_MODELS_PER_TURN,
+    failed_models: list[str] | None = None,
 ) -> tuple[object, str]:
     """Try models in priority order; move to the next on transient errors.
 
     Returns (response, serving_model). Raises LLMBusyError when every model failed
-    transiently (or was in cooldown), carrying the real failure category. Raises the
-    original exception for non-transient errors (400/401/403) - no fallback, surface
-    the bug clearly.
+    transiently (or was in cooldown, or the per-turn failure cap was reached), carrying
+    the real failure category. Raises the original exception for non-transient errors
+    (400/401/403) - no fallback, surface the bug clearly.
 
-    `models_tried` is the caller's per-turn counter (the agent passes one list for the
-    whole chat turn): every model this turn has already tried is counted, so the loop
-    stops after `max_models` of them and never burns the entire configured chain on a
-    single turn.
+    `failed_models` is the caller's per-turn counter (the agent passes one list for the
+    whole chat turn). ONLY a model that FAILED is appended to it, so the cap bounds the
+    failures a turn may burn - never the models that served it. A turn where the top 3
+    models are busy and the 4th serves both steps of a tool loop completes normally.
+
+    The chain is walked STICKY: `producer_model` (the model that served the previous
+    step) is tried first.
     """
-    tried = models_tried if models_tried is not None else []
+    failed = failed_models if failed_models is not None else []
     skipped: list[dict] = []
     categories: set[str] = set()
     last_transient: BaseException | None = None
-    for model in model_chain:
-        if len(tried) >= max_models:
+    for model in sticky_chain(model_chain, producer_model):
+        if len(failed) >= max_models:
             category = _pick_category(categories) if categories else CATEGORY_BUSY
             raise LLMBusyError(
-                category_message(category, f"model fallback cap: {max_models} models tried this turn"),
+                category_message(category, f"model fallback cap: {max_models} models failed this turn"),
                 category=category,
                 detail="cap reached",
             ) from last_transient
@@ -236,7 +260,6 @@ async def _create_with_fallback(
             logger.info(json.dumps({"event": "llm_model_skipped", "model": model, "request_id": request_id, **info}))
             continue
 
-        tried.append(model)
         stripped = producer_model is not None and model != producer_model
         send_messages = _strip_tool_signatures(kwargs["messages"]) if stripped else kwargs["messages"]
         attempt_kwargs = {**kwargs, "messages": send_messages}
@@ -263,6 +286,7 @@ async def _create_with_fallback(
                 raise  # 400/401/403 etc: config/schema bug, never fall back
             category = error_category(exc)
             categories.add(category)
+            failed.append(model)  # ONLY failures count against the per-turn cap
             cooldowns[model] = time.monotonic() + MODEL_COOLDOWN_SECONDS
             last_transient = exc
             skipped.append({"model": model, "reason": "failed", "error_type": type(exc).__name__,

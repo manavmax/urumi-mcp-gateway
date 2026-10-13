@@ -25,6 +25,7 @@ from types import SimpleNamespace
 
 import chat.llm_fallback as fb
 import pytest
+from chat.llm_fallback import DEFAULT_MAX_MODELS_PER_TURN
 
 CHAIN = ["gemini-top", "gemini-next", "gemini-third"]
 TOP, NEXT = CHAIN[0], CHAIN[1]  # the third entry proves the failover does NOT walk the chain
@@ -76,6 +77,9 @@ class _FakeSettings:
 
     def model_chain(self):
         return list(CHAIN)
+
+    def max_models_per_turn(self):
+        return DEFAULT_MAX_MODELS_PER_TURN
 
 
 class _FakeDB:

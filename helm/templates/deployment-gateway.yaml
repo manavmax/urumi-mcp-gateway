@@ -87,6 +87,11 @@ spec:
             # Comma-separated priority-ordered fallback chain, first entry = model.
             - name: OPENAI_MODELS
               value: {{ concat (list .Values.gateway.llm.model) (.Values.gateway.llm.models | default list) | uniq | join "," | quote }}
+            # How many models may FAIL per chat turn before it gives up. Only failures
+            # count (the serving model never spends the budget), so a turn whose top
+            # models are busy still completes on a healthy one. A Helm value, not code.
+            - name: OPENAI_MAX_MODELS_PER_TURN
+              value: {{ .Values.gateway.llm.maxModelsPerTurn | default 6 | quote }}
 {{- end }}
             # Gateway administrator bootstrap. Always present because the chart always
             # renders the Secret (ADR-019); the gateway refuses to invent a password, so a

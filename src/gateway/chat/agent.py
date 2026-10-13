@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chat.llm_fallback import (
     CATEGORY_UNKNOWN,
-    MAX_MODELS_PER_TURN,
     MODEL_COOLDOWNS,
     LLMBusyError,
     _create_with_fallback,
@@ -32,11 +31,9 @@ Rules:
 """
 
 MAX_ITERS = 8
-# Two independent per-turn budgets (docs/05 §2):
-#   MAX_TOOL_CALLS      - how much a model may DO to the store in one turn.
-#   MAX_MODELS_PER_TURN - how many models one turn may try while failing over
-#                         (defined in chat.llm_fallback, so the loop reads the module
-#                         global and a test can shrink it).
+# How much a model may DO to the store in one turn (docs/05 §2). Independent of the
+# model-failure budget (chat.llm_fallback / Helm gateway.llm.maxModelsPerTurn), which
+# bounds how many models may fail while a turn is being served.
 MAX_TOOL_CALLS = 20
 OVERALL_TIMEOUT = 60
 MAX_TOOL_OUTPUT = 20_000
@@ -187,16 +184,18 @@ async def chat_loop(
     # gateway.llm.models extras. Configurable via Helm values only - no model name is
     # hardcoded here.
     model_chain = settings.model_chain()
+    # Per-turn failure budget (Helm gateway.llm.maxModelsPerTurn): only models that FAIL
+    # are recorded, so a model that served a step never consumes the allowance and the
+    # next step can still be served by the same (sticky) model. Independent of
+    # MAX_TOOL_CALLS, which bounds how much a model may DO to the store.
+    models_failed: list[str] = []
     total_calls = 0
     start = time.monotonic()
     producer_model: str | None = None  # model that produced the last assistant tool_calls
-    # Per-turn model budget: every model this turn tries is recorded here and handed to
-    # the fallback, so the cap holds ACROSS the tool-loop iterations (not per LLM call).
-    models_tried: list[str] = []
 
     for iteration in range(MAX_ITERS):
         if time.monotonic() - start > OVERALL_TIMEOUT:
-            yield {"type": "text", "content": "Chat timed out (60s). Please try a shorter request."}
+            yield {"type": "text", "content": "Chat timed out (60s). Please try a shorter request.", "category": CATEGORY_UNKNOWN}
             return
 
         # Use non-streaming chat, then stream tokens pseudo? For simplicity we do non-stream.
@@ -217,8 +216,8 @@ async def chat_loop(
                 producer_model=producer_model,
                 request_id=str(request_id),
                 remaining_budget=OVERALL_TIMEOUT - (time.monotonic() - start),
-                max_models=MAX_MODELS_PER_TURN,
-                models_tried=models_tried,
+                max_models=settings.max_models_per_turn(),
+                failed_models=models_failed,
             )
             producer_model = serving_model  # this model produced the tool_calls we echo
             yield {"type": "model", "model": serving_model}
@@ -229,7 +228,7 @@ async def chat_loop(
                 "request_id": str(request_id),
                 "category": exc.category,
                 "detail": exc.detail,
-                "models_tried": models_tried,
+                "models_failed": models_failed,
             }))
             yield {"type": "text", "content": exc.message, "category": exc.category}
             return
@@ -260,7 +259,7 @@ async def chat_loop(
         for tc in tool_calls:
             total_calls += 1
             if total_calls > MAX_TOOL_CALLS:
-                yield {"type": "text", "content": "Maximum tool calls reached."}
+                yield {"type": "text", "content": "Maximum tool calls reached.", "category": "unknown"}
                 return
             name = tc.function.name
             raw_args = tc.function.arguments or "{}"

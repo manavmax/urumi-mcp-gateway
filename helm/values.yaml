@@ -92,8 +92,14 @@ gateway:
     # (429/500/502/503/504/timeout/connection) - e.g. Gemini's frequent 503 "high demand"
     # or 429. gateway.llm.model is always tried FIRST (back-compat); these are the
     # additional models to fail over to, in order. Set via Helm values only; no model
-    # names are hardcoded in code. A model that just failed is cooled down for ~45s.
+    # names are hardcoded in code. A model that just failed is cooled down for ~45s, and
+    # the model that served a step is tried first for the next step of the same turn
+    # (sticky), so a healthy model is not abandoned mid-turn.
     models: []
+    # How many models may FAIL in one chat turn before it gives up. Only failures count -
+    # the model that served a step never spends the budget - and the count is per turn,
+    # across that turn's tool-loop iterations. Independent of the tool-call budget.
+    maxModelsPerTurn: 6
     # Optional prod override: name of a pre-created Secret holding key OPENAI_API_KEY.
     # When set, the chart does NOT render its own `gateway-llm` Secret.
     existingSecret: ""
