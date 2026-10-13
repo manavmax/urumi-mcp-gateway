@@ -129,15 +129,18 @@ verify-gateway:
 
 # Unit tests for the gateway modules (docs/04): password hashing + verify-fails-closed,
 # tool namespacing/routing, timeout isolation + circuit breaker, RBAC/CSRF 403, audit
-# redaction. No cluster and no network needed. First run bootstraps ./.venv from
-# requirements-dev.txt (never shipped in the image, gitignored).
+# redaction, admin-endpoint RBAC through the real router, and the MCP tool servers'
+# blank-optional-argument contract. No cluster and no network needed. First run
+# bootstraps ./.venv from requirements-dev.txt (never shipped in the image, gitignored).
 test:
 	@if [ ! -x .venv/bin/pytest ]; then \
 		echo "bootstrapping .venv for the test suite (first run only)..."; \
 		python3 -m venv .venv; \
 		.venv/bin/pip install -q -r requirements-dev.txt; \
 	fi
-	cd src/gateway && ../../.venv/bin/python -m pytest tests -v
+	cd src/gateway && ../../.venv/bin/python -m pytest tests -q
+	cd src/woo-mcp && ../../.venv/bin/python -m pytest tests -q
+	cd src/demo-mcp-time && ../../.venv/bin/python -m pytest tests -q
 
 # LOCAL USE ONLY - prints the gateway administrator password held in the chart-generated
 # `gateway-admin` Secret (never printed by any automated target, never written to a

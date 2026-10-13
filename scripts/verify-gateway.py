@@ -265,6 +265,70 @@ async def main() -> int:
         except Exception as exc:
             check("SSRF probe did not crash", False, str(exc))
 
+        # --- RBAC: a member session must be denied EVERY admin endpoint (Test 7) ---
+        # A member is provisioned through the real API (admin login -> create user),
+        # then driven through the same session-cookie + CSRF flow the dashboard uses.
+        if not ADMIN_PASSWORD:
+            check("RBAC member probes (needs GATEWAY_ADMIN_PASSWORD)", False, "GATEWAY_ADMIN_PASSWORD is empty")
+        else:
+            import secrets as _secrets
+
+            member_email = f"verify-member-{_secrets.token_hex(3)}@urumi.local"
+            member_pw = _secrets.token_urlsafe(12)
+            ra = await c.post(f"{BASE}/api/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, headers={"Content-Type": "application/json"})
+            if ra.status_code != 200:
+                check("RBAC: admin login to provision a member", False, f"status={ra.status_code}")
+            else:
+                ah = {"Content-Type": "application/json", "X-CSRF-Token": ra.json().get("csrf_token", "")}
+                ru = await c.post(f"{BASE}/api/users", json={"email": member_email, "password": member_pw, "role": "member"}, headers=ah, cookies=ra.cookies)
+                check("RBAC: admin creates a member user -> 201", ru.status_code == 201, f"status={ru.status_code}")
+                member_id = (ru.json().get("id") if ru.status_code == 201 else None)
+                rm = await c.post(f"{BASE}/api/auth/login", json={"email": member_email, "password": member_pw}, headers={"Content-Type": "application/json"})
+                check("RBAC: member login (cookie + CSRF) works", rm.status_code == 200, f"status={rm.status_code}")
+                if rm.status_code == 200:
+                    mh = {"Content-Type": "application/json", "X-CSRF-Token": rm.json().get("csrf_token", "")}
+                    mc = rm.cookies
+                    # a real server id for the id-taking probes (read is allowed)
+                    srv_id = None
+                    rs = await c.get(f"{BASE}/api/servers", cookies=mc)
+                    if rs.status_code == 200 and rs.json().get("servers"):
+                        srv_id = rs.json()["servers"][0]["id"]
+                    srv_id = srv_id or "00000000-0000-0000-0000-000000000001"
+                    probes = [
+                        ("POST", "/api/servers", {"slug": "verify-evil", "url": "http://urumi-demo-time:8000/mcp", "auth_type": "none", "timeout_ms": 5000}),
+                        ("PATCH", f"/api/servers/{srv_id}", {"enabled": False}),
+                        ("POST", f"/api/servers/{srv_id}/disable", None),
+                        ("POST", f"/api/servers/{srv_id}/enable", None),
+                        ("DELETE", f"/api/servers/{srv_id}", None),
+                        ("PUT", f"/api/servers/{srv_id}", {"enabled": False}),
+                        ("GET", "/api/users", None),
+                        ("POST", "/api/users", {"email": f"verify-evil-{_secrets.token_hex(3)}@example.test", "password": "verify-evil-123", "role": "admin"}),
+                    ]
+                    for method, path, body in probes:
+                        r = await c.request(method, f"{BASE}{path}", json=body, headers=mh, cookies=mc)
+                        allowed = 405 if method == "PUT" else 403  # PUT has no route: 405, never success
+                        check(f"member {method} {path} -> {allowed} (denied)", r.status_code == allowed, f"status={r.status_code} {r.text[:100]}")
+                    # a member MUST still be able to use the gateway itself
+                    rk = await c.post(f"{BASE}/api/keys", json={}, headers=mh, cookies=mc)
+                    ok_member_key = rk.status_code == 201
+                    # never echo the raw key: only prefix/last4 leave this process
+                    key_detail = f"last4={rk.json().get('last4')}" if ok_member_key else rk.text[:100]
+                    check("member can still mint own API key -> 201", ok_member_key, f"status={rk.status_code} {key_detail}")
+                    if ok_member_key:
+                        mkey = rk.json().get("key", "")
+                        r = await c.post(f"{BASE}/mcp", headers=gw_headers(mkey), json={"jsonrpc": "2.0", "id": 77, "method": "tools/call", "params": {"name": "time__get_current_time", "arguments": {}}})
+                        try:
+                            out = r.json()
+                        except Exception:
+                            out = {}
+                        res = out.get("result", {}) if isinstance(out, dict) else {}
+                        ok = r.status_code == 200 and "result" in out and not bool(res.get("isError"))
+                        check("member tools/call time__get_current_time still works", ok, json.dumps(out)[:200])
+                    # cleanup: remove the temp member again
+                    if member_id:
+                        rd = await c.delete(f"{BASE}/api/users/{member_id}", headers=ah, cookies=ra.cookies)
+                        check("RBAC: admin removes the temp member -> 204", rd.status_code == 204, f"status={rd.status_code}")
+
         # --- audit row written (best-effort; allow flush interval) ---
         await asyncio.sleep(1.5)
         try:

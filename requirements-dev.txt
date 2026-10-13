@@ -3,3 +3,5 @@
 -r src/gateway/requirements.txt
 pytest==8.*
 pytest-asyncio==0.24.*
+# embedded real DB for the router-level RBAC tests (tests/test_admin_endpoints_router.py)
+aiosqlite==0.22.*
