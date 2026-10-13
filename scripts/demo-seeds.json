@@ -1,0 +1,28 @@
+{
+  "purpose": "Seed set of the demo store: the products the wp-setup Helm job creates and that `make demo-reset` must KEEP. Any product NOT matched here is treated as test data and is deleted through the Woo REST API. This file is the audit trail for that rule - edit it deliberately, together with helm/templates/jobs/wp-setup.yaml (the 'Seed products' section) so the two never drift.",
+  "source": "helm/templates/jobs/wp-setup.yaml lines 268-323 (Urumi Classic Tee / Urumi Hoodie)",
+  "products": [
+    {
+      "name": "Urumi Classic Tee",
+      "sku": "URUMI-TEE-001",
+      "regular_price": "29.99",
+      "type": "simple"
+    },
+    {
+      "name": "Urumi Hoodie",
+      "sku": "URUMI-HOODIE-001",
+      "regular_price": "59.99",
+      "type": "simple"
+    }
+  ],
+  "products_rule": "KEEP a product iff its SKU matches one of the SKUs above (case-insensitive). A product with NO SKU is kept only when its name matches a seed name exactly; every other product (any SKU, any status, including drafts) is deleted.",
+  "orders_rule": "wp-setup seeds NO orders, so every order in the store was created during testing: all of them are deleted (every status, force=true).",
+  "never_touched": [
+    "WordPress/WooCommerce settings (woocommerce_* options, incl. COD), pages, tax, shipping",
+    "Kubernetes Secrets (woo-secrets, gateway-secrets, demo-notes-token, gateway-admin, ...)",
+    "Kubernetes PVCs and the persistent MariaDB/Postgres data",
+    "The Helm release `urumi` itself (the script never runs helm)",
+    "Gateway servers/tools rows and their Fernet-encrypted credentials",
+    "The gateway admin user admin@urumi.local and API keys owned by admin users"
+  ]
+}

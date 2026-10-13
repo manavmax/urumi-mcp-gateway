@@ -85,6 +85,41 @@ make helm-local                               # the urumi.io/llm-secret-checksum
 
 Point `gateway.llm.existingSecret` at your own pre-created Secret (key `OPENAI_API_KEY`) to skip the chart-rendered one entirely.
 
+## Demo reset — `make demo-reset`
+
+Between demo takes the cluster should be put back into a known state. `make demo-reset` does
+that through official APIs only (Woo REST + the gateway's own models), it is **dry-run by
+default**, and it refuses to run against anything but the local kind cluster.
+
+```bash
+make demo-reset                                # DRY RUN: prints what WOULD be deleted, changes nothing
+make demo-reset CONFIRM=yes                    # performs the reset, then verifies 3 upstreams Connected + tools/list = 11
+make demo-reset CONFIRM=yes ARGS=--with-demo-users   # additionally creates demo users A (admin) + B (member)
+scripts/demo-reset.sh --check-only             # only the safety guard (exits 2 when it refuses)
+```
+
+The seed set (the products that survive) is an auditable file, not a hidden rule:
+`scripts/demo-seeds.json`. Everything not matched there is test data.
+
+| deletes | keeps |
+|---|---|
+| every WooCommerce product that is not a seed product (REST `force=true`) | the seed products (`URUMI-TEE-001`, `URUMI-HOODIE-001`), store settings, COD, tax/shipping |
+| every WooCommerce order (all statuses) | all Kubernetes Secrets and PVCs, and the Helm release (the script never runs `helm`) |
+| every row in `audit_logs` (ids restart at 1) | the gateway admin user `admin@urumi.local` and its API keys |
+| every non-admin user + their API keys | the 3 seeded upstreams `woo`/`time`/`notes`, their encrypted credentials, the Fernet state |
+| all notes (in-memory store → `rollout restart` + `rollout status` of `urumi-demo-notes`) | any non-seeded server you added — it is listed in the summary, never deleted |
+
+Safety guarantees (ADR-032): refuses unless `kubectl config current-context` is a `kind-*`
+cluster whose API server is on loopback and the namespace is `urumi`; the only cluster
+object it mutates is the `urumi-demo-notes` Deployment; no credential is ever printed —
+except the demo-user passwords/keys that `--with-demo-users` shows exactly once on the
+terminal (never written to a file or log). A dry run only ever issues `kubectl get` /
+`config` / `exec`; that invariant is pinned by `src/gateway/tests/test_demo_reset_safety.py`.
+
+After a confirmed run the script prints a deleted/kept summary and verifies the demo
+contract live: 3 upstreams `Connected` and `tools/list` returning 11 tools (woo 6, time 2,
+notes 3).
+
 ## Submission (when ready)
 
 - Demo video (chapters: design, K8s, MCP internals, security, chat, local→VPS) + GitHub repo → https://forms.gle/nftwgyNeenSDmiRb6

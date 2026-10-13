@@ -1,7 +1,8 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard deploy test
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard deploy test demo-reset
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
+CONTEXT   ?= kind-urumi
 
 # Admin credentials: the USER comes from values, the PASSWORD only ever comes from the
 # Secret (ADR-019). ADMIN_SECRET_NAME lets `existingAdminSecret` be honoured by make.
@@ -193,6 +194,18 @@ admin-password:
 
 wp-logs:
 	kubectl logs -n $(NAMESPACE) -l app=wp-setup --tail=100 2>&1 | tail -n 100; echo "---"; kubectl logs -n $(NAMESPACE) job/$(RELEASE)-wp-setup --tail=100 2>&1 | tail -n 100 || true
+
+# Demo reset (docs/DECISIONS.md ADR-032): put the cluster back into a demo-ready
+# state before recording. The DEFAULT is a DRY RUN that prints what WOULD be
+# deleted (with counts) and changes nothing; `CONFIRM=yes` performs it.
+#   make demo-reset                                  # dry run
+#   make demo-reset CONFIRM=yes                      # perform the reset
+#   make demo-reset CONFIRM=yes ARGS=--with-demo-users   # + demo A/B users
+# Guards (refuses anything that is not the local kind cluster in namespace urumi),
+# never touches Secrets/PVCs/the Helm release, and never prints a credential except
+# the demo-user keys that --with-demo-users shows exactly once.
+demo-reset:
+	@CONTEXT=$(CONTEXT) NAMESPACE=$(NAMESPACE) CONFIRM=$(CONFIRM) scripts/demo-reset.sh $(ARGS)
 
 # Verify Cash on delivery is offered at checkout.
 # WooCommerce 9.x installs the BLOCK checkout by default: the payment method list is

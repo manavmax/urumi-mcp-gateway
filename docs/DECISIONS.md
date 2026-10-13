@@ -6,6 +6,72 @@
 
 ---
 
+## ADR-032 — `make demo-reset`: guarded, dry-run-by-default, official APIs only
+
+**Date:** 2026-10-14
+
+**Context:** after demoing the system the cluster holds test data — 30+ products, a dozen
+checkout-draft orders, `checkout-draft` carts, notes, 189 `audit_logs` rows and 4 member
+users with their API keys. Recording the next take on top of that looks unprofessional and
+makes `audit_logs` useless as evidence. So the dataset needs a reset. But a reset is the
+single most dangerous command in this repo: one wrong `kubectl`/`psql` line and the demo
+deletes the admin account, the seeded upstream credentials or the store's payment config.
+Three temptations were rejected explicitly: (a) a "just truncate" script that trusts the
+operator to read `--help`; (b) raw SQL against WordPress tables (`DELETE FROM wp_posts …`),
+which leaves product meta and WooCommerce lookup tables orphaned — Woo owns those rows;
+(c) deleting a `users` row by hand, which would skip the app's ORM cascade and strand
+`api_keys`.
+
+**Decision:** `scripts/demo-reset.sh` + `scripts/demo-seeds.json` + two in-pod workers
+(`scripts/demo-reset.py` in the gateway pod, `scripts/demo-reset-woo.py` in the woo-mcp
+pod), wired to `make demo-reset`:
+
+1. **The default is a DRY RUN.** It prints every object it would touch — products as
+   KEEP/DELETE with name + SKU, orders, audit rows, users, API keys, notes — and only ever
+   issues `kubectl get` / `config` / `exec`. The reset runs on `CONFIRM=yes`. The invariant
+   "a dry run issues no mutating kubectl verb" is pinned by
+   `src/gateway/tests/test_demo_reset_safety.py` with a stubbed `kubectl`.
+2. **A hard guard against the wrong cluster.** The script refuses unless
+   `kubectl config current-context` matches `kind-*` AND the context's API server is on
+   loopback AND the namespace is `urumi` (exit 2). Kind clusters are unambiguous by
+   construction (name prefix + the API server is always 127.0.0.1), while a renamed prod
+   context can never pass both.
+3. **Official APIs only, per domain.** WooCommerce is reset through the Woo REST API with
+   `force=true` from the woo-mcp pod — the only component holding the Consumer
+   Key/Secret in its env and the only one the NetworkPolicy lets reach `wordpress:80`
+   (the gateway may talk to woo-mcp, never to Woo). The gateway is reset in the gateway pod
+   through the app's own SQLAlchemy models, so user deletion keeps the same cascade as
+   `DELETE /api/users/{id}`; `audit_logs` has no HTTP surface, so `TRUNCATE … RESTART IDENTITY`
+   goes through the same driver the app uses.
+4. **The seed set is a file, not a hidden rule.** `scripts/demo-seeds.json` lists the two
+   products `wp-setup` creates (SKU `URUMI-TEE-001`/`URUMI-HOODIE-001`); a product is kept
+   iff its SKU matches (a SKU-less product falls back to exact name match), everything else
+   is test data. Orders have no seed rows, so all of them go. The file also records what is
+   never touched: settings/COD, Secrets, PVCs, the Helm release, the admin user, the
+   seeded servers.
+5. **Notes are "deleted" by restarting the upstream.** The demo-notes store is in-process
+   memory with no delete tool, so `kubectl rollout restart` + `rollout status` on
+   `urumi-demo-notes` *is* the delete-all API for it. The rollout status wait happens
+   BEFORE the post-reset health probe, otherwise the probe reports a false
+   "notes Unreachable" while the replacement pod is still starting.
+6. **Demo users are an opt-in flag** (`--with-demo-users` → `demo-a@urumi.local` admin,
+   `demo-b@urumi.local` member). Their password and API key are generated in-pod and
+   printed exactly once on the terminal: the orchestrator captures worker output in a
+   shell variable (never a temp file), appends nothing to any log, and excludes them from
+   every `SUMMARY_JSON`. Re-running is idempotent — a previous demo user is removed first.
+7. **The run ends by proving the demo still works**: a forced `probe_once()` must show
+   `woo`/`time`/`notes` all `Connected`, and a temporary admin API key must see
+   `tools/list` return 11 tools (woo 6, time 2, notes 3) — the key is revoked immediately
+   afterwards so the clean state stays clean.
+
+**Main failure mode:** `TRUNCATE audit_logs` needs an ACCESS EXCLUSIVE lock and waits for
+the gateway's in-flight audit inserts (seconds, not minutes); and a product that lost its
+SKU is kept only if its name matches a seed exactly — a test product copied from a seed
+product's name survives. Both are visible in the dry run's KEEP/DELETE listing, which is
+the point of printing it before every confirmed run.
+
+---
+
 ## ADR-031 — per-turn model cap counts FAILURES, the serving model is sticky, and a half-done write is announced
 
 **Date:** 2026-10-14
