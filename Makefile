@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard deploy test demo-reset
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard verify-llm deploy test demo-reset
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -146,6 +146,18 @@ verify-gateway:
 	echo "== healthz/readyz =="; kubectl exec -n $(NAMESPACE) $$POD -c gateway -- sh -c 'curl -s http://127.0.0.1:8000/healthz; echo ""; curl -s http://127.0.0.1:8000/readyz; echo ""'; echo ""; \
 	echo "== MCP handshake via gateway (requires API key) =="; \
 	kubectl exec -n $(NAMESPACE) $$POD -c gateway -- python3 -c "$$(cat scripts/verify-gateway.py)" 2>&1 || echo "grep the FAILURES line above - gateway verification FAILED"
+
+# Verify the live LLM path (Days 8-9 exit) inside the gateway pod: a chat
+# completion that carries all 11 tool schemas, the multi-step tool loop (model
+# calls a tool -> the gateway echoes the result -> the loop iterates), SSE
+# streaming with [DONE], and the wrong-key error. Needs a real key in the
+# `gateway-llm` Secret; the free-tier Gemini endpoint rate-limits per minute, so
+# the script retries those turns instead of reporting them as failures.
+verify-llm:
+	@POD=$$(kubectl get pods -n $(NAMESPACE) -l app=gateway -o jsonpath='{.items[0].metadata.name}'); \
+	echo "== gateway pod: $$POD =="; kubectl get pods -n $(NAMESPACE) -l app=gateway; echo ""; \
+	echo "== chat streaming + multi-step tool loop via gateway (requires a real LLM key) =="; \
+	kubectl exec -n $(NAMESPACE) $$POD -c gateway -- python3 -c "$$(cat scripts/verify-llm.py)" 2>&1 || echo "grep the FAILURES line above - LLM verification FAILED"
 
 # Unit tests for the gateway modules (docs/04): password hashing + verify-fails-closed,
 # tool namespacing/routing, timeout isolation + circuit breaker, RBAC/CSRF 403, audit
