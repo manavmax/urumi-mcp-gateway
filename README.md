@@ -76,11 +76,36 @@ The chat assistant's LLM endpoint is values, not code — `gateway.llm` in `helm
 | `gateway.llm.model` | `gpt-4o-mini` | model name passed to the chat completions call |
 | `gateway.llm.existingSecret` | `""` | optional prod override: name of a pre-created Secret holding key `OPENAI_API_KEY`; when set the chart renders no `gateway-llm` Secret |
 
-No API key is committed anywhere. The chart renders a `gateway-llm` Secret whose `OPENAI_API_KEY` is **empty until an operator supplies a real one** — deliberately not `randAlphaNum`, because a generated string is a guaranteed-invalid key and the honest failure is "chat is not configured" (ADR-022). Supply a key with:
+No API key is committed anywhere. The chart renders a `gateway-llm` Secret whose `OPENAI_API_KEY` is **empty until an operator supplies a real one** — deliberately not `randAlphaNum`, because a generated string is a guaranteed-invalid key and the honest failure is "chat is not configured" (ADR-022).
+
+Apply a key. The recommended way asks for it with echo off, so it stays out of the shell history, any process list and any file:
 
 ```bash
-kubectl -n urumi create secret generic gateway-llm --from-literal=OPENAI_API_KEY=sk-... --dry-run=client -o yaml | kubectl apply -f -
-make helm-local                               # the urumi.io/llm-secret-checksum annotation rolls the gateway pod
+printf 'Gemini API key (hidden): ' >&2
+read -rs LLM_KEY
+echo
+kubectl -n urumi create secret generic gateway-llm --from-literal=OPENAI_API_KEY="$LLM_KEY" --dry-run=client -o yaml | kubectl apply -f -
+unset LLM_KEY
+
+# afterwards check the length, never the value:
+kubectl get secret gateway-llm -n urumi -o jsonpath='{.data.OPENAI_API_KEY}' | base64 -d | wc -c
+```
+
+Rotating is the same command with a new key. In a script or CI, where the key already lives in a variable, skip the prompt:
+
+```bash
+kubectl -n urumi create secret generic gateway-llm --from-literal=OPENAI_API_KEY="$LLM_KEY" --dry-run=client -o yaml | kubectl apply -f -
+```
+
+**An upgrade never wipes the key.** Only the Secret's *existence* is unconditional; its *value* is `lookup`-guarded, so `helm upgrade` / `make helm-local` re-renders `gateway-llm` with the `OPENAI_API_KEY` already in the cluster instead of the empty default (ADR-016/022). Consequences worth knowing:
+
+- A no-op upgrade is really a no-op: the value is unchanged, so `urumi.io/llm-secret-checksum` is unchanged, so the gateway pod is **not** restarted.
+- `helm.sh/resource-policy: keep` means the Secret (and your key) survives `helm uninstall` and rollbacks.
+- Only applying a *different* key changes the checksum, and that is what rolls the pod to pick up the new value.
+- Nothing in `values.yaml` ever holds the key, so `git diff` and `helm get values` stay key-free; the chart's own file (`helm/templates/secrets.yaml`) says the same.
+
+```bash
+make verify-llm        # prove the live key: chat streams, multi-step tool loop, wrong-key error
 ```
 
 Point `gateway.llm.existingSecret` at your own pre-created Secret (key `OPENAI_API_KEY`) to skip the chart-rendered one entirely.
