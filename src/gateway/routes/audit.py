@@ -8,8 +8,10 @@ from datetime import datetime
 
 from audit.crud import query_audit
 from auth.rbac import get_current_user_via_session
+from db.models import User
 from db.session import get_db
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
@@ -58,6 +60,13 @@ async def get_audit(
         current_user_id=user.id,
         is_admin=(user.role == "admin"),
     )
+    # Batch-resolve user emails for display (auditor-friendly; no extra N+1 query)
+    user_ids = {r.user_id for r in rows if r.user_id}
+    email_by_id: dict = {}
+    if user_ids:
+        u_res = await db.execute(select(User.id, User.email).where(User.id.in_(user_ids)))
+        for uid, email in u_res.all():
+            email_by_id[uid] = email
     return {
         "total": total,
         "limit": limit,
@@ -67,6 +76,7 @@ async def get_audit(
                 "id": r.id,
                 "ts": r.ts.isoformat(),
                 "user_id": str(r.user_id) if r.user_id else None,
+                "user_email": email_by_id.get(r.user_id),
                 "api_key_id": str(r.api_key_id) if r.api_key_id else None,
                 "server_slug": r.server_slug,
                 "tool_exposed_name": r.tool_exposed_name,

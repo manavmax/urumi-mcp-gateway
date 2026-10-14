@@ -52,6 +52,9 @@ Thumbs.db
 # Local tool state (Kilo)
 .kilo/
 
+# Artifacts (screenshots, live SSE dumps — not committed)
+artifacts/
+
 # Logs & tmp
 *.log
 /tmp/

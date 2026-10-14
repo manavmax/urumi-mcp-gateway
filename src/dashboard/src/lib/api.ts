@@ -70,6 +70,7 @@ export type AuditRow = {
   id: number;
   ts: string;
   user_id: string | null;
+  user_email?: string | null;
   api_key_id: string | null;
   server_slug: string;
   tool_exposed_name: string;
