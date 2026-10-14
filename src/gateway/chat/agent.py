@@ -262,6 +262,7 @@ async def chat_loop(
             kwargs["tools"] = openai_tools  # type: ignore[assignment]
             kwargs["tool_choice"] = "auto"
 
+        _llm_exc: Exception | None = None
         try:
             resp, serving_model = await _create_with_fallback(
                 client.chat.completions.create,
@@ -292,11 +293,56 @@ async def chat_loop(
             yield {"type": "text", "content": "LLM timed out.", "category": CATEGORY_UNKNOWN}
             return
         except Exception as exc:
-            # 400/401/403 and friends reach here unchanged - the category tells the
-            # operator which of them it was without reading a provider stack trace.
-            category = error_category(exc)
-            yield {"type": "text", "content": f"LLM error ({category}): {exc}", "category": category}
-            return
+            exc_str = str(exc).lower()
+            # Gemini sometimes drops extra_content (the thought_signature) on a tool_call;
+            # echoing it back with nothing to sign is a 400 on the NEXT call. Recover by
+            # re-presenting the tool results as plain user text and retrying once.
+            # 400/401/403 and friends still reach the error path unchanged - the category
+            # tells the operator which of them it was without a provider stack trace.
+            is_sig_400 = (
+                "thought_signature" in exc_str
+                and "function call" in exc_str
+                and any(x in exc_str for x in ("400", "missing a thought"))
+            )
+            if is_sig_400 and _iteration > 0 and messages and messages[-1].get("role") == "tool":
+                # Find the assistant echo these tool results answer (the last message
+                # carrying tool_calls; several tool results may follow it).
+                asst_idx = None
+                for i in range(len(messages) - 2, -1, -1):
+                    if messages[i].get("tool_calls"):
+                        asst_idx = i
+                        break
+                if asst_idx is not None:
+                    tool_msgs = messages[asst_idx + 1:]
+                    del messages[asst_idx:]
+                    parts = [tm.get("content", "") or "" for tm in tool_msgs]
+                    parts = [p for p in parts if p]
+                    if parts:
+                        messages.append({"role": "user", "content": "\n\n".join(parts)})
+                    try:
+                        resp, serving_model = await _create_with_fallback(
+                            client.chat.completions.create,
+                            model_chain,
+                            kwargs,
+                            cooldowns=MODEL_COOLDOWNS,
+                            producer_model=producer_model,
+                            request_id=str(request_id),
+                            remaining_budget=OVERALL_TIMEOUT - (time.monotonic() - start),
+                            max_models=settings.max_models_per_turn(),
+                            failed_models=models_failed,
+                        )
+                        producer_model = serving_model
+                        yield {"type": "model", "model": serving_model}
+                    except Exception as retry_exc:
+                        _llm_exc = retry_exc
+                else:
+                    _llm_exc = exc
+            else:
+                _llm_exc = exc
+            if _llm_exc is not None:
+                category = error_category(_llm_exc)
+                yield {"type": "text", "content": f"LLM error ({category}): {_llm_exc}", "category": category}
+                return
 
         msg = resp.choices[0].message
         # OpenAI message may have tool_calls
