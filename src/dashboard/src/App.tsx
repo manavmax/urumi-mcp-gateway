@@ -10,7 +10,7 @@ function Shell() {
   const { user, logout } = useAuth();
   return (
     <div className="layout">
-      <nav className="sidebar">
+      <nav className="sidebar" aria-label="Primary">
         <div className="brand">Urumi</div>
         <NavLink to="/servers">Servers</NavLink>
         <NavLink to="/members">Members & Keys</NavLink>
@@ -18,8 +18,8 @@ function Shell() {
         <NavLink to="/chat">Chat</NavLink>
         <div className="spacer" />
         <div className="userbox">
-          <div className="small mono">{user?.email}</div>
-          <div className="small muted">{user?.role}</div>
+          <div className="small mono break">{user?.email}</div>
+          <div className="small muted" style={{ textTransform: "capitalize" }}>{user?.role}</div>
           <button className="secondary small" onClick={logout}>
             Sign out
           </button>

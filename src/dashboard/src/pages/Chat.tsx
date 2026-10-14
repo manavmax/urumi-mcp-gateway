@@ -1,11 +1,9 @@
 import { useState, useRef } from "react";
 import { api } from "../lib/api";
+import { OutcomeBadge } from "../components/ui/Badge";
 
 type Msg = { role: "user" | "assistant" | "tool"; content: string; tool?: string; outcome?: string; truncated?: boolean };
 
-// Tool output is JSON from the MCP server, so it must be pretty-printed for a human to
-// read it. It is collapsed by default (a <details> block) and truncated when long, so a
-// 500-product listing cannot take over the chat log.
 const MAX_TOOL_OUTPUT = 2000;
 
 function prettyJson(value: unknown): string {
@@ -52,11 +50,8 @@ export default function Chat() {
       }
       const ct = res.headers.get("content-type") || "";
       if (ct.includes("text/event-stream")) {
-        // SSE streaming
         const reader = res.body?.getReader();
         const decoder = new TextDecoder();
-        // No empty assistant bubble is created up front: until the model actually emits
-        // a token (or finishes), the log shows the user message and the tool chips only.
         let assistant = "";
         const commitAssistant = () =>
           setMessages((prev) => {
@@ -90,11 +85,13 @@ export default function Chat() {
                 const out = toolOutput(evt.output);
                 setMessages((prev) => [...prev, { role: "tool", content: out.text, truncated: out.truncated, tool: evt.tool || evt.name, outcome: evt.outcome || evt.status }]);
               } else if (evt.type === "text") {
-                assistant += evt.content || "";
+                // Error/category text from the gateway (LLM failure, timeout, fallback cap, etc.)
+                const label = evt.category ? ` [${evt.category}]` : "";
+                assistant += (evt.content || "") + label;
                 commitAssistant();
               }
             } catch {
-              // ignore
+              // ignore malformed SSE line
             }
           }
         }
@@ -122,22 +119,27 @@ export default function Chat() {
   }
 
   return (
-    <div className="chat">
-      <h2>Chat — store assistant</h2>
-      {servingModel && <p className="muted small mono">serving model: {servingModel}</p>}
-      <p className="muted small">Chat uses server-side tool loop; upstream credentials never reach the browser. Tool calls are audited as your user.</p>
-      {err && <div className="alert alert-error">{err}</div>}
-      <div ref={logRef} className="chat-log">
-        {messages.length === 0 && <div className="muted">Try: “Create product Urumi Tee $29.99” or “What orders came in today?”</div>}
+    <div className="stack">
+      <div className="page-head">
+        <h2>Chat — store assistant</h2>
+        {servingModel && <span className="badge badge-unknown mono small" title="Model serving this turn">Serving: {servingModel}</span>}
+      </div>
+      <p className="small muted" style={{ marginTop: -6 }}>Chat uses server-side tool loop; upstream credentials never reach the browser. Tool calls are audited as your user.</p>
+      {err && <div className="alert alert-error" role="alert">{err}</div>}
+      <div ref={logRef} className="chat-log" aria-live="polite">
+        {messages.length === 0 && <div className="empty">Try: “Create product Urumi Tee $29.99” or “What orders came in today?”<div className="small muted" style={{ marginTop: 6 }}>Tool calls appear as chips — tap output to expand.</div></div>}
         {messages.map((m, i) => (
           <div key={i} className={`chat-msg chat-${m.role}`}>
             {m.role === "tool" ? (
               <div className="tool-chip">
-                <span className="mono">{m.tool}</span> <span className={`badge ${m.outcome === "success" ? "badge-connected" : "badge-unreachable"}`}>{m.outcome || "tool"}</span>
+                <div className="row gap wrap">
+                  <span className="mono small" style={{ fontWeight: 750 }}>{m.tool}</span>
+                  <OutcomeBadge outcome={m.outcome || "tool"} />
+                </div>
                 {m.content && (
-                  <details>
-                    <summary>output{m.truncated ? " (truncated)" : ""}</summary>
-                    <pre className="small">{m.content}</pre>
+                  <details style={{ marginTop: 6 }}>
+                    <summary className="small muted">output{m.truncated ? " (truncated)" : ""}</summary>
+                    <pre className="small" style={{ marginTop: 6 }}>{m.content}</pre>
                   </details>
                 )}
               </div>
@@ -146,11 +148,12 @@ export default function Chat() {
             ) : null}
           </div>
         ))}
+        {busy && <div className="small muted">Assistant is thinking…</div>}
       </div>
       <form onSubmit={send} className="row gap">
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask the store assistant..." className="flex1" disabled={busy} />
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask the store assistant..." className="flex1" disabled={busy} aria-label="Chat message" />
         <button type="submit" disabled={busy || !input.trim()}>
-          {busy ? "..." : "Send"}
+          {busy ? "…" : "Send"}
         </button>
       </form>
     </div>
