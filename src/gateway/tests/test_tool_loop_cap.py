@@ -6,6 +6,9 @@ Two separate tests per the updated plan:
 
 Both prove every call is audited as the logged-in user, ending with a clear
 "Maximum tool calls reached." / loop-exhaustion message.
+
+The mock-LLM harness (fake settings/DB, tool routing, FakeOpenAI, cooldown reset)
+lives in tests/conftest.py.
 """
 
 from __future__ import annotations
@@ -14,64 +17,17 @@ import asyncio
 import uuid
 from types import SimpleNamespace
 
-import chat.llm_fallback as fb
-import pytest
+from tests.conftest import ChatFakeDB, chat_user, fake_settings, make_tool_call, run_chat_turn
 
 TOOLS = [
     {"name": "notes__list_notes", "description": "List notes.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "notes__create_note", "description": "Create a note.", "inputSchema": {"type": "object", "properties": {}}},
 ]
 
-CHAIN = ["fake-a", "fake-b"]
-
-
-@pytest.fixture(autouse=True)
-def _reset_cooldowns():
-    fb.MODEL_COOLDOWNS.clear()
-    yield
-    fb.MODEL_COOLDOWNS.clear()
-
-
-class _Settings:
-    openai_api_key = "test-key-not-real"
-    openai_base_url = None
-    openai_model = CHAIN[0]
-    openai_models = ",".join(CHAIN[1:])
-
-    def model_chain(self):
-        return list(CHAIN)
-
-    def max_models_per_turn(self):
-        return fb.DEFAULT_MAX_MODELS_PER_TURN
-
-
-class _DB:
-    async def execute(self, stmt):
-        class _Res:
-            def scalar_one_or_none(self):
-                return "00000000-0000-0000-0000-00000000000a"
-        return _Res()
-
-    async def commit(self):
-        pass
-
-
-async def _allowed(_db):
-    return TOOLS
-
-
-def _tool_call(name: str, call_id: str):
-    return SimpleNamespace(id=call_id, function=SimpleNamespace(name=name, arguments="{}"))
-
 
 def _resp_with_calls(*names: str):
-    calls = [_tool_call(n, f"call_{i}") for i, n in enumerate(names)]
+    calls = [make_tool_call(n, f"call_{i}") for i, n in enumerate(names)]
     msg = SimpleNamespace(content="", tool_calls=calls)
-    return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
-
-
-def _text_resp(text: str):
-    msg = SimpleNamespace(content=text, tool_calls=[])
     return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
 
 
@@ -90,39 +46,26 @@ def test_max_tool_calls_20_multi_per_iteration(monkeypatch):
     async def fake_route(db, name, arguments):
         return {"ok": True, "tool": name}
 
-    async def _run():
-        import audit.queue as audit_queue
-        import gw_mcp.router as gw_router
-        import openai
-        from chat import agent
+    async def fake_audit(*, user_id, **kw):
+        audited_user_ids.append(user_id)
+        call_names.append(kw.get("tool_exposed_name"))
 
-        monkeypatch.setattr(agent, "get_settings", lambda: _Settings())
-        monkeypatch.setattr(agent, "_get_allowed_tools", _allowed)
-        monkeypatch.setattr(gw_router, "call_tool_routed", fake_route)
+    async def create(**kwargs):
+        return _resp_with_calls(*(["notes__list_notes"] * 5))
 
-        async def fake_audit(*, user_id, **kw):
-            audited_user_ids.append(user_id)
-            call_names.append(kw.get("tool_exposed_name"))
+    events = asyncio.run(run_chat_turn(
+        monkeypatch,
+        ChatFakeDB(),
+        chat_user(user_id),
+        settings=fake_settings(),
+        tools=TOOLS,
+        route=fake_route,
+        create=create,
+        messages=[{"role": "user", "content": "go"}],
+        request_id=str(uuid.uuid4()),
+        audit=fake_audit,
+    ))
 
-        monkeypatch.setattr(audit_queue, "log_audit", fake_audit)
-
-        # Each LLM turn returns 5 parallel tool calls
-        async def create(**kwargs):
-            return _resp_with_calls(*(["notes__list_notes"] * 5))
-
-        class FakeOpenAI:
-            def __init__(self, **kw):
-                self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
-
-        monkeypatch.setattr(openai, "AsyncOpenAI", FakeOpenAI)
-
-        user = SimpleNamespace(id=user_id)
-        events: list[dict] = []
-        async for evt in agent.chat_loop(_DB(), user, [{"role": "user", "content": "go"}], str(uuid.uuid4())):
-            events.append(evt)
-        return events
-
-    events = asyncio.run(_run())
     tool_events = [e for e in events if e.get("type") == "tool_call"]
     text_events = [e for e in events if e.get("type") == "text"]
 
@@ -152,41 +95,28 @@ def test_max_iters_8_single_per_iteration(monkeypatch):
     async def fake_route(db, name, arguments):
         return {"ok": True}
 
-    async def _run():
-        import audit.queue as audit_queue
-        import gw_mcp.router as gw_router
-        import openai
-        from chat import agent
+    async def fake_audit(*, user_id, **kw):
+        audited.append(user_id)
 
-        monkeypatch.setattr(agent, "get_settings", lambda: _Settings())
-        monkeypatch.setattr(agent, "_get_allowed_tools", _allowed)
-        monkeypatch.setattr(gw_router, "call_tool_routed", fake_route)
+    async def create(**kwargs):
+        nonlocal iterations
+        iterations += 1
+        # Always request one more tool call; loop should hit MAX_ITERS and stop iterating
+        return _resp_with_calls("notes__list_notes")
 
-        async def fake_audit(*, user_id, **kw):
-            audited.append(user_id)
+    events = asyncio.run(run_chat_turn(
+        monkeypatch,
+        ChatFakeDB(),
+        chat_user(user_id),
+        settings=fake_settings(),
+        tools=TOOLS,
+        route=fake_route,
+        create=create,
+        messages=[{"role": "user", "content": "go"}],
+        request_id=str(uuid.uuid4()),
+        audit=fake_audit,
+    ))
 
-        monkeypatch.setattr(audit_queue, "log_audit", fake_audit)
-
-        async def create(**kwargs):
-            nonlocal iterations
-            iterations += 1
-            # Always request one more tool call; loop should hit MAX_ITERS and stop iterating
-            return _resp_with_calls("notes__list_notes")
-
-        class FakeOpenAI:
-            def __init__(self, **kw):
-                self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
-
-        monkeypatch.setattr(openai, "AsyncOpenAI", FakeOpenAI)
-
-        user = SimpleNamespace(id=user_id)
-        events: list[dict] = []
-        # MAX_ITERS loop yields 8 tool calls; next iteration exits the for range silently
-        async for evt in agent.chat_loop(_DB(), user, [{"role": "user", "content": "go"}], str(uuid.uuid4())):
-            events.append(evt)
-        return events
-
-    events = asyncio.run(_run())
     tool_events = [e for e in events if e.get("type") == "tool_call"]
     # One per iteration, 8 iterations -> 8 calls, then loop ends (no "Maximum tool calls" message — it hit the iter cap)
     assert len(tool_events) == MAX_ITERS

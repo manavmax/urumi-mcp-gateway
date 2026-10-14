@@ -11,22 +11,23 @@ nothing was rolled back - a retry may repeat it. Check the store before you retr
 
 Read-only tools (`list_*`, `get_*`) must never trigger that note, otherwise every failed
 turn after a lookup would cry wolf.
+
+The mock-LLM harness (fake settings/DB, tool routing, FakeOpenAI, cooldown reset)
+lives in tests/conftest.py.
 """
 
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
 
-import chat.llm_fallback as fb
 import pytest
+
+from tests.conftest import ChatFakeDB, chat_user, fake_settings, run_chat_turn, tool_call_response
 
 TOOLS = [
     {"name": "notes__create_note", "description": "Create a note.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "notes__list_notes", "description": "List notes.", "inputSchema": {"type": "object", "properties": {}}},
 ]
-
-CHAIN = ["gemini-a", "gemini-b"]
 
 
 class StatusBusy(Exception):
@@ -35,90 +36,31 @@ class StatusBusy(Exception):
     status_code = 503
 
 
-@pytest.fixture(autouse=True)
-def _reset_cooldowns():
-    fb.MODEL_COOLDOWNS.clear()
-    yield
-    fb.MODEL_COOLDOWNS.clear()
-
-
-class _Settings:
-    openai_api_key = "test-key-not-real"
-    openai_base_url = None
-    openai_model = CHAIN[0]
-    openai_models = ",".join(CHAIN[1:])
-
-    def model_chain(self):
-        return list(CHAIN)
-
-    def max_models_per_turn(self):
-        return fb.DEFAULT_MAX_MODELS_PER_TURN
-
-
-class _DB:
-    """Answers the server_id lookup chat_loop does for the audit row."""
-
-    async def execute(self, stmt):
-        class _Res:
-            def scalar_one_or_none(self):
-                return "00000000-0000-0000-0000-00000000000a"
-
-        return _Res()
-
-    async def commit(self):
-        pass
-
-
-async def _allowed(_db):
-    return TOOLS
-
-
 async def _route_ok(db, name, arguments):
     return {"tool": name, "args": arguments, "id": "note-1", "title": "test"}
 
 
-async def _audit(**_kwargs):
-    return None
-
-
-def _tool_call_response(name: str, call_id: str = "call_1"):
-    msg = SimpleNamespace(content="", tool_calls=[
-        SimpleNamespace(id=call_id, function=SimpleNamespace(name=name, arguments="{}"))
-    ])
-    return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
-
-
 async def _run_turn(monkeypatch, tool_name: str, request_id: str):
     """One turn: step 1 asks for `tool_name`, every later LLM call is busy."""
-    import audit.queue as audit_queue
-    import gw_mcp.router as gw_router
-    import openai
-    from chat import agent
-
-    monkeypatch.setattr(agent, "get_settings", lambda: _Settings())
-    monkeypatch.setattr(agent, "_get_allowed_tools", _allowed)
-    monkeypatch.setattr(gw_router, "call_tool_routed", _route_ok)
-    monkeypatch.setattr(audit_queue, "log_audit", _audit)
-
     state = {"n": 0}
 
     async def create(**kwargs):
         state["n"] += 1
         if state["n"] == 1:
-            return _tool_call_response(tool_name)
+            return tool_call_response(tool_name)
         raise StatusBusy()
 
-    class FakeOpenAI:
-        def __init__(self, **kwargs):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
-
-    monkeypatch.setattr(openai, "AsyncOpenAI", FakeOpenAI)
-
-    user = SimpleNamespace(id="00000000-0000-0000-0000-000000000001")
-    events = []
-    async for evt in agent.chat_loop(_DB(), user, [{"role": "user", "content": "go"}], request_id):
-        events.append(evt)
-    return events
+    return await run_chat_turn(
+        monkeypatch,
+        ChatFakeDB(),
+        chat_user(),
+        settings=fake_settings(),
+        tools=TOOLS,
+        route=_route_ok,
+        create=create,
+        messages=[{"role": "user", "content": "go"}],
+        request_id=request_id,
+    )
 
 
 def _text_of(events) -> str:
@@ -180,31 +122,20 @@ def test_a_failed_write_is_not_reported_as_succeeded(monkeypatch):
 
 
 async def _run_turn_with_failing_route(monkeypatch):
-    import audit.queue as audit_queue
-    import gw_mcp.router as gw_router
-    import openai
-    from chat import agent
-
-    monkeypatch.setattr(agent, "get_settings", lambda: _Settings())
-    monkeypatch.setattr(agent, "_get_allowed_tools", _allowed)
-    monkeypatch.setattr(audit_queue, "log_audit", _audit)
-
     async def _route_fail(db, name, arguments):
         raise RuntimeError("notes upstream exploded")
 
-    monkeypatch.setattr(gw_router, "call_tool_routed", _route_fail)
-
     async def create(**kwargs):
-        return _tool_call_response("notes__create_note")
+        return tool_call_response("notes__create_note")
 
-    class FakeOpenAI:
-        def __init__(self, **kwargs):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
-
-    monkeypatch.setattr(openai, "AsyncOpenAI", FakeOpenAI)
-
-    user = SimpleNamespace(id="00000000-0000-0000-0000-000000000001")
-    events = []
-    async for evt in agent.chat_loop(_DB(), user, [{"role": "user", "content": "go"}], "req-write-fail-1"):
-        events.append(evt)
-    return events
+    return await run_chat_turn(
+        monkeypatch,
+        ChatFakeDB(),
+        chat_user(),
+        settings=fake_settings(),
+        tools=TOOLS,
+        route=_route_fail,
+        create=create,
+        messages=[{"role": "user", "content": "go"}],
+        request_id="req-write-fail-1",
+    )

@@ -24,8 +24,8 @@ import os
 from types import SimpleNamespace
 
 import chat.llm_fallback as fb
-import pytest
-from chat.llm_fallback import DEFAULT_MAX_MODELS_PER_TURN
+
+from tests.conftest import ChatFakeDB, chat_user, fake_settings, make_tool_call, run_chat_turn
 
 CHAIN = ["gemini-top", "gemini-next", "gemini-third"]
 TOP, NEXT = CHAIN[0], CHAIN[1]  # the third entry proves the failover does NOT walk the chain
@@ -50,55 +50,6 @@ class FakeResp:
         self.choices = [SimpleNamespace(message=msg)]
 
 
-def _tool_call(name: str, call_id: str, signature: str | None = None):
-    tc = SimpleNamespace(
-        id=call_id,
-        function=SimpleNamespace(name=name, arguments="{}"),
-    )
-    if signature:
-        tc.extra_content = {"google": {"thought_signature": signature}}
-    return tc
-
-
-@pytest.fixture(autouse=True)
-def _reset_cooldowns():
-    # cooldowns are module-level on purpose (they survive across turns); each test starts
-    # from a cold chain, exactly like a restarted gateway
-    fb.MODEL_COOLDOWNS.clear()
-    yield
-    fb.MODEL_COOLDOWNS.clear()
-
-
-class _FakeSettings:
-    openai_api_key = "test-key-not-real"
-    openai_base_url = None
-    openai_model = TOP
-    openai_models = ",".join(CHAIN[1:])
-
-    def model_chain(self):
-        return list(CHAIN)
-
-    def max_models_per_turn(self):
-        return DEFAULT_MAX_MODELS_PER_TURN
-
-
-class _FakeDB:
-    """Answers the server_id lookup chat_loop does for the audit row."""
-
-    def __init__(self):
-        self.commits = 0
-
-    async def execute(self, stmt):
-        class _Res:
-            def scalar_one_or_none(self):
-                return "00000000-0000-0000-0000-00000000000a"
-
-        return _Res()
-
-    async def commit(self):
-        self.commits += 1
-
-
 async def _fake_route(db, name, arguments):
     # deterministic per tool, so the raw output shows the loop really iterated
     return {"tool": name, "args": arguments, "rows": [{"id": 1}, {"id": 2}]}
@@ -108,10 +59,6 @@ async def _fake_audit(**_kwargs):
     return None
 
 
-async def _fake_allowed(_db):
-    return TOOLS
-
-
 def _switch_on() -> bool:
     """Read the test-only switch at call time (so a test can set it per run)."""
     return os.environ.get("URUMI_TEST_FORCE_TOP_MODEL_503", "1") not in ("0", "false", "no")
@@ -119,16 +66,6 @@ def _switch_on() -> bool:
 
 async def _multi_step_loop(monkeypatch):
     """Drive chat_loop over a 3-step turn: 2 tool calls, then the final answer."""
-    import audit.queue as audit_queue
-    import gw_mcp.router as gw_router
-    import openai
-    from chat import agent
-
-    monkeypatch.setattr(agent, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(agent, "_get_allowed_tools", _fake_allowed)
-    monkeypatch.setattr(gw_router, "call_tool_routed", _fake_route)
-    monkeypatch.setattr(audit_queue, "log_audit", _fake_audit)
-
     force_503 = _switch_on()
     calls: list[dict] = []
     next_steps = {"n": 0}
@@ -137,9 +74,9 @@ async def _multi_step_loop(monkeypatch):
         # the model that serves the loop: step 1 -> tool call, step 2 -> tool call, step 3 -> answer
         next_steps["n"] += 1
         if next_steps["n"] == 1:
-            return FakeResp(content="", tool_calls=[_tool_call("woo__list_products", "call_1", "sig-NEXT")])
+            return FakeResp(content="", tool_calls=[make_tool_call("woo__list_products", "call_1", "sig-NEXT")])
         if next_steps["n"] == 2:
-            return FakeResp(content="", tool_calls=[_tool_call("woo__list_orders", "call_2")])
+            return FakeResp(content="", tool_calls=[make_tool_call("woo__list_orders", "call_2")])
         return FakeResp("found 2 products and 0 orders")
 
     async def create(**kwargs):
@@ -157,17 +94,17 @@ async def _multi_step_loop(monkeypatch):
             return next_behavior(kwargs)
         raise StatusError(503, "unexpected fallback past the healthy model")
 
-    class FakeOpenAI:
-        def __init__(self, **kwargs):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
-
-    monkeypatch.setattr(openai, "AsyncOpenAI", FakeOpenAI)
-
-    user = SimpleNamespace(id="00000000-0000-0000-0000-000000000001")
-    events = []
-    async for evt in agent.chat_loop(_FakeDB(), user, [{"role": "user", "content": "what do we sell?"}], "req-multistep-1"):
-        events.append(evt)
-    return events, calls
+    return await run_chat_turn(
+        monkeypatch,
+        ChatFakeDB(),
+        chat_user(),
+        settings=fake_settings(CHAIN),
+        tools=TOOLS,
+        route=_fake_route,
+        create=create,
+        messages=[{"role": "user", "content": "what do we sell?"}],
+        request_id="req-multistep-1",
+    ), calls
 
 
 def _show(events, calls):

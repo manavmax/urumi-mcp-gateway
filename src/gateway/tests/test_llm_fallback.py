@@ -35,13 +35,6 @@ from chat.llm_fallback import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _reset_cooldowns():
-    MODEL_COOLDOWNS.clear()
-    yield
-    MODEL_COOLDOWNS.clear()
-
-
 class StatusError(Exception):
     """Minimal stand-in for openai.APIStatusError carrying an HTTP status."""
 
