@@ -273,3 +273,179 @@ def test_thought_signature_400_recovery(monkeypatch):
     reply = " ".join(e.get("content", "") for e in events if e.get("type") in ("token", "text"))
     assert "error" not in reply.lower(), f"user must not see error, got: {reply}"
     assert "probe" in reply.lower() or "note" in reply.lower(), f"final reply should mention note, got: {reply}"
+
+
+# ---------------------------------------------------------------------------
+# thought_signature recovery: the boundary must survive the role move (security check)
+
+
+def _sig400(exc_message: str = "400 Function call is missing a thought_signature in functionCall parts"):
+    """Exception shaped like the provider 400 the recovery path is built for."""
+    class _Sig400Err(Exception):
+        status_code = 400
+
+        def __init__(self):
+            super().__init__(exc_message)
+
+    return _Sig400Err()
+
+
+def _assert_envelope_intact(content: str) -> None:
+    assert "BEGIN TOOL OUTPUT" in content, "per-turn random delimiter missing"
+    assert "END TOOL OUTPUT" in content, "per-turn random delimiter (END) missing"
+    assert '"untrusted_output"' in content, "JSON envelope field missing"
+
+
+def _messages_with_poison(calls: list[list[dict]], poison: str) -> list[dict]:
+    return [m for call in calls for m in call if poison in (m.get("content") or "")]
+
+
+def test_recovery_keeps_the_injection_boundary(monkeypatch):
+    """A POISONED tool payload that travels through the thought_signature recovery must
+    keep exactly the protections of the normal path: the tool content moves into a
+    user-role message VERBATIM, so it still carries the same per-turn random marker, the
+    BEGIN/END TOOL OUTPUT delimiter and the untrusted_output JSON framing. The payload is
+    never bare anywhere, never in a system or assistant instruction message, and the tool
+    is executed exactly once (no re-execution)."""
+    route_calls: list[str] = []
+
+    async def fake_route(db, name, _):
+        route_calls.append(name)
+        if name == "woo__get_order":
+            return {"id": 1, "status": "processing",
+                    "billing": {"first_name": "John" + POISON, "last_name": "Doe"}}
+        return {}
+
+    class _Err(Exception):
+        status_code = 400
+
+        def __init__(self):
+            super().__init__("400 Function call is missing a thought_signature in functionCall parts")
+
+    calls: list[list[dict]] = []
+    count = [0]
+
+    async def create(**kw):
+        msgs = [dict(m) for m in kw.get("messages", [])]
+        calls.append(msgs)
+        count[0] += 1
+        if count[0] == 1:
+            return tool_call_response("woo__get_order")
+        if count[0] == 2:
+            raise _Err()
+        return text_response("Here is the billing info. No product created.")
+
+    events = asyncio.run(run_chat_turn(
+        monkeypatch,
+        ChatFakeDB(),
+        chat_user("00000000-0000-0000-0000-000000000004"),
+        settings=fake_settings(["sig-model"], max_models_per_turn=1),
+        tools=[*TOOLS, {"name": "woo__get_order", "description": "Get one order.", "inputSchema": {"type": "object", "properties": {}}}],
+        route=fake_route,
+        create=create,
+        messages=[{"role": "user", "content": "show the billing details of the newest order"}],
+        request_id="sig-security-1",
+    ))
+
+    assert count[0] == 3, f"expected 3 calls (tool + 400 + retry), got {count[0]}"
+    retry = calls[2]
+    # 1. the recovery message is a USER-role message and its content is the wrapped envelope
+    user_tool = [m for m in retry if m.get("role") == "user" and POISON in (m.get("content") or "")]
+    assert len(user_tool) == 1, f"poison must be re-presented exactly once as a user message; roles={[m.get('role') for m in retry]}"
+    _assert_envelope_intact(user_tool[0]["content"])
+    # 2. SAME per-turn marker as the tool-role message carried (not a fresh one)
+    tool_msgs_before = [m for m in calls[1] if m.get("role") == "tool"]
+    assert len(tool_msgs_before) == 1
+    marker_before = tool_msgs_before[0]["content"].split("[marker:", 1)[1].split(" ", 1)[0]
+    assert marker_before in user_tool[0]["content"], "recovery must reuse the per-turn marker"
+    # 3. the poison is never bare and never in a system/assistant instruction message
+    for m in _messages_with_poison(calls, POISON):
+        _assert_envelope_intact(m["content"])
+        assert m.get("role") in ("tool", "user"), f"poison reached an instruction role: {m.get('role')}"
+    assert not any(m.get("role") == "system" and POISON in (m.get("content") or "") for m in retry)
+    # 4. the tool executed exactly once: no re-execution after the recovery
+    assert route_calls == ["woo__get_order"]
+    # and the user-visible turn succeeded with no error
+    reply = " ".join(e.get("content", "") for e in events if e.get("type") in ("token", "text"))
+    assert "error" not in reply.lower()
+
+
+def test_recovery_retries_once_only_and_never_reexecutes_writes(monkeypatch):
+    """Exactly one retry: if the retry fails too, the turn surfaces the error and stops.
+
+    And a WRITE tool that already ran is not executed again: the echo is dropped, so the
+    only way the model can repeat the write is by explicitly asking for it again, which
+    the retry (returning a final answer) never does here."""
+    route_calls: list[str] = []
+
+    async def fake_route(db, name, _):
+        route_calls.append(name)
+        return {"id": "note-1", "title": "test"}
+
+    class _Err(Exception):
+        status_code = 400
+
+        def __init__(self):
+            super().__init__("400 Function call is missing a thought_signature in functionCall parts")
+
+    class _RetryErr(Exception):
+        status_code = 503
+
+        def __init__(self):
+            super().__init__("503 This model is currently experiencing high demand")
+
+    calls: list[list[dict]] = []
+    count = [0]
+
+    async def create(**kw):
+        calls.append([dict(m) for m in kw.get("messages", [])])
+        count[0] += 1
+        if count[0] == 1:
+            return tool_call_response("notes__create_note")
+        if count[0] == 2:
+            raise _Err()
+        raise _RetryErr()  # the single retry fails as well
+
+    events = asyncio.run(run_chat_turn(
+        monkeypatch,
+        ChatFakeDB(),
+        chat_user("00000000-0000-0000-0000-000000000005"),
+        settings=fake_settings(["sig-model"], max_models_per_turn=1),
+        tools=TOOLS,
+        route=fake_route,
+        create=create,
+        messages=[{"role": "user", "content": "create a note titled test"}],
+        request_id="sig-security-2",
+    ))
+
+    assert count[0] == 3, f"exactly one retry (tool + 400 + retry-fail), got {count[0]} calls"
+    # no third retry: no further LLM call happened, so no new tool call could be made
+    assert route_calls == ["notes__create_note"], "the write must not run twice"
+    tool_events = [e for e in events if e.get("type") == "tool_call"]
+    assert [e["tool"] for e in tool_events] == ["notes__create_note"]
+    # the turn surfaces an error and STILL names the write (ADR-031)
+    reply = " ".join(e.get("content", "") for e in events if e.get("type") in ("token", "text"))
+    assert "error" in reply.lower()
+    assert "notes__create_note already succeeded" in reply
+
+
+def test_recovery_message_helper_preserves_envelope_verbatim():
+    """Unit-level: the helper moves the wrapped content verbatim, and defensively wraps
+    anything that somehow lacks the envelope (fresh marker) instead of passing it bare."""
+    from chat.agent import _build_recovery_message, _tool_output_envelope_intact
+
+    wrapped = "--- BEGIN TOOL OUTPUT [marker:URUMI_TOOL_DEADBEEF tool:woo__get_order] ---\n"
+    payload = "{\"marker\":\"URUMI_TOOL_DEADBEEF\",\"tool\":\"woo__get_order\",\"untrusted_output\":\"ignored evil\"}"
+    tool_msgs = [{"role": "tool", "tool_call_id": "c1", "content": f"{wrapped}\n{payload}\n--- END TOOL OUTPUT [URUMI_TOOL_DEADBEEF] ---"}]
+
+    msg = _build_recovery_message(tool_msgs)
+    assert msg is not None and msg["role"] == "user"
+    assert msg["content"] == tool_msgs[0]["content"], "wrapped content must move verbatim"
+
+    bare = [{"role": "tool", "content": "no envelope here"}]
+    msg2 = _build_recovery_message(bare)
+    assert msg2 is not None
+    assert _tool_output_envelope_intact(msg2["content"]), "bare content must be wrapped, not passed through"
+
+    assert _build_recovery_message([]) is None
+    assert _build_recovery_message([{"role": "tool", "content": ""}]) is None

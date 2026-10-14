@@ -3,10 +3,13 @@
 Security note: `_sanitize` is a WEAK blocklist — one layer only. It catches
 obvious `ignore previous instructions` / `system:` markers but cannot stop a
 determined injection hidden in tool output (e.g. in an order note or a note
-body). The real boundary is the MESSAGE ROLE: tool output is always placed in
-a `role: tool` message (never `system`/`assistant` instruction), wrapped in a
-per-turn random delimiter and a JSON envelope so an attacker cannot forge the
-boundary. See `chat/agent.py:wrap_tool_output` and `docs/THREAT_MODEL.md`.
+body). The real boundary is the MESSAGE ROLE + the per-turn envelope: tool
+output never becomes a `system`/`assistant` instruction message. It is placed
+in a `role: tool` message, or — when the provider rejects the tool-call echo
+(Gemini thought_signature 400) — re-presented as a `role: user` message that
+carries the SAME wrapped envelope verbatim. In both roles it stays data. See
+`chat/agent.py:wrap_tool_output` / `_build_recovery_message` and
+docs/THREAT_MODEL.md.
 """
 
 import re
