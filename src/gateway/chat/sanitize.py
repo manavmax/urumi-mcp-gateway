@@ -1,4 +1,13 @@
-"""Sanitize tool output before feeding back to LLM / browser."""
+"""Sanitize tool output before feeding back to LLM / browser.
+
+Security note: `_sanitize` is a WEAK blocklist — one layer only. It catches
+obvious `ignore previous instructions` / `system:` markers but cannot stop a
+determined injection hidden in tool output (e.g. in an order note or a note
+body). The real boundary is the MESSAGE ROLE: tool output is always placed in
+a `role: tool` message (never `system`/`assistant` instruction), wrapped in a
+per-turn random delimiter and a JSON envelope so an attacker cannot forge the
+boundary. See `chat/agent.py:wrap_tool_output` and `docs/THREAT_MODEL.md`.
+"""
 
 import re
 
@@ -14,9 +23,11 @@ MAX_TOOL_OUTPUT = 20_000
 def sanitize(text: str, limit: int = MAX_TOOL_OUTPUT) -> str:
     if not text:
         return ""
-    # strip obvious prompt-injection markers
+    # Weak blocklist — best-effort only. The role + delimiter/JSON envelope is
+    # the real isolation; this just trims the obvious markers.
     for pat in _INJECTION_PATTERNS:
         text = pat.sub("[filtered]", text)
     if len(text) > limit:
         text = text[:limit] + f"\n...[truncated {len(text) - limit} chars; use pagination]"
     return text
+
