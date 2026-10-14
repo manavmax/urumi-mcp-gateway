@@ -7,7 +7,10 @@
 
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { chromium } = require("/Users/manavsharma/Desktop/Urumi_AI/src/dashboard/node_modules/playwright-core");
+// Repo-relative: resolves from this script's own directory (scripts/), so the
+// script runs from any checkout/mount path. The dashboards/node_modules install
+// is what ships playwright-core (see src/dashboard/package.json devDependencies).
+const { chromium } = require("../src/dashboard/node_modules/playwright-core");
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
