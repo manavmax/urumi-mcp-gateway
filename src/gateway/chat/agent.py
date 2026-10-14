@@ -51,7 +51,24 @@ def wrap_tool_output(marker: str, tool_name: str, sanitized_json: str) -> str:
     envelope = json.dumps({"marker": marker, "tool": tool_name, "untrusted_output": sanitized_json}, ensure_ascii=False, default=str)
     return f"--- BEGIN TOOL OUTPUT [marker:{marker} tool:{tool_name}] ---\n{envelope}\n--- END TOOL OUTPUT [{marker}] ---"
 
+def _build_tool_message(tool_call_id: str | None, marker: str, tool_name: str, result: dict) -> dict:
+    """Build a tool-role message dict with the result wrapped in the per-turn JSON envelope.
+
+    All tool results (validation error, permission denied, upstream error, success) use this
+    helper so every path is consistent: json.dumps always uses default=str (so
+    objects/dates/bytes are serialised rather than raising TypeError), and _sanitize is
+    applied to the JSON string before it is handed to wrap_tool_output.
+    """
+    sanitized = _sanitize(json.dumps(result, default=str))
+    content = wrap_tool_output(marker, tool_name, sanitized)
+    msg = {"role": "tool", "content": content}
+    if tool_call_id:
+        msg["tool_call_id"] = tool_call_id
+    return msg
+
+
 MAX_ITERS = 8
+
 # How much a model may DO to the store in one turn (docs/05 §2). Independent of the
 # model-failure budget (chat.llm_fallback / Helm gateway.llm.maxModelsPerTurn), which
 # bounds how many models may fail while a turn is being served.
@@ -376,8 +393,7 @@ async def chat_loop(
                 result = {"error": f"unknown tool '{name}'; allowed: {sorted(allowed_names)[:10]}"}
                 outcome = "validation_error"
                 yield {"type": "tool_call", "tool": name, "outcome": outcome, "output": result}
-                sanitized = _sanitize(json.dumps(result))
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": wrap_tool_output(tool_marker, name, sanitized)})
+                messages.append(_build_tool_message(tc.id, tool_marker, name, result))
                 continue
 
             # Route via gateway (impersonate user)
@@ -437,8 +453,7 @@ async def chat_loop(
                 result = {"error": str(exc)[:800]}
                 outcome = "upstream_error"
 
-            sanitized = _sanitize(json.dumps(result, default=str))
-            messages.append({"role": "tool", "tool_call_id": tc.id, "content": wrap_tool_output(tool_marker, name, sanitized)})
+            messages.append(_build_tool_message(tc.id, tool_marker, name, result))
             yield {"type": "tool_call", "tool": name, "outcome": outcome, "output": result}
             if outcome == "success" and _is_write_tool(name):
                 writes_done.append(name)  # the turn may still die: remember what changed
