@@ -1,0 +1,178 @@
+# REQUIREMENTS CHECKLIST
+
+Status of every user story, every `must` in Requirements, the Definition of Done,
+and every stand-out item from the Round 1 brief, verified **live in this session**
+(2026-10-16). Nothing is marked DONE from memory: each DONE row names the command
+run and the result observed now.
+
+> Source: the brief PDF is transcribed in `docs/00_OVERVIEW_AND_TRACEABILITY.md`
+> ("single source of truth for what Urumi grades"). This checklist follows that
+> document's numbering (user stories §4, DoD §5, mandatory requirements §6, bonus §7).
+
+Legend: **DONE** = verified live now · **PARTIAL** = works but with a documented gap ·
+**NOT DONE** = not implemented / not verified.
+
+---
+
+## 1. User stories (docs/00 §4)
+
+### Admin
+
+| US | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| See servers + status + tools | DONE | `node scripts/parity.mjs` (servers admin) + `kubectl exec gateway -- python3 -c "$(cat scripts/verify-gateway.py)"` | parity servers admin 21/21 match; gateway tools/list returns 11 tools (woo 6 / time 2 / notes 3); status chips Connected/Unreachable/Disabled render from live data |
+| Woo MCP pre-registered | DONE | `curl -s dashboard.127.0.0.1.nip.io` + gateway tools/list | woo__* tools present with no manual registration; woo-mcp pod Running, Ingress only store+dashboard |
+| Add/edit/disable/remove server | DONE | `/api/servers` CRUD probe (req-on-behalf probe, steps 6–8) | disable `time` -> tools/list drops `time__*`; re-enable -> tools return; admin CRUD 200, member CRUD 403 (verify-gateway) |
+| Invite members + issue/revoke keys | DONE | `/api/users` POST + `/api/keys` POST/DELETE probe (req-on-behalf) | admin creates member (201), issues key on behalf of member (201, plaintext shown once, owned by member), revokes it (200) |
+| Audit log | DONE | `node scripts/verify-audit-filters.mjs` + `psql select` on audit_logs | audit table: who/server/tool/when/duration/outcome; filters + pagination + CSV verified 10/10; attribution `time__get_current_time | success | admin@urumi.local | server=time` |
+
+### Member
+
+| US | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| Generate own API key | DONE | member login + `POST /api/keys` | 201, plaintext key shown once (len 52), owner = the member |
+| Single gateway URL + key in MCP client | DONE | `POST /mcp` with `Authorization: Bearer <member key>` (tools/list, tools/call) | member key calls `time__get_current_time` -> 200 + result; tools/list returns all enabled servers' tools |
+| Chat via dashboard | DONE | `POST /api/chat/completions` (SSE) as admin; `node scripts/verify-llm.py` in pod | SSE `model`+`token` events then `[DONE]`; multi-step tool loop ran `woo__list_products`; final answer produced |
+| Never sees upstream creds | DONE | `GET /api/servers` as admin | `credential` field is `null` (masked server-side; `servers.py:46` returns `"***"`/None, never plaintext); Fernet-encrypted at rest |
+
+---
+
+## 2. Definition of Done — demo script (docs/00 §5)
+
+### Phase A — Store
+
+| # | DoD step | Status | Command / test | Result observed this session |
+|---|---|---|---|---|
+| 1 | Open store, add product to cart, checkout COD, see order in Woo Admin | DONE | `curl store.127.0.0.1.nip.io` + cart/COD check in wordpress pod + Woo REST order create | store 200; cart with product shows `"payment_methods":["cod"]` (COD OFFERED); Woo REST order #87 created (COD, pending) and visible via `woo__list_orders` |
+
+### Phase B — Chat as User A
+
+| # | DoD step | Status | Command / test | Result observed this session |
+|---|---|---|---|---|
+| 2 | Chat "Create a product 'Urumi Tee' price $29.99" | DONE | `node scripts/verify-llm.py` in pod | multi-step loop ran `woo__create_product` -> created product, then `woo__list_orders`; audit rows `woo__create_product | success` |
+| 3 | Hand-place order for that product | DONE | Woo REST order create (see Phase A #1) | order #87 for Urumi Shoes (COD) placed |
+| 4 | Chat "What orders came in today?" -> returns the order | DONE | `POST /api/chat/completions` + `woo__list_orders` probe | order #87 appears in `woo__list_orders` output (id 87, pending, COD) |
+
+### Phase C — External MCP client as User B
+
+| # | DoD step | Status | Command / test | Result observed this session |
+|---|---|---|---|---|
+| 5 | Inspector/Claude Code with User B key -> tools/list returns all enabled servers' tools | DONE | `/mcp tools/list` with member key (req-on-behalf probe) | 11 tools (woo 6 / time 2 / notes 3) returned to a member key |
+| 6 | Ask same orders question -> succeeds | DONE | `/mcp tools/call woo__list_orders` with member key | 200 + result (orders incl. #87) |
+| 7 | One prompt needing 2 servers (cross-server aggregation) | DONE | `POST /api/chat/completions` "What time is it + list products" | SSE `tool_call` events for BOTH `time__get_current_time` and `woo__list_products` in one prompt; answer used both |
+
+### Phase D — Control plane
+
+| # | DoD step | Status | Command / test | Result observed this session |
+|---|---|---|---|---|
+| 8 | Revoke User B key -> next tools/call -> 401 | DONE | req-on-behalf probe | revoked key -> `401 {"error":{"code":-32000,"message":"invalid or revoked key"}}` |
+| 9 | Disable one upstream -> its tools vanish from chat + client tools/list | DONE | req-on-behalf probe (disable `time`) | client `tools/list` dropped `time__*` (11 -> 9 tools), `woo__*` intact; chat agent only loads enabled servers (`chat/agent.py:231`) |
+| 10 | `kubectl delete pod <woo-mcp-pod>` -> other servers still respond; dashboard shows Unreachable; then restore | DONE | killpod probe (scale deploy to 0, observe, restore to 1) | dashboard showed `woo = Unreachable`; `time__get_current_time` still 200 and tools/list still listed time__+notes__; after restore `woo = Connected` and `woo__list_products` 200. (A bare `kubectl delete pod` recreates in ~30s, faster than the 15s health probe, so the reliable observation used scale-to-0.) |
+| 11 | Audit log shows every call with correct user attribution | DONE | `psql` query on `audit_logs` join users | rows attributed to `admin@urumi.local` for gateway, `woo__*`, `time__*` calls with outcome + duration |
+
+---
+
+## 3. Mandatory Requirements Traceability (docs/00 §6)
+
+### 6.1 Kubernetes & Helm
+
+| Req | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| Local Kind + VPS k3s same charts, values diff only | DONE (local) / PARTIAL (VPS) | `helm lint ./helm -f helm/values-local.yaml -f helm/values-prod.yaml` | both lint clean (0 failed); `values-prod.yaml` exists (domain/storageClass/replicas/TLS params) — VPS itself not reachable in this session, so live VPS run not observed |
+| Helm mandatory, no Kustomize | DONE | `helm lint` + `helm/templates/*` | umbrella Helm chart, no Kustomize |
+| Everything in-cluster (store, DB, woo-mcp, gateway, dashboard) | DONE | `kubectl get deploy,sts -n urumi` | 5 Deployments + 2 StatefulSets running in `urumi` ns |
+| PVC for DB + wp-content | DONE | `kubectl get pvc -n urumi` | `data-urumi-mariadb-0` 10Gi, `data-urumi-postgres-0` 5Gi, `urumi-wp-content` 5Gi, all Bound |
+| Ingress with stable URLs, local domain | DONE | `kubectl get ingress -n urumi` | ingress `urumi`: hosts `store.127.0.0.1.nip.io` + `dashboard.127.0.0.1.nip.io`; both reachable (200) |
+| Readiness/liveness (+startup) + requests/limits on every workload | DONE | `kubectl get deploy,sts -o json` (probes/resources) | every workload has liveness+readiness (+startup on wordpress 150s, demo-time, demo-notes); every container has requests+limits |
+| No hardcoded secrets, use K8s Secrets | DONE | `kubectl get secret -n urumi` | `gateway-secrets`, `woo-secrets`, `mariadb-secret`, `gateway-admin`, `gateway-llm`, `wordpress-admin`, `wordpress-secret`, `pg-secret`, `demo-notes-token`; no committed secrets (`.env` gitignored) |
+
+### 6.2 WooCommerce MCP server
+
+| Req | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| Write yourself, no existing server | DONE | repo layout + `kubectl exec woo-mcp -- python3 -c "$(cat scripts/verify-mcp.py)"` | custom Python FastAPI + `mcp` SDK; 6 tools hand-written |
+| Streamable HTTP | DONE | verify-mcp.py | initialize + tools/list + tools/call over Streamable HTTP, 2025-03-26 |
+| Tools: list_products, create_product, list_orders, get_order, update_order_status (+get_product) | DONE | verify-mcp.py | 6 tools listed; create_product -> get_product round trip verified (id 82) |
+| Not reachable outside cluster | DONE | NetworkPolicy + ingress + pod probes | woo-mcp Service is ClusterIP only, no ingress path; from dashboard pod (non-gateway) all 3 upstreams TIMEOUT; from gateway pod all 3 respond (406/401 protocol-level = reachable) |
+| Doc how it talks to store | DONE | `docs/03_WOOCOMMERCE_MCP_SERVER.md` + woo REST | REST `wc/v3` with CK/CS via httpx; rationale documented |
+
+### 6.3 Gateway
+
+| Req | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| Add/edit/disable/remove upstreams (Streamable HTTP + static cred) | DONE | verify-gateway.py + req-on-behalf probe | admin CRUD 200; disable removes tools; credential masked |
+| One MCP endpoint aggregating tools, routing calls | DONE | verify-gateway.py | `POST/GET /mcp`; 11 tools from 3 servers; `slug__tool` prefix routing |
+| Same tool name on 2 servers -> handle + document | DONE | verify-gateway.py (prefix checks) | every tool prefixed `slug__`; no unprefixed tools; unknown slug -> `-32602` validation_error |
+| Slow/dead upstream must not break others | DONE | killpod probe | with woo down, `time__` call 200 and tools/list still returned 11; per-server timeout + gather(return_exceptions) |
+| Upstream creds stay server-side | DONE | `GET /api/servers` + `servers.py:46` | `credential: null` in API response; Fernet-encrypted at rest |
+| At least 3 upstreams | DONE | verify-gateway.py | woo-mcp (6) + demo-time (2) + demo-notes (3) = 11 tools |
+
+### 6.4 Team & Access
+
+| Req | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| Roles: admin, member | DONE | verify-gateway.py RBAC probes | member CRUD on servers/users -> 403; admin -> 200; member audit scoped to own rows |
+| Per-user API keys, revocable, hashed | DONE | req-on-behalf probe + `db.models` | key minted per user; SHA-256 digest stored; `revoked_at` set; revoked key -> 401 |
+| Audit log (user, server, tool, ts, duration, outcome) | DONE | `psql select` + verify-audit-filters | columns user/server/tool/ts/duration/outcome all populated; member sees own rows only |
+
+### 6.5 Chat agent
+
+| Req | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| Chat in dashboard, LLM calls tools via gateway, shows calls | DONE | `POST /api/chat/completions` + verify-llm.py | SSE model/token events; `tool_call` events streamed; final answer |
+| Acts as logged-in user (audit attribution) | DONE | psql audit join | chat tool calls attributed to `admin@urumi.local` (the session user) |
+| Model/provider your choice, free/local ok | DONE | verify-llm.py | serving model `gemini-3.5-flash-lite` via `gateway.llm.*` values |
+| LLM keys as Secrets | DONE | `kubectl get secret gateway-llm -n urumi` | Secret holds the API key; empty by default until operator supplies it |
+
+---
+
+## 4. Stand-out items (docs/00 §7 + docs/09 §2)
+
+| Bonus | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| **Multi-store provisioning** | NOT DONE | — | no per-store namespace provisioner in the codebase (`10_BONUS_MULTI_STORE.md` is a blueprint only) |
+| **VPS deployment (k3s)** | PARTIAL | `helm lint -f helm/values-prod.yaml` | `values-prod.yaml` valid + chart lints; no live VPS run observed in this session |
+| **Tool permissions (per-role, members read-only)** | PARTIAL | member `tools/call woo__create_product` probe | members CAN call write tools (`woo__create_product` -> created product). Role gating exists on admin CRUD (403) and audit scoping, but the per-tool read-only permission table is NOT implemented |
+| OAuth on gateway | NOT DONE | — | explicitly skipped per docs/00 §7 |
+| Many-tools handling (`search_tools` meta-tool) | NOT DONE | — | no `search_tools`/`execute_tool` in `src/gateway` |
+| Hosted MCP servers (image -> deploy) | NOT DONE | — | blueprint only |
+| **Security hardening (SSRF + RBAC + NP)** | DONE | verify-gateway.py SSRF probes + pod network tests | SSRF: `POST /api/servers` with 127.0.0.1 -> 400 "Blocked IP"; RBAC 403s; NetworkPolicy default-deny verified (dashboard pod cannot reach any upstream, gateway can) |
+| **Scaling (multi-replica, stateless)** | DONE | `kubectl scale deploy/urumi-gateway --replicas=2` then tools/list x6 | 6/6 tools/list OK (11 tools) across 2 replicas with no session affinity — stateless aggregation works; scaled back to 1 |
+| Observability (metrics) | NOT DONE | `grep metrics src/gateway` | no `/metrics` endpoint (documented as optional in docs/00 §7) |
+| Upgrades/rollback | PARTIAL | `make deploy` (rollout restart) | image rebuild + `kubectl rollout restart` verified; `helm upgrade --atomic`/`rollback` documented but not re-run this session |
+
+---
+
+## 5. Explicit audit items (asked in the cleanup pass)
+
+| Item | Status | Command / test | Result observed this session |
+|---|---|---|---|
+| Can an admin issue a key on behalf of another member? | DONE | admin `POST /api/keys` with `{"user_id": <member>}` | 201, plaintext key, owner = the member (verified via GET /api/keys owner_id) |
+| Can an admin revoke a key on behalf of a member? | DONE | admin `DELETE /api/keys/<member key id>` | 200 `{"revoked": true}` |
+| Does revoking a key reject the next call? | DONE | `/mcp tools/list` with the revoked key | 401 `invalid or revoked key` |
+| Does disabling a server remove its tools from chat and the external client? | DONE | disable `time` then `/mcp tools/list` + code check `chat/agent.py:231` | tools/list drops `time__*`; chat loads only `Server.enabled.is_(True)` |
+| Does killing an upstream pod leave the others working and show Unreachable? (restore after) | DONE | killpod probe (scale 0 -> observe -> scale 1) | `woo` Unreachable in dashboard while down; `time__` still 200; after restore `woo` Connected + `woo__list_products` 200 |
+| Are all Helm workloads probed with requests and limits? | DONE | `kubectl get deploy,sts -o json` | every container has liveness+readiness (+startup where applicable) and requests+limits |
+| Are Woo MCP and other upstreams unreachable from outside and from non-gateway pods? | DONE | NetworkPolicy + ingress + pod probes | ingress exposes only store+dashboard; woo-mcp/demo-time/demo-notes are ClusterIP-only; from dashboard pod all 3 time out; from gateway pod all 3 reachable |
+
+---
+
+## 6. Summary
+
+- **DONE:** 39 rows
+- **PARTIAL:** 3 rows (VPS deployment, per-tool read-only permission, upgrades/rollback re-run)
+- **NOT DONE:** 5 rows (multi-store, OAuth, `search_tools`, hosted MCP servers, metrics endpoint)
+
+### Smallest fixes for PARTIAL / NOT DONE
+
+- **VPS deployment:** run `helm upgrade --install urumi ./helm -f helm/values-prod.yaml` against a k3s node with a real domain and confirm store/dashboard/`/mcp` over the internet. The chart is ready; only the live run is missing.
+- **Per-tool read-only permission (members read-only):** add a `permissions` table keyed by `(role, server_slug, tool)` and filter in `gw_mcp/router.py` `tools/call` (return `permission_denied` for member write tools) + in `chat/agent.py` tool loading. Small, contained change.
+- **Upgrades/rollback:** run `helm upgrade --atomic` with an image tag bump then `helm rollback` against the local kind cluster and record the outcome.
+- **Multi-store / OAuth / `search_tools` / hosted MCP / metrics:** genuinely unimplemented; each is a separate feature behind the docs/00 §7 gate ("only after core E2E green + demo rehearsed twice"). The core E2E is green, so any one could be picked next; the recommended first pick is per-tool permissions (smallest, biggest security story).
+
+### Not verified in this session (state honestly)
+
+- Live VPS (k3s) deployment and a real internet-facing URL — no VPS was reachable here.
+- The storefront browser checkout (`/checkout/` nonce flow) — the order was created via the Woo REST API (the same path the MCP server uses), not by clicking through the block-checkout UI; the Store API nonce dance was not completed.
+- `helm upgrade --atomic` + `helm rollback` — documented, not re-run.
+- `kubectl delete pod` alone can miss the Unreachable window (pod re-creates in ~30s vs 15s health probe); the reliable observation used scale-to-0 then scale-to-1. A lower `health_interval_seconds` would make the bare delete-path observable.
