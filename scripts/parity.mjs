@@ -27,6 +27,7 @@ import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as browserAuth from "./lib/browser-auth.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("../src/dashboard/node_modules/playwright-core");
@@ -189,58 +190,10 @@ const onlyPage = argValue("page");
 const onlyRole = argValue("role");
 const pixelOnly = process.argv.includes("--pixel");
 
-/* ---------- auth helpers (mirrors scripts/screenshots.mjs) ---------- */
-async function httpJson(url, { method = "GET", body, headers = {}, cookie } = {}) {
-  const h = { "Content-Type": "application/json", ...headers };
-  if (cookie) h["Cookie"] = cookie;
-  const res = await fetch(url, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
-  const text = await res.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch { /* not json */ }
-  return { res, text, json, ok: res.ok, status: res.status, setCookie: res.headers.get("set-cookie") || "" };
-}
-function parseCookie(setCookieHeader) {
-  return setCookieHeader.split(",").map((s) => s.split(";")[0].trim()).filter(Boolean).join("; ");
-}
-async function adminLogin() {
-  let pass = process.env.GATEWAY_ADMIN_PASSWORD || "";
-  let email = process.env.GATEWAY_ADMIN_EMAIL || "admin@urumi.local";
-  if (!pass) {
-    const { execSync } = await import("node:child_process");
-    pass = execSync("kubectl get secret gateway-admin -n urumi -o jsonpath='{.data.password}' | base64 -d", { encoding: "utf8" }).trim();
-  }
-  const r = await httpJson(`${DASHBOARD_URL}/api/auth/login`, { method: "POST", body: { email, password: pass } });
-  if (!r.ok) throw new Error(`admin login failed ${r.status} ${r.text.slice(0, 300)}`);
-  return { cookie: parseCookie(r.setCookie), csrf: r.json?.csrf_token || "", email, pass };
-}
-async function createThrowawayMember(adminCookie, adminCsrf) {
-  const { randomUUID } = await import("node:crypto");
-  const email = `tmp-parity-${randomUUID().slice(0, 8)}@example.invalid`;
-  const password = `Tmp-${randomUUID().slice(0, 12)}-a1!`;
-  const r = await httpJson(`${DASHBOARD_URL}/api/users`, {
-    method: "POST", body: { email, password, role: "member" },
-    cookie: adminCookie, headers: { "X-CSRF-Token": adminCsrf },
-  });
-  if (!r.ok) throw new Error(`create member failed ${r.status} ${r.text.slice(0, 300)}`);
-  return { email, password, id: r.json?.id };
-}
-async function deleteMember(adminCookie, adminCsrf, userId) {
-  const r = await httpJson(`${DASHBOARD_URL}/api/users/${userId}`, {
-    method: "DELETE", cookie: adminCookie, headers: { "X-CSRF-Token": adminCsrf },
-  });
-  if (!r.ok && r.status !== 204) console.error(`  ! delete member ${userId} -> ${r.status} ${r.text.slice(0, 200)}`);
-}
-async function loginAs(email, password) {
-  const r = await httpJson(`${DASHBOARD_URL}/api/auth/login`, { method: "POST", body: { email, password } });
-  if (!r.ok) throw new Error(`login ${email} failed ${r.status} ${r.text.slice(0, 300)}`);
-  return parseCookie(r.setCookie);
-}
-function cookiePair(cookieHeader) {
-  return cookieHeader.split(";").map((c) => {
-    const [name, ...rest] = c.trim().split("=");
-    return { name, value: rest.join("="), domain: new URL(DASHBOARD_URL).hostname, path: "/" };
-  }).filter((c) => c.name && c.value);
-}
+/* ---------- auth helpers: shared with scripts/screenshots.mjs (Fix 4) ----------
+   One login contract and one cookie-priming path for every dashboard script,
+   so a renamed or extra session cookie cannot break one script only. */
+const { loginAs, adminLogin, createThrowawayMember, deleteMember, cookiePair } = browserAuth;
 
 /* ---------- in-page measurement ---------- */
 /* A selector may appear in more than one list (shared fleet list + per-page
@@ -431,8 +384,11 @@ const MEMBER_STRUCTURE = {
 
 async function runStructureChecks(browser, liveUrl, role, member, admin) {
   let cookie = null;
-  if (role === "member" && member) cookie = cookiePair(await loginAs(member.email, member.password));
-  if (role === "admin" && admin) cookie = cookiePair(admin.cookie);
+  if (role === "member" && member) {
+    const m = await loginAs(DASHBOARD_URL, member.email, member.password);
+    cookie = cookiePair(m.cookie, DASHBOARD_URL);
+  }
+  if (role === "admin" && admin) cookie = cookiePair(admin.cookie, DASHBOARD_URL);
 
   const results = [];
   for (const vp of [VIEWPORT, MOBILE_VIEWPORT]) {
@@ -485,10 +441,10 @@ async function run() {
   const needAdmin = PAGES.some((p) => (!onlyPage || p.page === onlyPage) && p.roles?.includes("admin"));
   const needMember = PAGES.some((p) => (!onlyPage || p.page === onlyPage) && p.roles?.includes("member")) && (!onlyRole || onlyRole === "member");
 
-  if (needAdmin) admin = await adminLogin();
+  if (needAdmin) admin = await adminLogin(DASHBOARD_URL);
   if (needMember) {
-    member = await createThrowawayMember(admin.cookie, admin.csrf);
-    memberCleanup = () => deleteMember(admin.cookie, admin.csrf, member.id);
+    member = await createThrowawayMember(DASHBOARD_URL, admin.cookie, admin.csrf, "tmp-parity-");
+    memberCleanup = () => deleteMember(DASHBOARD_URL, admin.cookie, admin.csrf, member.id);
     console.log(`parity member: ${member.email}`);
   }
 
@@ -530,8 +486,11 @@ async function run() {
         await mctx.close();
 
         const lctx = await browser.newContext({ viewport: VIEWPORT });
-        if (role === "admin" && admin) await lctx.addCookies(cookiePair(admin.cookie));
-        if (role === "member" && member) await lctx.addCookies(cookiePair(await loginAs(member.email, member.password)));
+        if (role === "admin" && admin) await lctx.addCookies(cookiePair(admin.cookie, DASHBOARD_URL));
+        if (role === "member" && member) {
+          const m = await loginAs(DASHBOARD_URL, member.email, member.password);
+          await lctx.addCookies(cookiePair(m.cookie, DASHBOARD_URL));
+        }
         const lpage = await lctx.newPage();
         await lpage.goto(liveUrl, { waitUntil: "networkidle" });
         await lpage.waitForTimeout(400);
