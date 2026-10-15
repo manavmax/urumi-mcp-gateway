@@ -14,7 +14,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 from auth.rbac import get_current_user_via_session
-from db.models import ApiKey, AuditLog, Server, Tool, User
+from db.models import ApiKey, AuditLog
 from db.session import get_db
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
@@ -83,16 +83,6 @@ async def get_stats(
         if outcome != "success":
             bucket["errors"] += int(n)
 
-    # Exact top tools (bounded, deterministic tiebreak).
-    tool_res = await db.execute(
-        select(AuditLog.tool_exposed_name, func.count())
-        .where(*scope)
-        .group_by(AuditLog.tool_exposed_name)
-        .order_by(func.count().desc(), AuditLog.tool_exposed_name)
-        .limit(5)
-    )
-    top_tools = [{"tool": tool, "calls": int(n)} for tool, n in tool_res.all()]
-
     # Duration sample for the percentiles: newest rows first, so when the cap
     # ever binds it trims the oldest rows instead of an arbitrary subset.
     dur_res = await db.execute(
@@ -136,22 +126,9 @@ async def get_stats(
         })
         day += timedelta(days=1)
 
-    servers_res = await db.execute(select(Server.status, func.count()).group_by(Server.status))
-    by_status = {status: int(count) for status, count in servers_res.all()}
-
-    tools_res = await db.execute(
-        select(func.count())
-        .select_from(Tool)
-        .join(Server, Tool.server_id == Server.id)
-        .where(Server.enabled.is_(True))
-    )
-    tools_exposed = int(tools_res.scalar() or 0)
-
     out = {
         "range": range,
         "window_days": max(1, int(window.total_seconds() // 86400)),
-        "servers": {"by_status": by_status},
-        "tools_exposed": tools_exposed,
         "audit": {
             "calls": calls,
             "prev_calls": prev_calls,
@@ -160,15 +137,10 @@ async def get_stats(
             "success_rate": success_rate,
             "p50_ms": _percentile(sorted_all, 0.50),
             "p95_ms": _percentile(sorted_all, 0.95),
-            "by_outcome": dict(by_outcome),
             "per_day": per_day_series,
-            "top_tools": top_tools,
         },
     }
-    if is_admin:
-        users_res = await db.execute(select(func.count()).select_from(User))
-        out["users_total"] = int(users_res.scalar() or 0)
-    else:
+    if not is_admin:
         keys_res = await db.execute(
             select(func.count())
             .select_from(ApiKey)

@@ -132,7 +132,12 @@ async def test_stats_admin_sees_all_member_sees_own(harness):
         a = ra.json()
         # admin sees all: 5 admin + 1 error + 2 member + 1 member2 = 9
         assert a["audit"]["calls"] == 9, "admin sees every user's calls"
-        assert a["users_total"] == 3, "admin payload carries the user count"
+        # the dead fields were removed: neither role gets users_total/servers/tools_exposed,
+        # and audit no longer carries by_outcome/top_tools
+        for dead in ("users_total", "servers", "tools_exposed"):
+            assert dead not in a, f"{dead} must not appear in the stats payload"
+        for dead in ("by_outcome", "top_tools"):
+            assert dead not in a["audit"], f"{dead} must not appear in the stats payload"
         assert "own_keys_active" not in a
         # window filter: the 40-day-old row is excluded; the series covers all 14d buckets
         assert len(a["audit"]["per_day"]) == 15

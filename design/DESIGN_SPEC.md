@@ -179,7 +179,7 @@ segmented switch (ink active pill) and the Motion toggle.
 | Widget | Source | Status |
 |---|---|---|
 | Row 1, tile 1 (gradient hero): Tool calls, 7 days, count-up, delta pill | `GET /api/stats`, `audit.calls` | **N** |
-| Row 1, tile 2: Success rate with a mini bar sparkline and error count | `GET /api/stats`, `audit.success_rate`, `by_outcome` | **N** |
+| Row 1, tile 2: Success rate with a mini bar sparkline and error count | `GET /api/stats`, `audit.success_rate`, `audit.errors` | **N** |
 | Row 1, tile 3: p95 latency with a line squiggle and delta | `GET /api/stats`, `audit.p95_ms` | **N** |
 | Row 1, tile 4: Servers connected with an icon in a soft tinted circle | `GET /api/servers`, count by status | E |
 | Row 2, card 1: Tool calls per day, 14-day bar chart, floating white mini-cards with success rate and p95 values and small delta pills | `GET /api/stats?range=14d`, `audit.per_day[]` | **N** |
@@ -243,7 +243,7 @@ segmented switch (ink active pill) and the Motion toggle.
 
 | Endpoint | Purpose | Consumers | Notes |
 |---|---|---|---|
-| `GET /api/stats` | Overview aggregates: `servers.by_status`, `tools_exposed`, `audit.{calls,success_rate,by_outcome,p50_ms,p95_ms,per_day[]}`, `users_total` (admin only) | Overview, Audit trend | Read-only; `per_day` counts by day for the requested range. Percentiles from `duration_ms`. Members get `users_total` omitted and an `own_keys_active` count instead. |
+| `GET /api/stats` | Overview aggregates: `audit.{calls,success_rate,errors,p50_ms,p95_ms,per_day[],prev_calls}` | Overview | Read-only; `per_day` counts by day for the requested range. Percentiles from `duration_ms` over a bounded newest-first sample. Members get `own_keys_active`, `own_calls_total` and `own_api_key_calls` (account-scoped) instead of admin-only fields; the earlier `servers.by_status`, `tools_exposed`, `by_outcome`, `top_tools` and `users_total` fields are dropped as dead. |
 | *optional* `GET /api/chats`, `POST /api/chats` | chat history persistence | Chat history panel | **ND**, only if localStorage is rejected |
 
 All other server, user, key, audit and chat mutations already exist and enforce CSRF and RBAC.

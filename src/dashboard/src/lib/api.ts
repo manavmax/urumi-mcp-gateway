@@ -89,8 +89,6 @@ export type StatsDayPoint = { date: string; calls: number; errors: number; p95_m
 export type Stats = {
   range: string;
   window_days: number;
-  servers: { by_status: Record<string, number> };
-  tools_exposed: number;
   audit: {
     calls: number;
     prev_calls: number;
@@ -99,11 +97,8 @@ export type Stats = {
     success_rate: number | null;
     p50_ms: number;
     p95_ms: number;
-    by_outcome: Record<string, number>;
     per_day: StatsDayPoint[];
-    top_tools: { tool: string; calls: number }[];
   };
-  users_total?: number;
   own_keys_active?: number;
   own_api_key_calls?: number;
   own_calls_total?: number;
