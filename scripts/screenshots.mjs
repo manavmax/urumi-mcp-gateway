@@ -32,7 +32,8 @@ const VIEWPORTS = [
   { name: "mobile", width: 375, height: 812 },
 ];
 const PAGES = [
-  { path: "/", label: "servers" },
+  { path: "/", label: "overview-root" },
+  { path: "/overview", label: "overview" },
   { path: "/servers", label: "servers" },
   { path: "/members", label: "members" },
   { path: "/audit", label: "audit" },
@@ -96,7 +97,7 @@ async function screenshotStage({ adminCookie, memberCookie }) {
         for (const pg of PAGES) {
           // Deduplicate: "/" and "/servers" same screenshot; skip duplicate label+viewport per role
           // Actually capture both but second overwrites; keep distinct by path
-          const tag = pg.path === "/" ? "servers-root" : pg.label;
+          const tag = pg.label;
           const context = await browser.newContext({
             viewport: { width: vp.width, height: vp.height },
           });

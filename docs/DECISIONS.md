@@ -57,3 +57,113 @@ working default; the final choice is still with the user.
 **Contrast.** All pairs now pass AA for normal text: ink on white 17.96:1, muted `#5F6673` on white
 5.78:1 and on greige 4.84:1, Disabled `#565D69` on `#E9E8E3` 5.41:1, Connected 6.24:1, Unreachable
 5.84:1, white on ink 17.96:1. This closes the two below-threshold pairs flagged in the 0.5 entry.
+
+## 2026-10-15: STAGE 1 slice 1, tokens, shell and shared components
+
+**What changed.** The React dashboard adopts the 0.6 token set (greige `#ECEBE7` canvas, white
+borderless cards with radius 24 and layered soft shadows, ink `#14171C` as the only primary,
+muted `#5F6673`, Disabled text `#565D69`), the floating pill sidebar as an overlay (72px collapsed,
+248px on hover or focus-within, 80ms intent delay, 150ms collapse delay, 20ms label stagger,
+instant under reduced motion), a greeting topbar with the pill page search (client-side, reset per
+route), a mobile bottom tab bar, the shared Card, StatTile, Badge, StatusBadge, Button, Toggle,
+Table, Skeleton, Empty and Error components, the inline SVG icon set with logo A, and the login
+page with glow, white card and ink button. Favicon is the logo A knockout variant, ink updated to
+`#14171C`.
+
+**Why.** Slice 1 of the approved plan. No UI or animation library was added; icons are inline SVG,
+motion is CSS keyframes with the global reduced-motion rule in tokens.css.
+
+**Deviations and notes.**
+1. No CLAUDE.md file exists in the repo, so the slice followed the rules in the task prompt.
+2. ESLint has no flat config file in src/dashboard (pre-existing), so `npx eslint` exits 2 with a
+   configuration error. The dashboard gate is tsc plus vite build; make lint covers helm and ruff.
+3. The Overview nav item routes to "/" which still redirects to /servers until slice 2 lands.
+4. Nine pre-existing em dashes in page UI strings were replaced with commas, colons or "n/a", and
+   one dark-theme hard-coded mint text colour in Members was moved to `var(--ok-text)`.
+5. Search field is wired to a shared client-side query context; pages consume it in slices 2 to 4.
+6. Greeting name is derived from the real email local part (admin@urumi.local becomes Admin).
+
+**Deferred.** Dark mode: second token set plus prefers-color-scheme. Deferred in STAGE 1 planning;
+mockups and app ship light only.
+
+## 2026-10-15: STAGE 1 correction, exact mockup port across all pages
+
+**What changed.** The deployed dashboard was a recolour of the old layouts, not the approved
+design. Every page is now an exact DOM and CSS port of design/mockups/*.html, with real data and
+the locked STAGE 1 decisions: GET /api/stats (new, admin = all users, member = own calls,
+parameterized SQLAlchemy, range day/week/month/14d default 14d) drives the new Overview page,
+which is now the default landing at /overview; the audit CSV export (GET /api/audit/export,
+admin-only server-side, 5000-row cap, BOM-prefixed, no argument values) is wired to the audit
+page button; chat history is browser-only localStorage (last 20 sessions per user, cleared on
+sign out). Parity is proven by scripts/parity.mjs (playwright-core + pixelmatch + pngjs devDeps):
+geometry and computed styles at 1440x900 with 8px w/h and 12px x/y tolerances, plus a login pixel
+diff under 3% at 1440x900 and 390x844 with reduced motion. After-stage screenshots and the parity
+report are in artifacts/.
+
+**Why.** The correction requires the mockups to win over the spec and over the old layouts, a
+script-proven parity table per page and role, and a single combined report.
+
+**Deviations and notes (all also listed in the STAGE 1 report).**
+1. Login logo block is STACKED (mark, wordmark, muted sub beneath, left aligned) per the
+   acceptance contract, which supersedes the mockup's inline row. The parity script applies this
+   and the named drift classes to the mockup before measuring, and logs it.
+2. The login mockup defines .glow-bg CSS but renders no such element, so the port ships exactly
+   the three drifting shapes and no background-glow div.
+3. overview.html hides .user-menu (display:none), so the Overview header carries only the search
+   pill; the account menu lives on the fleet pages' topbar, as their mockups show.
+4. Mockups disagree with each other in three places; the port unifies per page where they differ
+   and documents it: td padding (servers/members 12px flat, audit 11px 12px), card-title weight
+   (overview/chat 650, fleet 750) and stat-num weight (overview 650, members 750). The
+   .content max-width (1240 overview/chat, 1280 fleet), gutters, gaps and h1 size are scoped by
+   the fam-o / fam-f classes on the shell.
+5. Mockup-only chrome not shipped: SAMPLE DATA and Auto-refresh chips, the Motion toggle and
+   rm-note, the Admin/Member view switcher (role comes from the session), the skeleton and
+   empty-state demo cards, the interactive chart tooltip (bars keep native title tooltips), the
+   count-up animation (final values render immediately), and the CSV export button stays
+   admin-only in the member view because the endpoint is 403 for members.
+6. Members (member view): the mockup still shows the fleet-wide Members tile, but GET /api/users
+   is 403 for members, so the live member view hides it and shows Your role instead; this is the
+   one parity row that differs by design (reported as DATA, not FAIL).
+7. Chat persistence copy: the mockup's NEEDS DECISION note is replaced with the localStorage
+   decision text. Key expiry: the create flow sets none, so new keys show "never"; the UI has no
+   expiry picker.
+8. The audit CSV button is enabled (the mockup has it disabled, NEEDS DECISION) because the
+   export endpoint now exists and is tested.
+9. Grid hygiene: bento and grid cards get min-width 0 so a long real email cannot widen a
+   fractional column; the account email ellipsizes.
+10. Overview range: the seg offers Day/Week/Month exactly as the mockup, default Week; the chart
+    subtitle follows the selected range (the mockup's 14d subtitle contradicted its own Week
+    selection). The API default remains 14d.
+11. ESLint still has no flat config (pre-existing); the dashboard gate is tsc plus vite build.
+12. Members page head: the mockup's page-head sub ("Invite members, manage roles and API keys.
+    Keys are shown once at creation.") is folded into the API keys card title, because the create
+    flow is the only place a key is displayed. The Members page head therefore carries no sub.
+
+## 2026-10-15: STAGE 1 polish pass, member-scoped Overview (FIX 1)
+
+**What changed.** Members landing on /overview previously saw the admin page with zeros. /overview
+now renders OverviewMember.tsx, which is scoped to the signed-in user: Getting started (three
+steps: create an API key, connect an MCP client, make a first call), Connect your client (MCP URL
+plus the Authorization header), My activity (my calls, success rate, p95 latency), Calls per day,
+Tools I can use, Recent activity, and Try in chat. Nothing is fabricated: every number, the audit
+list and the tool list come from GET /api/stats and GET /api/audit filtered to the session user.
+The gateway stats route now returns own_api_key_calls, and scripts/parity.mjs gained MEMBER_STRUCTURE
+checks for the member page (required sections, no admin-only text, no horizontal overflow at 1440
+and 390) because no static mockup exists for it.
+
+**Why.** The member view must be useful without leaking team-wide numbers or other members'
+emails, and it must not look like a broken empty admin page.
+
+**Decisions.**
+1. "MCP client connected" counts any audit row that carries api_key_id, because POST /mcp
+   authenticates with the API key and writes api_key_id, while chat rows are session-based and
+   carry none. That makes origin determinable without a new endpoint.
+2. The card uses its own bento rows (.activity-row, .ct-row) with the same responsive collapse as
+   the admin rows, so the member page reads as one family with the approved admin layout.
+3. The admin Overview is unchanged: the polish brief scoped FIX 2 to clutter, and the admin page
+   passed parity as approved.
+4. Getting started hides itself once all three steps are done, so the card is an empty state that
+   disappears rather than dead chrome.
+5. The member header search mirrors the admin one and is non-functional by design, so the shell
+   is identical across roles.
+

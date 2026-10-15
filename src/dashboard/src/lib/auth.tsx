@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { api, setCsrf } from "./api";
+import { clearHistory } from "./history";
 
 type User = { id: string; email: string; role: string };
 type AuthState = {
@@ -39,13 +40,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    /* STAGE 1 decision: chat history is browser-only and cleared on sign out. */
+    clearHistory(user?.email ?? "");
     try {
       await api.logout();
     } finally {
       setUser(null);
       setCsrf("");
     }
-  }, []);
+  }, [user?.email]);
 
   return <Ctx.Provider value={{ user, loading, login, logout, refresh }}>{children}</Ctx.Provider>;
 }

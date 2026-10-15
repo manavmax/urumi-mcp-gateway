@@ -186,6 +186,7 @@ def create_app() -> FastAPI:
     from routes.health import router as health_router
     from routes.mcp import router as mcp_router
     from routes.servers import router as servers_router
+    from routes.stats import router as stats_router
     from routes.tools import router as tools_router
     from routes.users import router as users_router
 
@@ -195,6 +196,7 @@ def create_app() -> FastAPI:
     app.include_router(users_router)
     app.include_router(audit_router)
     app.include_router(tools_router)
+    app.include_router(stats_router)
     app.include_router(chat_router)
 
     @app.get("/")

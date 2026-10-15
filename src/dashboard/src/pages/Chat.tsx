@@ -1,10 +1,30 @@
-import { useState, useRef } from "react";
+/* Chat, exact port of design/mockups/chat.html (family O) with the real SSE
+   loop against POST /api/chat/completions: events model, token, tool_call,
+   text, [DONE]; tool output is truncated at 2000 chars in the UI. The history
+   rail is the STAGE 1 decision: browser-only localStorage (last 20 sessions
+   per user, cleared on sign out), replacing the mockup's NEEDS DECISION note.
+
+   FIX 1: Supports prefill state from OverviewMember "Try in chat" cards:
+   navigate("/chat", { state: { prefill: text } }) pre-fills the composer without
+   sending, and clears the state so a refresh doesn't replay it. */
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
-import { OutcomeBadge } from "../components/ui/Badge";
+import { useAuth } from "../lib/auth";
+import { displayName } from "../lib/search";
+import { clearHistory, loadHistory, saveSession, type ChatSession, type ChatTurn } from "../lib/history";
+import { useMockupMotion } from "../lib/motion";
+import { Icon } from "../components/icons";
 
 type Msg = { role: "user" | "assistant" | "tool"; content: string; tool?: string; outcome?: string; truncated?: boolean };
 
 const MAX_TOOL_OUTPUT = 2000;
+
+const STARTERS = [
+  { tile: "var(--sky)", icon: "cart" as const, title: "Orders today", text: "What orders came in today?" },
+  { tile: "var(--butter)", icon: "plus" as const, title: "Create a product", text: "Create product Urumi Tee $29.99 (write)" },
+  { tile: "var(--lilac)", icon: "globe" as const, title: "World clock", text: "What time is it in Tokyo?" },
+];
 
 function prettyJson(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -15,7 +35,6 @@ function prettyJson(value: unknown): string {
     return String(value);
   }
 }
-
 function toolOutput(output: unknown): { text: string; truncated: boolean } {
   const raw = prettyJson(output);
   if (!raw || raw.length <= MAX_TOOL_OUTPUT) return { text: raw, truncated: false };
@@ -24,21 +43,73 @@ function toolOutput(output: unknown): { text: string; truncated: boolean } {
     truncated: true,
   };
 }
+const OUTCOME_CHIP = (o: string) => (o === "success" ? "chip-ok" : o === "timeout" || o === "circuit_open" ? "chip-warn" : "chip-danger");
+const OUTCOME_ICON = (o: string): "check-circle" | "alert" | "x-circle" => (o === "success" ? "check-circle" : o === "timeout" || o === "circuit_open" ? "alert" : "x-circle");
+function relTime(ts: number): string {
+  const secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (secs < 60) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "Yesterday" : `${days} days ago`;
+}
 
 export default function Chat() {
+  const { user } = useAuth();
+  const email = user?.email || "";
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [servingModel, setServingModel] = useState<string | null>(null);
+  const [history, setHistory] = useState<ChatSession[]>([]);
+  const [histFilter, setHistFilter] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || busy) return;
+  useEffect(() => {
+    setHistory(loadHistory(email));
+  }, [email]);
+
+  /* FIX 1 prefill: OverviewMember "Try in chat" navigates here with
+     { state: { prefill } } so the composer is primed without sending. Read once
+     on mount, then clear the state so a refresh does not replay it. */
+  useEffect(() => {
+    const prefill = (location.state as { prefill?: string } | null)?.prefill;
+    if (prefill) {
+      setInput(prefill);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useMockupMotion(busy);
+
+  const shownHistory = useMemo(() => {
+    const q = histFilter.trim().toLowerCase();
+    if (!q) return history;
+    return history.filter((h) => `${h.title} ${h.snippet}`.toLowerCase().includes(q));
+  }, [history, histFilter]);
+
+  function loadSession(s: ChatSession) {
     setErr("");
-    const next: Msg[] = [...messages, { role: "user", content: text }];
+    setMessages(s.turns.map((t) => ({ role: t.role, content: t.content })));
+  }
+
+  function newChat() {
+    setMessages([]);
+    setErr("");
+    setServingModel(null);
+  }
+
+  async function send(text: string) {
+    const prompt = text.trim();
+    if (!prompt || busy) return;
+    setErr("");
+    const next: Msg[] = [...messages, { role: "user", content: prompt }];
     setMessages(next);
     setInput("");
     setBusy(true);
@@ -83,32 +154,38 @@ export default function Chat() {
                 commitAssistant();
               } else if (evt.type === "tool_call") {
                 const out = toolOutput(evt.output);
-                setMessages((prev) => [...prev, { role: "tool", content: out.text, truncated: out.truncated, tool: evt.tool || evt.name, outcome: evt.outcome || evt.status }]);
+                setMessages((prev) => [...prev, {
+                  role: "tool", content: out.text, truncated: out.truncated,
+                  tool: evt.tool || evt.name, outcome: evt.outcome || evt.status,
+                }]);
               } else if (evt.type === "text") {
-                // Error/category text from the gateway (LLM failure, timeout, fallback cap, etc.)
                 const label = evt.category ? ` [${evt.category}]` : "";
                 assistant += (evt.content || "") + label;
                 commitAssistant();
               }
             } catch {
-              // ignore malformed SSE line
+              /* ignore malformed SSE line */
             }
           }
+        }
+        if (assistant) {
+          setHistory(saveSession(email, [
+            { role: "user", content: prompt },
+            { role: "assistant", content: assistant },
+          ]));
         }
       } else {
         const data = await res.json();
         const content = data.content || data.message || JSON.stringify(data).slice(0, 4000);
         const toolCalls: Msg[] = (data.tool_calls || []).map((tc: { tool: string; outcome: string; output: unknown }) => {
           const out = toolOutput(tc.output);
-          return {
-            role: "tool" as const,
-            content: out.text,
-            truncated: out.truncated,
-            tool: tc.tool,
-            outcome: tc.outcome,
-          };
+          return { role: "tool" as const, content: out.text, truncated: out.truncated, tool: tc.tool, outcome: tc.outcome };
         });
         setMessages((prev) => [...prev, ...toolCalls, { role: "assistant", content: String(content) }]);
+        setHistory(saveSession(email, [
+          { role: "user", content: prompt },
+          { role: "assistant", content: String(content) },
+        ]));
       }
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -118,44 +195,124 @@ export default function Chat() {
     }
   }
 
+  const name = displayName(email) || "there";
+
   return (
-    <div className="stack">
-      <div className="page-head">
-        <h2>Chat — store assistant</h2>
-        {servingModel && <span className="badge badge-unknown mono small" title="Model serving this turn">Serving: {servingModel}</span>}
-      </div>
-      <p className="small muted" style={{ marginTop: -6 }}>Chat uses server-side tool loop; upstream credentials never reach the browser. Tool calls are audited as your user.</p>
+    <main className="content">
+      <header className="page-head">
+        <div>
+          <h1>Hello, {name}</h1>
+          <p className="card-sub">Server-side tool loop: the model calls gateway tools, upstream credentials never reach the browser, and every call is audited as your user.</p>
+        </div>
+        <div className="row wrap" style={{ gap: 8 }}>
+          {servingModel && (
+            <span className="chip chip-neutral" title="Model reported by the SSE model event">
+              <span className="mono">Serving: {servingModel}</span>
+            </span>
+          )}
+        </div>
+      </header>
+
       {err && <div className="alert alert-error" role="alert">{err}</div>}
-      <div ref={logRef} className="chat-log" aria-live="polite">
-        {messages.length === 0 && <div className="empty">Try: “Create product Urumi Tee $29.99” or “What orders came in today?”<div className="small muted" style={{ marginTop: 6 }}>Tool calls appear as chips — tap output to expand.</div></div>}
-        {messages.map((m, i) => (
-          <div key={i} className={`chat-msg chat-${m.role}`}>
-            {m.role === "tool" ? (
-              <div className="tool-chip">
-                <div className="row gap wrap">
-                  <span className="mono small" style={{ fontWeight: 750 }}>{m.tool}</span>
-                  <OutcomeBadge outcome={m.outcome || "tool"} />
-                </div>
-                {m.content && (
-                  <details style={{ marginTop: 6 }}>
-                    <summary className="small muted">output{m.truncated ? " (truncated)" : ""}</summary>
-                    <pre className="small" style={{ marginTop: 6 }}>{m.content}</pre>
-                  </details>
-                )}
+
+      <div className="chat-layout">
+        <section className="thread">
+          {messages.length === 0 ? (
+            <section className="card empty-state" aria-label="New chat">
+              <div className="empty-glow" aria-hidden="true" />
+              <div className="empty-mark"><Icon name="logo" size={28} /></div>
+              <h2>Hello, {name}</h2>
+              <p className="sub">What would you like to do in your store?</p>
+              <div className="suggestion-grid">
+                {STARTERS.map((s) => (
+                  <div key={s.title} className="starter" role="button" tabIndex={0}
+                    onClick={() => send(s.text)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); send(s.text); } }}>
+                    <span className="tile" style={{ background: s.tile }}><Icon name={s.icon} /></span>
+                    <b>{s.title}</b>
+                    <span>{s.text}</span>
+                  </div>
+                ))}
               </div>
-            ) : m.content ? (
-              <div className={`bubble ${m.role}`}>{m.content}</div>
-            ) : null}
+            </section>
+          ) : (
+            <div className="card thread-card" style={{ padding: 24, display: "grid", gap: 16, minHeight: 420 }}>
+              {messages.map((m, i) => (
+                <div key={i}>
+                  {m.role === "tool" ? (
+                    <div className="msg assistant">
+                      <div className="avatar ai">UR</div>
+                      <div className="tool-call">
+                        <div className="head">
+                          <span className="name">{m.tool}</span>
+                          <span className={`chip ${OUTCOME_CHIP(m.outcome || "")}`}><Icon name={OUTCOME_ICON(m.outcome || "")} />{m.outcome || "tool"}</span>
+                        </div>
+                        {m.content && (
+                          <details className="out">
+                            <summary><Icon name="chevron" />output{m.truncated ? " (truncated)" : ""}</summary>
+                            <pre>{m.content}</pre>
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`msg ${m.role}`}>
+                      <div className={`avatar${m.role === "assistant" ? " ai" : ""}`}>{m.role === "assistant" ? "UR" : (email.slice(0, 2).toUpperCase() || "ME")}</div>
+                      {m.content ? <div className="bubble">{m.content}</div> : null}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {busy && (
+                <div className="typing">
+                  <span className="tdot" aria-hidden="true"><i></i><i></i><i></i></span>Assistant is thinking...
+                </div>
+              )}
+            </div>
+          )}
+
+          <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
+            <input placeholder="Ask the store assistant" aria-label="Chat message" value={input}
+              onChange={(e) => setInput(e.target.value)} disabled={busy} />
+            <button className="send" type="submit" aria-label="Send" disabled={busy}><Icon name="send" /></button>
+          </form>
+          <p className="small faint">POST /api/chat/completions (SSE), events: <span className="mono">model</span> · <span className="mono">token</span> · <span className="mono">tool_call</span> · <span className="mono">text</span> · <span className="mono">[DONE]</span>. Tool output is truncated at 2000 chars in the UI.</p>
+        </section>
+
+        {/* right-hand chat history panel */}
+        <aside className="history">
+          <div className="card" style={{ padding: 16 }}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+              <div className="card-title" style={{ fontSize: "var(--t-md)" }}><Icon name="clock" />Chat history</div>
+            </div>
+            <label className="hist-search" style={{ marginBottom: 8 }}>
+              <Icon name="search" sm />
+              <input type="search" placeholder="Search chats" aria-label="Search history" value={histFilter}
+                onChange={(e) => setHistFilter(e.target.value)} />
+            </label>
+            <div className="hist-list">
+              {shownHistory.map((h) => (
+                <div className="hist-item" key={h.id} onClick={() => loadSession(h)} role="button" tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter") loadSession(h); }}>
+                  <b>{h.title}</b>
+                  <span>{h.snippet || "No reply text"}</span>
+                  <span className="faint">{relTime(h.ts)}</span>
+                </div>
+              ))}
+              {shownHistory.length === 0 && (
+                <div className="hist-item"><b>No chats yet</b><span>Your conversations appear here, stored in this browser only</span></div>
+              )}
+            </div>
+            <button className="btn btn-ink" type="button" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={newChat}>
+              <Icon name="plus" sm />New chat
+            </button>
+            <div className="hist-foot" style={{ marginTop: 12 }}>
+              Persistence: browser-only (localStorage), last 20 chats per user, cleared on sign out.
+              The current thread is re-sent on every turn.
+            </div>
           </div>
-        ))}
-        {busy && <div className="small muted">Assistant is thinking…</div>}
+        </aside>
       </div>
-      <form onSubmit={send} className="row gap">
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask the store assistant..." className="flex1" disabled={busy} aria-label="Chat message" />
-        <button type="submit" disabled={busy || !input.trim()}>
-          {busy ? "…" : "Send"}
-        </button>
-      </form>
-    </div>
+    </main>
   );
 }

@@ -1,40 +1,39 @@
-import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+/* Members and keys, exact port of design/mockups/members.html (family F) with
+   real data from GET /api/users, GET /api/keys and GET /api/me. Admins see
+   every user and every key (owner email resolved from /api/users); members see
+   only their own keys, exactly as the mockup's note-banner describes. The
+   mockup's Admin/Member view switcher and SAMPLE DATA chip are mockup-only
+   chrome and are not shipped; the role comes from the signed-in session. */
+import { useEffect, useMemo, useState } from "react";
+import { api, type ApiKeyRow } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { TableWrap } from "../components/ui/Table";
-import { EmptyState, InlineError, LoadingRows } from "../components/ui/EmptyState";
-import { Modal } from "../components/ui/Modal";
+import { initials, useSearch } from "../lib/search";
+import { useMockupMotion } from "../lib/motion";
+import { Topbar } from "../components/Topbar";
+import { Icon } from "../components/icons";
 
-function CopyBox({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="copybox">
-      <code className="mono small break flex1">{value}</code>
-      <button
-        className="secondary small"
-        onClick={async () => {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1400);
-        }}
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
-    </div>
-  );
+type UserRow = { id: string; email: string; role: string; is_active: boolean; created_at: string };
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 export default function Members() {
   const { user } = useAuth();
-  const [users, setUsers] = useState<{ id: string; email: string; role: string; is_active: boolean }[]>([]);
-  const [keys, setKeys] = useState<{ id: string; user_id: string; prefix: string; last4: string; revoked_at: string | null; created_at: string }[]>([]);
+  const isAdmin = user?.role === "admin";
+  const { query } = useSearch();
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [keys, setKeys] = useState<ApiKeyRow[]>([]);
+  const [emailById, setEmailById] = useState<Record<string, string>>({});
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("member");
   const [lastKey, setLastKey] = useState<string | null>(null);
-  const [revokeId, setRevokeId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function load() {
     setErr("");
@@ -42,11 +41,13 @@ export default function Members() {
     try {
       const k = await api.listKeys();
       setKeys(k.keys);
-      if (user?.role === "admin") {
+      if (isAdmin) {
         const u = await api.listUsers();
         setUsers(u.users);
+        setEmailById(Object.fromEntries(u.users.map((x) => [x.id, x.email])));
       } else {
         setUsers([]);
+        setEmailById({});
       }
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -57,7 +58,10 @@ export default function Members() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useMockupMotion(loading);
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
@@ -74,143 +78,252 @@ export default function Members() {
 
   async function revokeKey(id: string) {
     await api.revokeKey(id);
-    setRevokeId(null);
     await load();
   }
 
   async function createKey() {
-    setLastKey(null);
-    const res = await api.createKey();
-    setLastKey(res.key);
-    await load();
+    setErr("");
+    try {
+      const res = await api.createKey();
+      setLastKey(res.key);
+      setCopied(false);
+      await load();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
   }
 
-  const isAdmin = user?.role === "admin";
-  const revokeKeyMeta = revokeId ? keys.find((k) => k.id === revokeId) : null;
+  const activeKeys = useMemo(() => keys.filter((k) => !k.revoked_at), [keys]);
+  const revokedKeys = useMemo(() => keys.filter((k) => k.revoked_at), [keys]);
+  const adminCount = useMemo(() => users.filter((u) => u.role === "admin").length, [users]);
+  const memberCount = users.length - adminCount;
+
+  /* the topbar search narrows both tables client-side */
+  const q = query.trim().toLowerCase();
+  const matches = (text: string) => !q || text.toLowerCase().includes(q);
+  const shownUsers = q ? users.filter((u) => matches(u.email)) : users;
+  const shownKeys = q
+    ? keys.filter((k) => matches(`${emailById[k.user_id] || ""} ${k.prefix} ${k.last4}`))
+    : keys;
 
   return (
-    <div className="stack">
-      <div className="page-head">
-        <h2>Members & API keys</h2>
-        <span className="small muted">Invite members, manage API keys</span>
-      </div>
+    <>
+      <Topbar />
+      <main className="content">
+        <div className="page-head">
+          <div>
+            <h1>Members &amp; keys</h1>
+          </div>
+          <div className="row wrap">
+            {isAdmin && (
+              <button className="btn btn-primary" type="button" onClick={() => document.getElementById("iv-email")?.focus()}>
+                <Icon name="plus" sm />Invite member
+              </button>
+            )}
+          </div>
+        </div>
 
-      {err && <InlineError message={err} onRetry={load} />}
+        {!isAdmin && (
+          <div className="note-banner">
+            <Icon name="eye" />
+            <div>
+              <b>Viewing as member.</b> <span className="mono">GET /api/users</span> is admin-only (403 here), so this view shows
+              your own keys only. You can create and revoke keys for yourself. <span className="src">GET /api/keys · role from /api/me</span>
+            </div>
+          </div>
+        )}
 
-      <h3 style={{ margin: "8px 0 0" }}>Users</h3>
-      {loading ? (
-        <div className="card"><LoadingRows rows={3} /></div>
-      ) : (
-        <TableWrap>
-          <table className="table" aria-label="Users">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Active</th>
-                {isAdmin && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {users.length === 0 && !isAdmin ? (
-                <tr><td colSpan={isAdmin ? 4 : 3}><EmptyState title="No users listed" hint="Members cannot list users — only admins can." /></td></tr>
-              ) : users.length === 0 ? (
-                <tr><td colSpan={4} className="muted small">No users yet.</td></tr>
-              ) : (
-                users.map((u) => (
+        {err && <div className="alert alert-error" role="alert">{err}</div>}
+
+        {/* stats */}
+        <section className="grid-4" aria-label="Membership summary">
+          {isAdmin && (
+            <div className="card stat">
+              <div className="stat-label">Members <span className="src">GET /api/users</span></div>
+              <div className="stat-num">{loading ? <span className="sk num" style={{ width: 60 }} /> : users.length}</div>
+              <div className="stat-foot">
+                <span className="chip chip-accent"><Icon name="users" />{adminCount} admin · {memberCount} members</span>
+              </div>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="card stat">
+              <div className="stat-label">Active accounts <span className="src">GET /api/users</span></div>
+              <div className="stat-num">{users.filter((u) => u.is_active).length} <span className="stat-unit">of {users.length}</span></div>
+              <div className="stat-foot">
+                <span className="chip chip-neutral"><Icon name="dot" />{users.filter((u) => !u.is_active).length} deactivated</span>
+              </div>
+            </div>
+          )}
+          {!isAdmin && (
+            <div className="card stat">
+              <div className="stat-label">Your role <span className="src">GET /api/me</span></div>
+              <div className="stat-num" style={{ fontSize: 26 }}>Member</div>
+              <div className="stat-foot"><span className="chip chip-accent">can chat · audit own rows · own keys</span></div>
+            </div>
+          )}
+          <div className="card stat">
+            <div className="stat-label">API keys <span className="src">GET /api/keys</span></div>
+            <div className="stat-num">{activeKeys.length} <span className="stat-unit">active</span></div>
+            <div className="stat-foot">
+              <span className="chip chip-neutral"><Icon name="pause" />{revokedKeys.length} revoked</span>
+            </div>
+          </div>
+          <div className="card stat">
+            <div className="stat-label">Key storage <span className="src">db.api_keys</span></div>
+            <div className="stat-num" style={{ fontSize: 26 }}>SHA-256</div>
+            <div className="stat-foot"><span className="chip chip-accent"><Icon name="lock" />raw key shown once</span></div>
+          </div>
+        </section>
+
+        {/* users (admin) */}
+        {isAdmin && (
+          <section className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title"><Icon name="users" />Users</div>
+                <div className="card-sub">POST /api/users to invite · DELETE /api/users/{"{id}"} to remove</div>
+              </div>
+            </div>
+            <form className="invite" onSubmit={createUser}>
+              <div className="field" style={{ flex: 2 }}>
+                <label htmlFor="iv-email">Email</label>
+                <input id="iv-email" type="email" placeholder="new.member@urumi.local" required
+                  value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+              </div>
+              <div className="field" style={{ flex: 2 }}>
+                <label htmlFor="iv-pw">Password (≥ 8)</label>
+                <input id="iv-pw" type="password" placeholder="••••••••" required minLength={8}
+                  value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              </div>
+              <div className="field" style={{ flex: 1, minWidth: 120 }}>
+                <label htmlFor="iv-role">Role</label>
+                <select id="iv-role" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+                  <option value="member">member</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+              <button className="btn btn-primary" type="submit"><Icon name="plus" sm />Invite / create</button>
+            </form>
+            <table aria-label="Users">
+              <thead>
+                <tr><th>Email</th><th>Role</th><th>Since</th><th>Active</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {shownUsers.map((u) => (
                   <tr key={u.id}>
-                    <td className="mono small">{u.email}</td>
-                    <td><span className="small" style={{ textTransform: "capitalize" }}>{u.role}</span></td>
-                    <td className="small">{u.is_active ? "yes" : "no"}</td>
-                    {isAdmin && (
-                      <td>
-                        <button
-                          className="danger small"
-                          disabled={u.id === user?.id}
+                    <td data-label="Email">
+                      <div className="row">
+                        <div className="avatar" style={{ width: 28, height: 28, fontSize: 10 }}>{initials(u.email)}</div>
+                        <span className="email mono">{u.email}</span>
+                      </div>
+                    </td>
+                    <td data-label="Role">
+                      <span className={`chip ${u.role === "admin" ? "chip-accent" : "chip-neutral"}`}>
+                        {u.role === "admin" && <Icon name="shield" />}{u.role}
+                      </span>
+                    </td>
+                    <td data-label="Since" className="small muted">{fmtDate(u.created_at)}</td>
+                    <td data-label="Active" className="small">{u.is_active ? "yes" : "no"}</td>
+                    <td data-label="Actions">
+                      {u.id === user?.id ? (
+                        <span className="small muted" title="cannot delete self">this is you</span>
+                      ) : (
+                        <button className="btn btn-danger btn-sm" type="button"
                           onClick={async () => {
                             if (!confirm(`Delete ${u.email}?`)) return;
                             await api.deleteUser(u.id);
                             await load();
-                          }}
-                        >
-                          Delete
+                          }}>
+                          <Icon name="trash" sm />Delete
                         </button>
-                      </td>
-                    )}
+                      )}
+                    </td>
                   </tr>
-                ))
+                ))}
+                {!loading && shownUsers.length === 0 && (
+                  <tr><td colSpan={5}><span className="small muted">No users match the filter.</span></td></tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {/* keys */}
+        <section className="card">
+          <div className="card-head">
+            <div>
+              <div className="card-title"><Icon name="key" />{isAdmin ? "API keys" : "Your API keys"}</div>
+              <div className="card-sub">Keys are shown once at creation.</div>
+            </div>
+            <button className="btn btn-primary" type="button" onClick={createKey}>
+              <Icon name="plus" sm />{isAdmin ? "Create API key" : "Create key for me"}
+            </button>
+          </div>
+
+          <div className="reveal" hidden={!lastKey}>
+            <div className="row"><Icon name="lock" style={{ color: "var(--primary-hover)" }} /><b>New key: copy now, shown once</b></div>
+            <div className="row">
+              <div className="keybox"><code>{lastKey || ""}</code></div>
+              <button className="btn btn-secondary" type="button"
+                onClick={async () => {
+                  if (!lastKey) return;
+                  await navigator.clipboard.writeText(lastKey);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1400);
+                }}>
+                <Icon name="copy" sm />{copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <div className="small muted">This key will not be shown again. Store it in your secret manager, the gateway only keeps a SHA-256 digest.</div>
+          </div>
+
+          <table aria-label="API keys">
+            <thead>
+              <tr>
+                {isAdmin && <th>Owner</th>}
+                <th>Prefix</th><th>Last4</th><th>Created</th><th>Expires</th><th>Status</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shownKeys.map((k) => (
+                <tr key={k.id}>
+                  {isAdmin && <td data-label="Owner" className="small mono">{emailById[k.user_id] || k.user_id.slice(0, 8)}</td>}
+                  <td data-label="Prefix" className="mono-cell">{k.prefix}</td>
+                  <td data-label="Last4" className="mono-cell">…{k.last4}</td>
+                  <td data-label="Created" className="small muted">{fmtDate(k.created_at)}</td>
+                  <td data-label="Expires" className="small muted">{k.expires_at ? fmtDate(k.expires_at) : "never"}</td>
+                  <td data-label="Status">
+                    {k.revoked_at ? (
+                      <span className="chip chip-neutral"><Icon name="pause" />Revoked</span>
+                    ) : (
+                      <span className="chip chip-ok"><Icon name="check-circle" />Active</span>
+                    )}
+                  </td>
+                  <td data-label="Actions">
+                    {!k.revoked_at ? (
+                      <button className="btn btn-danger btn-sm" type="button" onClick={() => revokeKey(k.id)}>
+                        <Icon name="pause" sm />Revoke
+                      </button>
+                    ) : (
+                      <span className="small muted">none</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!loading && shownKeys.length === 0 && (
+                <tr>
+                  <td colSpan={isAdmin ? 7 : 6}><span className="small muted">No keys yet. Create one for API access via /mcp.</span></td>
+                </tr>
               )}
             </tbody>
           </table>
-        </TableWrap>
-      )}
-
-      {isAdmin && (
-        <form onSubmit={createUser} className="card row gap wrap" aria-label="Invite user">
-          <input placeholder="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} aria-label="New user email" />
-          <input placeholder="password (≥8)" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} aria-label="New user password" />
-          <select value={newRole} onChange={(e) => setNewRole(e.target.value)} aria-label="Role">
-            <option value="member">member</option>
-            <option value="admin">admin</option>
-          </select>
-          <button type="submit">Invite / Create</button>
-        </form>
-      )}
-
-      <h3 style={{ margin: "8px 0 0" }}>API keys</h3>
-      <p className="small muted" style={{ margin: 0 }}>Keys are shown once at creation. Store them safely.</p>
-      {lastKey && (
-        <div className="card" style={{ borderColor: "#065f46", background: "#06261e" }}>
-          <div className="small" style={{ fontWeight: 800, color: "#a7f3d0", marginBottom: 8 }}>New key — copy now, shown once</div>
-          <div className="alert alert-info" style={{ marginTop: 0 }}>This key will not be shown again. Copy it now and store it safely.</div>
-          <CopyBox value={lastKey} />
-          <div className="row gap" style={{ marginTop: 10 }}>
-            <button className="ghost small" onClick={() => setLastKey(null)}>Dismiss</button>
+          <div className="small faint" style={{ marginTop: "var(--s3)" }}>
+            Revoking is permanent: callers using the key get 401 on <span className="mono">/mcp</span>.
+            Expiry picker and per-user key creation from the UI are NEEDS DECISION (backend fields already exist).
           </div>
-        </div>
-      )}
-      <div className="row gap">
-        <button onClick={createKey}>Create API key for me</button>
-        <span className="small muted">Creates a key for your own user</span>
-      </div>
-
-      <TableWrap>
-        <table className="table" aria-label="API keys">
-          <thead>
-            <tr>
-              <th>Prefix</th>
-              <th>Last4</th>
-              <th>Created</th>
-              <th>Revoked</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {keys.map((k) => (
-              <tr key={k.id}>
-                <td className="mono small">{k.prefix}</td>
-                <td className="mono small">…{k.last4}</td>
-                <td className="small">{new Date(k.created_at).toLocaleString()}</td>
-                <td className="small">{k.revoked_at ? new Date(k.revoked_at).toLocaleString() : "—"}</td>
-                <td>{!k.revoked_at && <button className="danger small" onClick={() => setRevokeId(k.id)}>Revoke</button>}</td>
-              </tr>
-            ))}
-            {keys.length === 0 && (
-              <tr>
-                <td colSpan={5}><EmptyState title="No keys yet" hint="Create one for API access via /mcp." /></td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </TableWrap>
-
-      <Modal open={!!revokeId} onClose={() => setRevokeId(null)} title="Revoke API key?">
-        <p className="small muted">Revoke key <span className="mono">{revokeKeyMeta ? `${revokeKeyMeta.prefix}…${revokeKeyMeta.last4}` : revokeId}</span>? This cannot be undone — callers using it will get 401.</p>
-        <div className="row gap" style={{ justifyContent: "flex-end", marginTop: 12 }}>
-          <button className="ghost small" onClick={() => setRevokeId(null)}>Cancel</button>
-          <button className="danger" onClick={() => revokeId && revokeKey(revokeId)}>Revoke key</button>
-        </div>
-      </Modal>
-    </div>
+        </section>
+      </main>
+    </>
   );
 }

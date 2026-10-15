@@ -82,6 +82,41 @@ export type AuditRow = {
   client_ip: string | null;
 };
 
+/* GET /api/stats (new with the Overview page). Admin scope sees every user's
+   calls; a member only ever sees their own, enforced server-side. */
+export type StatsRange = "day" | "week" | "month" | "14d";
+export type StatsDayPoint = { date: string; calls: number; errors: number; p95_ms: number };
+export type Stats = {
+  range: string;
+  window_days: number;
+  servers: { by_status: Record<string, number> };
+  tools_exposed: number;
+  audit: {
+    calls: number;
+    prev_calls: number;
+    success: number;
+    errors: number;
+    success_rate: number | null;
+    p50_ms: number;
+    p95_ms: number;
+    by_outcome: Record<string, number>;
+    per_day: StatsDayPoint[];
+    top_tools: { tool: string; calls: number }[];
+  };
+  users_total?: number;
+  own_keys_active?: number;
+  own_api_key_calls?: number;
+};
+export type ApiKeyRow = {
+  id: string;
+  user_id: string;
+  prefix: string;
+  last4: string;
+  revoked_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+};
+
 export const api = {
   me: () => request<Me>("/api/me"),
   login: (email: string, password: string) =>
@@ -112,7 +147,7 @@ export const api = {
     }),
   deleteUser: (id: string) => request<void>(`/api/users/${id}`, { method: "DELETE", csrf: true }),
 
-  listKeys: () => request<{ keys: { id: string; user_id: string; prefix: string; last4: string; revoked_at: string | null; expires_at: string | null; created_at: string }[] }>("/api/keys"),
+  listKeys: () => request<{ keys: ApiKeyRow[] }>("/api/keys"),
   createKey: () =>
     request<{ id: string; key: string; prefix: string; last4: string; created_at: string }>("/api/keys", {
       method: "POST",
@@ -122,6 +157,34 @@ export const api = {
   revokeKey: (id: string) => request<{ revoked: boolean }>(`/api/keys/${id}`, { method: "DELETE", csrf: true }),
 
   listTools: () => request<{ tools: Tool[]; warnings: string[] }>("/api/tools"),
+
+  /* Overview aggregates (new endpoint, admin/member scoping enforced server-side). */
+  stats: (range?: StatsRange) =>
+    request<Stats>(`/api/stats${range ? `?range=${encodeURIComponent(range)}` : ""}`),
+
+  /* Admin-only CSV export of the current audit filters. The server enforces the
+     role check and hard-caps the export at 5000 rows; the browser just saves the
+     attachment. */
+  exportAuditCsv: async (params: Record<string, string | number | undefined> = {}): Promise<void> => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+    const res = await fetch(`/api/audit/export${qs.toString() ? `?${qs.toString()}` : ""}`, {
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body.slice(0, 300) || res.statusText);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "audit-export.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 
   listAudit: (params: Record<string, string | number | undefined>) => {
     const qs = new URLSearchParams();
