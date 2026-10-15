@@ -101,7 +101,7 @@ export default function Overview() {
   const activeKeys = useMemo(() => keys.filter((k) => !k.revoked_at).length, [keys]);
 
   const perDay = stats?.audit.per_day ?? [];
-  const windowDays = stats?.window_days ?? 0;
+  const windowDays = stats?.window_days ?? 14;
   const delta = useMemo(() => {
     const cur = stats?.audit.calls ?? 0;
     const prev = stats?.audit.prev_calls ?? 0;
