@@ -59,6 +59,11 @@ export default function Audit() {
   const [loading, setLoading] = useState(true);
   const [rangeIdx, setRangeIdx] = useState(-1);
   const [filters, setFilters] = useState({ user: "", server: "", tool: "", outcome: "", offset: 0 });
+  /* text/select filters are a draft until Apply: every keystroke used to refetch
+     the whole audit page, and changing a filter while paged deep into the
+     results kept a stale offset (empty pages). Range and pagination still apply
+     immediately because they are deliberate single actions. */
+  const [draft, setDraft] = useState({ user: "", server: "", tool: "", outcome: "" });
 
   const apiParams = useMemo(() => {
     const params: Record<string, string | number | undefined> = {
@@ -164,27 +169,27 @@ export default function Audit() {
           <div className="card-head">
             <div className="card-title"><Icon name="filter" />Filters</div>
           </div>
-          <form className="filters" onSubmit={(e) => { e.preventDefault(); setFilters((f) => ({ ...f, offset: 0 })); }}>
+          <form className="filters" onSubmit={(e) => { e.preventDefault(); setFilters((f) => ({ ...draft, offset: 0 })); }}>
             {isAdmin && (
               <div className="field grow">
                 <label htmlFor="f-user">User (admin)</label>
-                <input id="f-user" placeholder="email or id, any" value={filters.user}
-                  onChange={(e) => setFilters({ ...filters, user: e.target.value })} />
+                <input id="f-user" placeholder="email or id, any" value={draft.user}
+                  onChange={(e) => setDraft({ ...draft, user: e.target.value })} />
               </div>
             )}
             <div className="field">
               <label htmlFor="f-server">Server</label>
-              <input id="f-server" placeholder="slug, any" value={filters.server}
-                onChange={(e) => setFilters({ ...filters, server: e.target.value })} />
+              <input id="f-server" placeholder="slug, any" value={draft.server}
+                onChange={(e) => setDraft({ ...draft, server: e.target.value })} />
             </div>
             <div className="field grow">
               <label htmlFor="f-tool">Tool</label>
-              <input id="f-tool" placeholder="exposed name, any" value={filters.tool}
-                onChange={(e) => setFilters({ ...filters, tool: e.target.value })} />
+              <input id="f-tool" placeholder="exposed name, any" value={draft.tool}
+                onChange={(e) => setDraft({ ...draft, tool: e.target.value })} />
             </div>
             <div className="field">
               <label htmlFor="f-outcome">Outcome</label>
-              <select id="f-outcome" value={filters.outcome} onChange={(e) => setFilters({ ...filters, outcome: e.target.value })}>
+              <select id="f-outcome" value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })}>
                 <option value="">any outcome</option>
                 <option value="success">success</option>
                 <option value="timeout">timeout</option>
@@ -207,7 +212,7 @@ export default function Audit() {
             </div>
             <button className="btn btn-primary" type="submit">Apply</button>
             <button className="btn btn-ghost" type="reset"
-              onClick={() => { setFilters({ user: "", server: "", tool: "", outcome: "", offset: 0 }); setRangeIdx(-1); }}>
+              onClick={() => { setDraft({ user: "", server: "", tool: "", outcome: "" }); setFilters({ user: "", server: "", tool: "", outcome: "", offset: 0 }); setRangeIdx(-1); }}>
               Clear
             </button>
           </form>
