@@ -167,3 +167,32 @@ emails, and it must not look like a broken empty admin page.
 5. The member header search mirrors the admin one and is non-functional by design, so the shell
    is identical across roles.
 
+## 2026-10-15: STAGE 1 polish pass, clutter removal (FIX 2)
+
+**What changed.** Page-level clutter is gone: 10 dev-doc or duplicate lines removed across
+Servers (page-head sub), Members (Users card sub, one sentence of the keys helper), Audit
+(page-head sub, the Filters note and the Day/Week/Month helper) and Chat (page-head sub, the
+composer SSE helper, the history footer). Counts of one-line subs per page after the pass:
+Login 0, Servers 0, Chat 0, Members 1, Audit 1 (the Tool calls data readout), admin Overview
+unchanged at 5, member Overview 3 (its own data and source subs). Headings, card titles, column
+headers and stat labels are untouched.
+
+**Why.** The brief was one page title plus at most one short information-adding line, with
+section headings that repeat the title, uppercase eyebrows and dev-doc helper sentences removed.
+
+**Decisions.**
+1. The login helper "Use your workspace account to reach the gateway console." is kept: there
+   are two separate admin logins (WooCommerce dashboard and this gateway) and the WordPress
+   account name is also admin, so the line prevents a predictable wrong-dashboard mistake. It
+   also anchors the login pixel diff, so removing it would have moved the accepted baseline.
+2. Provenance and scope copy stays: .src chips, the audit CSV button title, the audit scoping
+   note-banner, "Keys are shown once at creation." and the revoke warning. The audit page-head
+   sub was removed together with its .src chip, which left the audit page with no .src at all,
+   so parity now measures .src on the servers and members pages instead of the whole fleet set.
+3. The mockups are static and still render the removed lines, so the parity selector specs were
+   adjusted (.src and the fleet page-head sub) rather than editing the mockups, which are the
+   frozen reference.
+4. The removed Members sentence was the expiry dev note; the create flow sets no expiry, so the
+   keys table keeps showing "never" and no expiry UI was implied.
+
+

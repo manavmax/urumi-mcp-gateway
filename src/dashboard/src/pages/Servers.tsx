@@ -128,7 +128,6 @@ export default function Servers() {
         <div className="page-head">
           <div>
             <h1>Servers</h1>
-            <p className="card-sub">Upstream MCP registry: live status, per-server tools, admin CRUD.</p>
           </div>
           <div className="row wrap">
             {isAdmin && (

@@ -182,7 +182,6 @@ export default function Members() {
             <div className="card-head">
               <div>
                 <div className="card-title"><Icon name="users" />Users</div>
-                <div className="card-sub">POST /api/users to invite · DELETE /api/users/{"{id}"} to remove</div>
               </div>
             </div>
             <form className="invite" onSubmit={createUser}>
@@ -320,7 +319,6 @@ export default function Members() {
           </table>
           <div className="small faint" style={{ marginTop: "var(--s3)" }}>
             Revoking is permanent: callers using the key get 401 on <span className="mono">/mcp</span>.
-            Expiry picker and per-user key creation from the UI are NEEDS DECISION (backend fields already exist).
           </div>
         </section>
       </main>

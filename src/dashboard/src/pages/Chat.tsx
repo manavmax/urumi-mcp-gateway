@@ -202,7 +202,6 @@ export default function Chat() {
       <header className="page-head">
         <div>
           <h1>Hello, {name}</h1>
-          <p className="card-sub">Server-side tool loop: the model calls gateway tools, upstream credentials never reach the browser, and every call is audited as your user.</p>
         </div>
         <div className="row wrap" style={{ gap: 8 }}>
           {servingModel && (
@@ -276,7 +275,6 @@ export default function Chat() {
               onChange={(e) => setInput(e.target.value)} disabled={busy} />
             <button className="send" type="submit" aria-label="Send" disabled={busy}><Icon name="send" /></button>
           </form>
-          <p className="small faint">POST /api/chat/completions (SSE), events: <span className="mono">model</span> · <span className="mono">token</span> · <span className="mono">tool_call</span> · <span className="mono">text</span> · <span className="mono">[DONE]</span>. Tool output is truncated at 2000 chars in the UI.</p>
         </section>
 
         {/* right-hand chat history panel */}
@@ -306,10 +304,6 @@ export default function Chat() {
             <button className="btn btn-ink" type="button" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={newChat}>
               <Icon name="plus" sm />New chat
             </button>
-            <div className="hist-foot" style={{ marginTop: 12 }}>
-              Persistence: browser-only (localStorage), last 20 chats per user, cleared on sign out.
-              The current thread is re-sent on every turn.
-            </div>
           </div>
         </aside>
       </div>

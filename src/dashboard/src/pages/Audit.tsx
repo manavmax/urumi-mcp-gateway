@@ -140,7 +140,6 @@ export default function Audit() {
         <div className="page-head">
           <div>
             <h1>Audit</h1>
-            <p className="card-sub">Every tool call with user, server, tool, outcome and duration. <span className="src">GET /api/audit</span></p>
           </div>
           <div className="row wrap">
             {isAdmin && (
@@ -164,7 +163,6 @@ export default function Audit() {
         <section className="card">
           <div className="card-head">
             <div className="card-title"><Icon name="filter" />Filters</div>
-            <span className="small muted">Maps 1:1 to existing query parameters, no new endpoint.</span>
           </div>
           <form className="filters" onSubmit={(e) => { e.preventDefault(); setFilters((f) => ({ ...f, offset: 0 })); }}>
             {isAdmin && (
@@ -213,10 +211,6 @@ export default function Audit() {
               Clear
             </button>
           </form>
-          <div className="small faint" style={{ marginTop: "var(--s3)" }}>
-            Day / Week / Month compute <span className="mono">from</span>/<span className="mono">to</span> on the client
-            (now-1d / -7d / -30d) and pass them to <span className="mono">GET /api/audit?from=…&to=…</span>.
-          </div>
         </section>
 
         {/* table */}
