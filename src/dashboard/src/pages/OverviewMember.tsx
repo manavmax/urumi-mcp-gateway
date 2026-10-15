@@ -106,14 +106,17 @@ export default function OverviewMember() {
 
   const ownKeysActive = stats?.own_keys_active ?? 0;
   const ownApiKeyCalls = stats?.own_api_key_calls ?? 0;
+  const ownCallsTotal = stats?.own_calls_total ?? 0;
   const myCalls = stats?.audit.calls ?? 0;
   const mySuccessRate = stats?.audit.success_rate;
   const myP95 = stats?.audit.p95_ms ?? 0;
 
-  // Getting-started step state
+  // Getting-started step state. Steps 2 and 3 read ALL-TIME account counters so
+  // onboarding never un-completes when the chart range changes; the windowed
+  // audit numbers only feed the hints and the tiles below.
   const stepCreateKey = ownKeysActive > 0;
   const stepConnectMcp = ownApiKeyCalls > 0;
-  const stepFirstCall = myCalls > 0;
+  const stepFirstCall = ownCallsTotal > 0;
   const allStepsDone = stepCreateKey && stepConnectMcp && stepFirstCall;
 
   const GETTING_STARTED_STEPS = [
@@ -132,7 +135,11 @@ export default function OverviewMember() {
     {
       label: "Make a first call",
       done: stepFirstCall,
-      hint: myCalls > 0 ? `${myCalls} call${myCalls > 1 ? "s" : ""} in the last ${stats?.window_days ?? 14} days` : "No calls yet",
+      hint: stepFirstCall
+        ? (myCalls > 0
+            ? `${myCalls} call${myCalls > 1 ? "s" : ""} in the last ${stats?.window_days ?? 14} days`
+            : "First call complete")
+        : "No calls yet",
     },
   ];
 

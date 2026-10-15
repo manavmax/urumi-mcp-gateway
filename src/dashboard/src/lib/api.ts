@@ -106,6 +106,7 @@ export type Stats = {
   users_total?: number;
   own_keys_active?: number;
   own_api_key_calls?: number;
+  own_calls_total?: number;
 };
 export type ApiKeyRow = {
   id: string;

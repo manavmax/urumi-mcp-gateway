@@ -175,10 +175,17 @@ async def get_stats(
             .where(ApiKey.user_id == user.id, ApiKey.revoked_at.is_(None))
         )
         out["own_keys_active"] = int(keys_res.scalar() or 0)
+        # All-time, account-scoped counters for the getting-started checklist:
+        # onboarding must not un-complete when the chart range changes, so these
+        # two COUNTs carry no window filter (unlike the audit aggregates above).
+        own_res = await db.execute(
+            select(func.count()).select_from(AuditLog).where(AuditLog.user_id == user.id)
+        )
+        out["own_calls_total"] = int(own_res.scalar() or 0)
         key_calls_res = await db.execute(
             select(func.count())
             .select_from(AuditLog)
-            .where(*scope, AuditLog.api_key_id.is_not(None))
+            .where(AuditLog.user_id == user.id, AuditLog.api_key_id.is_not(None))
         )
         out["own_api_key_calls"] = int(key_calls_res.scalar() or 0)
     return out

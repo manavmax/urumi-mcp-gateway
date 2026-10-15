@@ -232,6 +232,30 @@ async def test_stats_counts_exact_when_sample_cap_exceeded(harness, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_stats_member_onboarding_counters_are_account_scoped(harness):
+    """The getting-started signals (own_api_key_calls, own_calls_total) are all-time
+    account counters: onboarding must not un-complete when the chart range changes,
+    even when the requested window holds no calls at all."""
+    app, session_factory = harness
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        member_id = (await db.execute(select(User.id).where(User.email == MEMBER["email"]))).scalar_one()
+        member_key_id = (await db.execute(select(ApiKey.id).where(ApiKey.user_id == member_id))).scalar_one()
+        db.add(AuditLog(id=8000, ts=now - timedelta(days=40), user_id=member_id, server_slug="old",
+                        tool_exposed_name="t__old", tool_upstream_name="old", api_key_id=member_key_id,
+                        request_id=uuid.uuid4(), duration_ms=20, outcome="success"))
+        await db.commit()
+    async with _role_client(app, MEMBER["email"], MEMBER["password"]) as (client, headers):
+        r_day = (await client.get("/api/stats", headers=headers, params={"range": "day"})).json()
+        assert r_day["audit"]["calls"] == 0, "the day window holds no member calls"
+        # all-time counters ignore the window: 1 seeded key call + 1 old = 2, and
+        # 2 seeded + 1 old = 3 all-time calls
+        assert r_day["own_api_key_calls"] == 2, "MCP-client origin is account-scoped"
+        assert r_day["own_calls_total"] == 3, "first-call step is account-scoped"
+        assert r_day["own_keys_active"] == 1
+
+
+@pytest.mark.asyncio
 async def test_csv_export_admin_only(harness):
     app, _session_factory = harness
     async with _anon_client(app) as anon:
