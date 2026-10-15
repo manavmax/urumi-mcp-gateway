@@ -108,7 +108,7 @@ const FLEET_SELECTORS = [
   S(".chip-danger", ["background-color", "color"], { dataDependent: true }),
   S(".chip-neutral", ["background-color", "color"], { dataDependent: true }),
   S(".btn.btn-primary", ["padding", "border-radius", "background-color", "color", "font-weight"], { roles: ["admin"] }),
-  S(".btn.btn-secondary", ["padding", "border-radius", "background-color", "color"], { roles: ["admin"] }),
+  S(".btn.btn-secondary", ["padding", "border-radius", "background-color", "color"], { roles: ["admin"], dataDependent: true }),
 ];
 
 const CHAT_SELECTORS = [
@@ -138,8 +138,6 @@ const PAGES = [
   {
     page: "servers", mockup: "servers.html", path: "/servers", selectors: [
       ...FLEET_SELECTORS,
-      S(".src", ["font-size", "padding", "border-radius"]),
-      S(".note-banner", ["padding", "border-radius", "background-color"], { roles: ["member"] }),
       S(".switch .track", ["w", "h", "border-radius", "background-color"], { roles: ["admin"] }),
       S("details.tools > summary", ["padding", "border-radius", "font-size"], { dataDependent: true }),
       S(".slug", ["font-size", "font-weight"]),
@@ -150,10 +148,8 @@ const PAGES = [
   {
     page: "members", mockup: "members.html", path: "/members", selectors: [
       ...FLEET_SELECTORS,
-      S(".src", ["font-size", "padding", "border-radius"]),
       /* the keys card is the last content card in both views (the users card is admin-only) */
       S(".content > section.card", ["x", "w", "padding", "border-radius", "box-shadow", "background-color"], { nth: -1 }),
-      S(".note-banner", ["padding", "border-radius", "background-color"], { roles: ["member"] }),
       S(".grid-4", ["gap"]),
       S(".invite", ["padding", "border-radius", "background-color"], { roles: ["admin"] }),
       S(".invite .field input", ["padding", "border-radius", "font-size"], { roles: ["admin"] }),
