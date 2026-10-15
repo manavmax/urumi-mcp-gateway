@@ -485,7 +485,7 @@ export default function OverviewMember() {
         <div className="card-head">
           <div>
             <div className="card-title" style={{ fontSize: "var(--t-md)" }}><Icon name="chat" />Try in chat</div>
-            <div className="card-sub">Pick a starter or ask anything — the model has access to all your tools.</div>
+            <div className="card-sub">Pick a starter or ask anything, the model has access to all your tools.</div>
           </div>
         </div>
         <div className="suggestion-grid">
