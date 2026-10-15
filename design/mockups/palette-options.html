@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<title>Urumi Gateway: Gradient options (SAMPLE mockup)</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#ECEBE7; --surface:#FFFFFF; --surface-2:#F4F3EF; --tint-soft:#F1F0EC;
+    --text:#14171C; --text-muted:#5F6673;
+    --ink:#14171C; --ink-hover:#2A2E35;
+    --r-card:24px; --r-inner:14px; --r-pill:999px;
+    --shadow-card:0 1px 2px rgba(20,23,28,.04), 0 10px 30px rgba(20,23,28,.05);
+    --shadow-pop:0 2px 4px rgba(20,23,28,.05), 0 16px 40px rgba(20,23,28,.10);
+    --font:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --t-xs:11px; --t-sm:12px; --t-base:14px; --t-lg:16px;
+  }
+  html{-webkit-text-size-adjust:100%}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:var(--t-base);line-height:1.45;min-height:100vh}
+  .ic{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .muted{color:var(--text-muted)}
+  .small{font-size:var(--t-sm)}
+  .row{display:flex;align-items:center;gap:8px}
+  .wrap{flex-wrap:wrap}
+  .content{padding:40px 32px 64px;max-width:1240px;margin:0 auto;display:grid;gap:20px}
+  h1{font-size:28px;letter-spacing:-.02em;line-height:1.1;font-weight:700}
+  .card{background:var(--surface);border-radius:24px;box-shadow:var(--shadow-card);padding:24px}
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  .card-sub{font-size:var(--t-sm);color:var(--text-muted);margin-top:4px}
+  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+
+  /* the three gradient options, swapped purely via CSS variables */
+  .opt-a{--g1:#B9C4DD; --g2:#D9C8DC; --g3:#EFCBBE}
+  .opt-b{--g1:#A9BBD3; --g2:#CFE0EE; --g3:#F3EAD8}
+  .opt-c{--g1:#E3BFB8; --g2:#EADFCB; --g3:#D5E0EC}
+  .opt{--grad:linear-gradient(135deg,var(--g1) 0%,var(--g2) 52%,var(--g3) 100%)}
+  .opt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start}
+  .opt .name{font-size:var(--t-lg);font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+  .opt .head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .swatch-strip{display:flex;border-radius:var(--r-pill);overflow:hidden;height:14px;box-shadow:inset 0 0 0 1px rgba(20,23,28,.06)}
+  .swatch-strip span{flex:1}
+  .meta{display:grid;gap:6px;margin-top:14px;border-top:1px solid rgba(20,23,28,.07);padding-top:10px}
+  .meta .row{justify-content:space-between;font-size:var(--t-xs)}
+  .stop{display:inline-flex;align-items:center;gap:6px}
+  .stop i{width:12px;height:12px;border-radius:4px;display:inline-block;box-shadow:inset 0 0 0 1px rgba(20,23,28,.08)}
+  .ratio{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:10px;color:var(--text-muted)}
+  .ratio b{color:var(--text)}
+
+  /* mini overview per option: gradient only on the hero tile and the gauge fill */
+  .mini{display:grid;gap:20px}
+  .row1{display:grid;grid-template-columns:1.2fr 1fr;gap:20px}
+  .hero{background:var(--grad);border-radius:24px;box-shadow:var(--shadow-card);padding:24px;display:grid;gap:10px;align-content:start}
+  .hero .lab{font-size:var(--t-sm);font-weight:650;color:#14171C}
+  .hero .num{font-size:36px;font-weight:650;letter-spacing:-.02em;line-height:1;color:#14171C;font-variant-numeric:tabular-nums}
+  .hero .src{font-family:var(--font-mono);font-size:10px;background:rgba(255,255,255,.65);color:#14171C;border-radius:6px;padding:1px 6px}
+  .delta{display:inline-flex;align-items:center;gap:4px;border-radius:var(--r-pill);padding:2px 8px;font-size:var(--t-xs);font-weight:700;background:rgba(255,255,255,.92);color:var(--text);box-shadow:0 1px 2px rgba(20,23,28,.08);justify-self:start}
+  .chip{display:inline-flex;align-items:center;gap:5px;border-radius:var(--r-pill);padding:3px 9px;font-size:var(--t-xs);font-weight:700;white-space:nowrap}
+  .btn-ink{font:inherit;font-weight:650;cursor:pointer;border-radius:var(--r-pill);padding:8px 14px;border:none;background:#14171C;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+  .note{font-size:var(--t-sm);color:var(--text-muted);margin-top:10px}
+
+  @media (max-width:1120px){ .opt-grid{grid-template-columns:1fr} .row1{grid-template-columns:1fr 1fr} }
+  @media (max-width:720px){ .content{padding:24px 16px} h1{font-size:22px} .row1{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B9C4DD"/><stop offset=".52" stop-color="#D9C8DC"/><stop offset="1" stop-color="#EFCBBE"/></linearGradient>
+    <linearGradient id="gradB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A9BBD3"/><stop offset=".52" stop-color="#CFE0EE"/><stop offset="1" stop-color="#F3EAD8"/></linearGradient>
+    <linearGradient id="gradC" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E3BFB8"/><stop offset=".52" stop-color="#EADFCB"/><stop offset="1" stop-color="#D5E0EC"/></linearGradient>
+  </defs>
+  <symbol id="i-checkc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.3l2.4 2.4 4.6-4.9"/></symbol>
+  <symbol id="i-xc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9v6M14.5 9v6"/></symbol>
+</svg>
+
+<main class="content">
+  <header class="page-head">
+    <div>
+      <h1>Gradient options</h1>
+      <p class="card-sub">The Overview bento with three swap-in gradients, all non-green. Dark ink text only; ratios listed per option. Gradient never appears on buttons, table rows, badges or every card.</p>
+    </div>
+    <span class="row small muted" style="background:var(--surface);border-radius:999px;padding:8px 14px;box-shadow:var(--shadow-card)">Working default: <b style="margin-left:4px">A Dusk</b></span>
+  </header>
+
+  <div class="card">
+    <p class="small muted">Gradient is allowed only on: (a) one hero stat tile per page, (b) the half-ring gauge or main chart fill, very soft, (c) the login art panel, (d) the chat empty-state glow and avatar chips, (e) the soft background glow behind the page edge. Never on buttons, table rows, badges or every card. Status badges keep their small semantic tints, icon plus text, independent of the gradient choice.</p>
+  </div>
+
+  <div class="opt-grid">
+    <section class="opt opt-a">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px">
+          <span class="name">A · Dusk <span class="chip" style="background:#14171C;color:#fff">default</span></span>
+          <span class="small muted">#B9C4DD, #D9C8DC, #EFCBBE</span>
+        </div>
+        <div class="swatch-strip"><span style="background:#B9C4DD"></span><span style="background:#D9C8DC"></span><span style="background:#EFCBBE"></span></div>
+        <div class="row1" style="margin-top:16px">
+          <div class="hero">
+            <div class="lab">Tool calls, 7 days <span class="src" style="background:rgba(255,255,255,.65);color:#14171C;border-radius:6px;padding:1px 6px;font-size:10px">NEW /api/stats</span></div>
+            <div class="num">807</div>
+            <span class="delta">12% vs previous 7d</span>
+          </div>
+          <div class="card" style="display:grid;justify-items:center;gap:8px">
+            <svg width="150" height="94" viewBox="0 0 200 118" role="img" aria-label="Half-ring gauge, 96.4 percent, gradient fill">
+              <path d="M16 100 A84 84 0 0 1 184 100" fill="none" stroke="#F0EFEB" stroke-width="14" stroke-linecap="round"/>
+              <path d="M16 100 A84 84 0 0 1 184 100" fill="none" stroke="url(#gradA)" stroke-width="14" stroke-linecap="round" stroke-dasharray="254.4 263.9"/>
+              <text x="100" y="86" text-anchor="middle" font-size="30" font-weight="650" fill="#14171C">96.4%</text>
+            </svg>
+            <span class="small muted">gauge fill, very soft</span>
+          </div>
+        </div>
+        <div class="row wrap" style="gap:8px;margin-top:16px">
+          <span class="chip" style="background:#DDEDE4;color:#2F5D46"><svg class="ic"><use href="#i-checkc"/></svg>4 Connected</span>
+          <span class="chip" style="background:#F4DCD8;color:#8A3B33"><svg class="ic"><use href="#i-xc"/></svg>1 Unreachable</span>
+          <span class="chip" style="background:#E9E8E3;color:#565D69"><svg class="ic"><use href="#i-pause"/></svg>1 Disabled</span>
+          <button class="btn-ink" type="button">Ink primary</button>
+        </div>
+        <div class="meta">
+          <div class="row"><span class="stop"><i style="background:#B9C4DD"></i>#B9C4DD periwinkle</span><span class="ratio">ink <b>10.27:1</b></span></div>
+          <div class="row"><span class="stop"><i style="background:#D9C8DC"></i>#D9C8DC lilac</span><span class="ratio">ink <b>11.33:1</b></span></div>
+          <div class="row"><span class="stop"><i style="background:#EFCBBE"></i>#EFCBBE peach</span><span class="ratio">ink <b>11.94:1</b></span></div>
+        </div>
+        <p class="small note"><b>Why this one.</b> Equal distance from the semantic mint and blush badges, enough presence on the greige canvas for the one hero tile to anchor the page, and every stop keeps dark ink text above 10:1.</p>
+      </div>
+    </section>
+
+    <section class="opt opt-b">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px">
+          <span class="name">B · Mist</span>
+          <span class="small muted">#A9BBD3 / #CFE0EE / #F3EAD8</span>
+        </div>
+        <div class="swatch-strip"><span style="background:#A9BBD3"></span><span style="background:#CFE0EE"></span><span style="background:#F3EAD8"></span></div>
+        <div class="row1" style="margin-top:16px">
+          <div class="hero">
+            <div class="lab">Tool calls, 7 days</div>
+            <div class="num">807</div>
+            <span class="delta">12% vs previous 7d</span>
+          </div>
+          <div class="card" style="display:grid;justify-items:center;gap:8px">
+            <svg width="150" height="94" viewBox="0 0 200 118" role="img" aria-label="Half-ring gauge, 96.4 percent, gradient fill">
+              <path d="M16 100 A84 84 0 0 1 184 100" fill="none" stroke="#F0EFEB" stroke-width="14" stroke-linecap="round"/>
+              <path d="M16 100 A84 84 0 0 1 184 100" fill="none" stroke="url(#gradB)" stroke-width="14" stroke-linecap="round" stroke-dasharray="254.4 263.9"/>
+              <text x="100" y="86" text-anchor="middle" font-size="30" font-weight="650" fill="#14171C">96.4%</text>
+            </svg>
+            <span class="small muted">gauge fill, very soft</span>
+          </div>
+        </div>
+        <div class="row wrap" style="gap:8px;margin-top:16px">
+          <span class="chip" style="background:#DDEDE4;color:#2F5D46"><svg class="ic"><use href="#i-checkc"/></svg>4 Connected</span>
+          <span class="chip" style="background:#F4DCD8;color:#8A3B33"><svg class="ic"><use href="#i-xc"/></svg>1 Unreachable</span>
+          <span class="chip" style="background:#E9E8E3;color:#565D69"><svg class="ic"><use href="#i-pause"/></svg>1 Disabled</span>
+          <button class="btn-ink" type="button">Ink primary</button>
+        </div>
+        <div class="meta">
+          <div class="row"><span class="stop"><i style="background:#A9BBD3"></i>#A9BBD3 slate blue</span><span class="ratio">ink <b>9.18:1</b></span></div>
+          <div class="row"><span class="stop"><i style="background:#CFE0EE"></i>#CFE0EE sky</span><span class="ratio">ink <b>13.30:1</b></span></div>
+          <div class="row"><span class="stop"><i style="background:#F3EAD8"></i>#F3EAD8 cream</span><span class="ratio">ink <b>15.03:1</b></span></div>
+        </div>
+        <p class="small note muted">Calmest and closest to the neutral system; the cream stop nearly disappears on the greige, so the hero reads more quietly.</p>
+      </div>
+    </section>
+
+    <section class="opt opt-c">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px">
+          <span class="name">C · Rose sand</span>
+          <span class="small muted">#E3BFB8 / #EADFCB / #D5E0EC</span>
+        </div>
+        <div class="swatch-strip"><span style="background:#E3BFB8"></span><span style="background:#EADFCB"></span><span style="background:#D5E0EC"></span></div>
+        <div class="row1" style="margin-top:16px">
+          <div class="hero">
+            <div class="lab">Tool calls, 7 days</div>
+            <div class="num">807</div>
+            <span class="delta">12% vs previous 7d</span>
+          </div>
+          <div class="card" style="display:grid;justify-items:center;gap:8px">
+            <svg width="150" height="94" viewBox="0 0 200 118" role="img" aria-label="Half-ring gauge, 96.4 percent, gradient fill">
+              <path d="M16 100 A84 84 0 0 1 184 100" fill="none" stroke="#F0EFEB" stroke-width="14" stroke-linecap="round"/>
+              <path d="M16 100 A84 84 0 0 1 184 100" fill="none" stroke="url(#gradC)" stroke-width="14" stroke-linecap="round" stroke-dasharray="254.4 263.9"/>
+              <text x="100" y="86" text-anchor="middle" font-size="30" font-weight="650" fill="#14171C">96.4%</text>
+            </svg>
+            <span class="small muted">gauge fill, very soft</span>
+          </div>
+        </div>
+        <div class="row wrap" style="gap:8px;margin-top:16px">
+          <span class="chip" style="background:#DDEDE4;color:#2F5D46"><svg class="ic"><use href="#i-checkc"/></svg>4 Connected</span>
+          <span class="chip" style="background:#F4DCD8;color:#8A3B33"><svg class="ic"><use href="#i-xc"/></svg>1 Unreachable</span>
+          <span class="chip" style="background:#E9E8E3;color:#565D69"><svg class="ic"><use href="#i-pause"/></svg>1 Disabled</span>
+          <button class="btn-ink" type="button">Ink primary</button>
+        </div>
+        <div class="meta">
+          <div class="row"><span class="stop"><i style="background:#E3BFB8"></i>#E3BFB8 dusty rose</span><span class="ratio">ink <b>10.62:1</b></span></div>
+          <div class="row"><span class="stop"><i style="background:#EADFCB"></i>#EADFCB sand</span><span class="ratio">ink <b>13.61:1</b></span></div>
+          <div class="row"><span class="stop"><i style="background:#D5E0EC"></i>#D5E0EC pale blue</span><span class="ratio">ink <b>13.43:1</b></span></div>
+        </div>
+        <p class="small note muted">Warmest of the three; the rose stop sits near the Unreachable blush tint, so badge semantics need watching at small sizes.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="card">
+    <p class="small"><b>Recommendation: A "Dusk".</b> <span class="muted">Equal distance from the semantic mint and blush badges, enough presence on the greige canvas for the single hero tile to anchor each page, and every stop keeps dark ink text above 10:1. B is the calmest but nearly vanishes on the greige; C is the warmest but its rose stop leans on the Unreachable blush. Apply by swapping one <span class="mono">--grad</span> token; the other mockups stay on A until you choose.</span></p>
+  </div>
+</main>
+
+</body>
+</html>

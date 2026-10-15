@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Urumi Gateway: Servers (SAMPLE mockup)</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    /* surfaces: calm English pastel */
+    --bg:#ECEBE7; --bg-deep:#E5E3DC; --surface:#FFFFFF; --surface-2:#F4F3EF; --tint-soft:#F1F0EC;
+    --hairline:rgba(20,23,28,.07); --hairline-strong:rgba(20,23,28,.10);
+    /* text */
+    --text:#14171C; --text-muted:#5F6673; --text-faint:#5F6673;
+    /* primary: dusty blue */
+    --primary:#14171C; --primary-hover:#2A2E35; --primary-tint:#E7EAF0; --ring:rgba(185,196,221,.55);
+    /* accent tints: cards, chart bars, avatars */
+    --butter:#F3E6C4; --blush:#F4DCD8; --lilac:#E4DEF1; --sky:#DCE7F3; --sand:#EADFCB;
+    /* status badges: tint bg + dark text, always icon + text */
+    --ok-bg:#DDEDE4; --ok-text:#2F5D46;
+    --bad-bg:#F4DCD8; --bad-text:#8A3B33;
+    --off-bg:#E9E8E3; --off-text:#565D69;
+    /* radii / shadows / spacing */
+    --r-card:24px; --r-inner:14px; --r-sm:10px; --r-pill:999px;
+    --shadow-card:0 1px 2px rgba(20,23,28,.04), 0 10px 30px rgba(20,23,28,.05);
+    --shadow-pop:0 2px 4px rgba(20,23,28,.05), 0 16px 40px rgba(20,23,28,.10);
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
+    /* type */
+    --font:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --t-xs:11px; --t-sm:12px; --t-md:13px; --t-base:14px; --t-lg:16px; --t-xl:20px; --t-num:36px;
+    /* motion tokens */
+    --dur-fast:150ms; --dur-mid:300ms; --dur-slow:700ms;
+    --ease:cubic-bezier(.2,.8,.2,1); --ease-spring:cubic-bezier(.34,1.56,.64,1); --dur-rail:260ms;
+    --stagger:40ms;
+  }
+  html{-webkit-text-size-adjust:100%}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:var(--t-base);line-height:1.45;min-height:100vh}
+  .ic{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .ic.sm{width:14px;height:14px}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--text-muted)}
+  .small{font-size:var(--t-sm)}
+  .faint{color:var(--text-faint)}
+  .row{display:flex;align-items:center;gap:var(--s2)}
+  .bottomnav{display:none}
+  .wrap{flex-wrap:wrap}
+
+  /* ---------- floating pill sidebar (STAGE 0.6) ---------- */
+  .sidebar-pill{position:fixed;z-index:50;top:16px;left:16px;bottom:16px;width:72px;
+    background:var(--surface);border-radius:32px;box-shadow:var(--shadow-pop);
+    display:flex;flex-direction:column;gap:10px;padding:14px 10px;
+    transition:width var(--dur-rail,260ms) var(--ease) 150ms;overflow:hidden}
+  .sidebar-pill:hover,.sidebar-pill:focus-within,.sidebar-pill.force{width:248px;transition-delay:80ms}
+  .brand{display:flex;align-items:center;gap:12px;height:48px;flex:none;text-decoration:none;color:var(--text)}
+  .mark{width:44px;height:44px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;flex:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
+  .mark .ic{width:21px;height:21px;stroke-width:1.7}
+  .brand-name{font-size:var(--t-lg);font-weight:750;letter-spacing:-.01em;color:var(--text);line-height:1.05}
+  .brand-name small{display:block;font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase}
+  .rail-nav{display:grid;gap:6px;align-content:start;margin-top:10px}
+  .rail-item{display:flex;align-items:center;gap:12px;height:48px;border-radius:var(--r-pill);color:var(--text-muted);font-weight:650;font-size:var(--t-md);text-decoration:none;transition:background var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+  .rail-item:hover{background:var(--tint-soft);color:var(--text)}
+  .rail-item:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
+  .rail-ic{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:none;color:var(--text-faint)}
+  .rail-item:hover .rail-ic{color:var(--text)}
+  .rail-item.active .rail-ic{background:var(--primary);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+  .rail-item.active{color:var(--text)}
+  .sidebar-pill:hover .rail-item.active,.sidebar-pill:focus-within .rail-item.active,.sidebar-pill.force .rail-item.active{background:var(--tint-soft)}
+  .rail-label{opacity:0;transform:translateX(8px);transition:opacity 150ms var(--ease),transform var(--dur-rail,260ms) var(--ease);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .sidebar-pill:hover .rail-label,.sidebar-pill:focus-within .rail-label,.sidebar-pill.force .rail-label{opacity:1;transform:none;transition-delay:calc(70ms + var(--i,0)*20ms)}
+  .rail-user{margin-top:auto;display:grid;gap:6px}
+  .user-card{display:flex;align-items:center;gap:12px;border-radius:var(--r-inner);padding:8px;min-height:60px;
+    background:linear-gradient(135deg,rgba(185,196,221,.38),rgba(239,203,190,.32));box-shadow:inset 0 0 0 1px rgba(255,255,255,.5)}
+  .avatar{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.85);color:var(--text);display:grid;place-items:center;font-weight:750;font-size:var(--t-sm);flex:none;box-shadow:0 1px 2px rgba(20,23,28,.06)}
+  .user-card .who{min-width:0;line-height:1.25}
+  .user-card .who b{display:block;font-size:var(--t-sm);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .user-card .who small{font-size:var(--t-xs);color:var(--text-muted)}
+  .signout{display:flex;align-items:center;gap:12px;height:48px;border-radius:var(--r-pill);background:none;border:none;cursor:pointer;font:inherit;font-weight:650;font-size:var(--t-md);color:var(--text-muted);padding:0;text-align:left}
+  .signout .rail-ic{background:var(--tint-soft)}
+  .signout:hover{color:var(--text);background:var(--tint-soft)}
+  .signout:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
+
+  .main{margin-left:104px;min-width:0;display:flex;flex-direction:column}
+  .topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s5);background:transparent}
+  .search{flex:1;max-width:540px;display:flex;align-items:center;gap:var(--s2);background:var(--surface);border-radius:var(--r-pill);padding:9px 16px;color:var(--text-faint);box-shadow:var(--shadow-card)}
+  .search:focus-within{box-shadow:var(--shadow-card),0 0 0 3px var(--ring)}
+  .search input{border:none;outline:none;background:transparent;font:inherit;color:var(--text);width:100%;min-width:0}
+  .search input::placeholder{color:var(--text-faint)}
+  .kbd{font-family:var(--font-mono);font-size:10px;border:1px solid var(--hairline);border-bottom-width:2px;border-radius:6px;padding:1px 5px;color:var(--text-faint);background:var(--surface-2)}
+  .icon-btn{width:38px;height:38px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow-card);display:grid;place-items:center;color:var(--text-muted);cursor:pointer;position:relative;flex:none;border:none}
+  .icon-btn:hover{background:var(--primary-tint);color:var(--primary-hover)}
+  .icon-btn .dot{position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:var(--primary);border:2px solid var(--surface)}
+  .user-menu{position:relative;margin-left:auto}
+  .user-menu>button{display:flex;align-items:center;gap:var(--s2);background:var(--surface);border:none;border-radius:var(--r-pill);padding:4px 10px 4px 4px;cursor:pointer;font:inherit;box-shadow:var(--shadow-card)}
+  .user-menu>button:hover{border-color:var(--primary-tint)}
+  .um-name{text-align:left;line-height:1.2}
+  .um-name b{display:block;font-size:var(--t-sm)}
+  .um-name span{font-size:10px;color:var(--text-muted)}
+  .menu-pop{position:absolute;right:0;top:calc(100% + 8px);min-width:230px;background:var(--surface);border-radius:var(--r-inner);box-shadow:var(--shadow-pop);padding:var(--s3);display:none;gap:2px;z-index:8}
+  .user-menu:hover .menu-pop,.user-menu:focus-within .menu-pop{display:grid}
+  .menu-pop .head{display:flex;gap:var(--s2);align-items:center;padding:var(--s1) var(--s2) var(--s2);border-bottom:1px solid var(--hairline);margin-bottom:var(--s2)}
+  .menu-pop a,.menu-pop button{display:flex;align-items:center;gap:var(--s2);font:inherit;font-size:var(--t-md);font-weight:600;color:var(--text);text-decoration:none;padding:8px 10px;border-radius:var(--r-sm);background:none;border:none;cursor:pointer;text-align:left;width:100%}
+  .menu-pop a:hover,.menu-pop button:hover{background:var(--primary-tint)}
+
+  .content{padding:var(--s5) var(--s6) var(--s7);max-width:1280px;width:100%;margin:0 auto;display:grid;gap:var(--s4);align-content:start}
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--s4);flex-wrap:wrap}
+  h1{font-size:26px;letter-spacing:-.02em;line-height:1.1}
+  .card-sub{font-size:var(--t-sm);color:var(--text-muted);margin-top:4px}
+
+  .card{background:var(--surface);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:var(--s5)}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap}
+  .card-title{font-size:var(--t-lg);font-weight:750;letter-spacing:-.01em;display:flex;align-items:center;gap:var(--s2)}
+  .src{font-family:var(--font-mono);font-size:10px;color:var(--text-faint);background:var(--surface-2);border:1px solid var(--hairline);border-radius:6px;padding:1px 6px;white-space:nowrap}
+
+  .chip{display:inline-flex;align-items:center;gap:5px;border-radius:var(--r-pill);padding:3px 9px;font-size:var(--t-xs);font-weight:700;line-height:1.5;white-space:nowrap}
+  .chip .ic{width:12px;height:12px;stroke-width:2.4}
+  .chip-ok{background:var(--ok-bg);color:var(--ok-text)}
+  .chip-warn{background:var(--off-bg);color:var(--off-text)}
+  .chip-danger{background:var(--bad-bg);color:var(--bad-text)}
+  .chip-neutral{background:var(--surface-2);color:var(--text)}
+  .chip-accent{background:var(--primary-tint);color:var(--primary-hover)}
+  .chip-butter{background:var(--butter);color:var(--text)}
+  .chip-sand{background:var(--sand);color:var(--text)}
+  .btn{font:inherit;font-weight:650;cursor:pointer;border-radius:var(--r-pill);padding:9px 16px;display:inline-flex;align-items:center;gap:var(--s2);border:1px solid transparent;transition:background .15s,border-color .15s,color .15s,box-shadow .15s;text-decoration:none;white-space:nowrap}
+  .btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
+  .btn-primary{background:var(--primary);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+  .btn-primary:hover{background:var(--primary-hover)}
+  .btn-secondary{background:var(--surface);box-shadow:inset 0 0 0 1px var(--hairline);color:var(--text)}
+  .btn-secondary:hover{background:var(--tint-soft);box-shadow:inset 0 0 0 1px var(--hairline)}
+  .btn-ghost{background:transparent;color:var(--text-muted)}
+  .btn-ghost:hover{background:var(--surface-2);color:var(--text)}
+  .btn-danger{background:transparent;color:var(--bad-text)}
+  .btn-danger:hover{background:var(--bad-bg)}
+  .btn-sm{padding:6px 12px;font-size:var(--t-sm)}
+  .seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--hairline);border-radius:var(--r-pill);padding:3px;gap:2px}
+  .seg button{font:inherit;font-size:var(--t-sm);font-weight:650;border:none;background:transparent;color:var(--text-muted);border-radius:var(--r-pill);padding:5px 14px;cursor:pointer}
+  .seg button.on{background:var(--primary);color:#fff}
+
+  /* switch */
+  .switch{position:relative;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+  .switch input{position:absolute;opacity:0;width:0;height:0}
+  .switch .track{width:38px;height:22px;border-radius:999px;background:var(--hairline-strong);transition:background .15s;position:relative;flex:none}
+  .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .switch input:checked + .track{background:var(--primary)}
+  .switch input:checked + .track::after{transform:translateX(16px)}
+  .switch input:focus-visible + .track{box-shadow:0 0 0 3px var(--ring)}
+  .switch .lbl{font-size:var(--t-sm);font-weight:650;color:var(--text-muted)}
+
+  /* tables */
+  .table-wrap{overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);font-weight:700;text-align:left;padding:0 var(--s3) var(--s2);border-bottom:1px solid var(--hairline);white-space:nowrap}
+  td{padding:var(--s3);border-bottom:1px solid var(--hairline);vertical-align:middle}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--primary-tint)}
+  .slug{font-weight:750;font-family:var(--font-mono);font-size:var(--t-md)}
+  .url{font-family:var(--font-mono);font-size:var(--t-xs);color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .err{font-size:var(--t-xs);color:var(--bad-text);background:var(--bad-bg);border-radius:8px;padding:4px 8px;margin-top:6px;max-width:300px}
+
+  /* tools expander */
+  details.tools{border:1px solid var(--hairline);border-radius:var(--r-pill);padding:0;background:var(--surface-2)}
+  details.tools>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:var(--t-sm);font-weight:650;color:var(--text-muted);padding:5px 12px;border-radius:var(--r-pill)}
+  details.tools>summary::-webkit-details-marker{display:none}
+  details.tools>summary .ic{width:12px;height:12px;stroke-width:2.4;transition:transform .15s}
+  details.tools[open]>summary .ic{transform:rotate(180deg)}
+  details.tools[open]{border-radius:var(--r-inner);padding:0}
+  .tool-list{display:grid;gap:6px;padding:var(--s2) var(--s3) var(--s3)}
+  .tool-item{display:flex;gap:var(--s2);align-items:baseline;font-size:var(--t-xs)}
+  .tool-item .mono{font-weight:750;color:var(--text)}
+  .tool-item span{color:var(--text-muted)}
+
+  /* note banner */
+  .note-banner{display:flex;gap:var(--s3);align-items:flex-start;background:var(--primary-tint);border:1px solid var(--primary-tint);border-radius:var(--r-inner);padding:var(--s3) var(--s4);font-size:var(--t-sm)}
+  .note-banner .ic{color:var(--primary-hover);margin-top:1px}
+  .note-banner b{color:var(--primary-hover)}
+
+  /* modal */
+  .modal-back{position:fixed;inset:0;background:rgba(30,36,48,.28);display:none;place-items:center;z-index:50;padding:var(--s4)}
+  .modal-back.open{display:grid}
+  .modal{width:100%;max-width:480px;background:var(--surface);border:1px solid var(--hairline);border-radius:var(--r-card);box-shadow:var(--shadow-pop);padding:var(--s5);display:grid;gap:var(--s3)}
+  .field{display:grid;gap:5px}
+  .field label{font-size:var(--t-sm);font-weight:650}
+  .field input,.field select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--hairline-strong);border-radius:var(--r-pill);padding:9px 14px;width:100%}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}
+  .field .hint{font-size:var(--t-xs);color:var(--text-faint)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+
+  /* view variants */
+  body[data-view="member"] [data-only="admin"]{display:none !important}
+  body[data-view="admin"] [data-only="member"]{display:none !important}
+
+  /* responsive */
+  @media (max-width:900px){ .content{padding:var(--s4) var(--s4) var(--s7)} .topbar{padding:var(--s2) var(--s4)} }
+  @media (max-width:720px){
+    .sidebar-pill{display:none}
+    .main{margin-left:0}
+    .um-name{display:none}
+    .bottomnav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--hairline);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+    .bottomnav a{display:grid;justify-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--text-faint);text-decoration:none;padding:6px 2px;border-radius:12px}
+    .bottomnav a .ic{width:20px;height:20px}
+    .bottomnav a.on{color:var(--primary-hover);background:var(--primary-tint)}
+    .content{padding-bottom:110px}
+    h1{font-size:22px}
+    table, tbody, tr, td{display:block;width:100%}
+    thead{display:none}
+    tbody tr{border:1px solid var(--hairline);border-radius:var(--r-inner);margin-bottom:var(--s2);padding:var(--s1)}
+    td{border-bottom:1px dashed var(--hairline);padding:9px 6px;display:flex;justify-content:space-between;gap:var(--s4);align-items:center;flex-wrap:wrap}
+    td:last-child{border-bottom:none}
+    td::before{content:attr(data-label);font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);font-weight:700}
+    .url,.err{max-width:none;white-space:normal}
+  }
+
+  /* ---------- motion (STAGE 0.5): tokens above, keyframes below ---------- */
+  @keyframes fade-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes pop{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}
+  @keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+  @keyframes expand{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.6}}
+  @keyframes shake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-3px)}40%,60%{transform:translateX(3px)}}
+  @keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-7deg)}75%{transform:rotate(7deg)}}
+  @keyframes slide-down{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+  @keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+  @keyframes note-hl{0%{background:var(--butter)}100%{background:transparent}}
+  @keyframes bounce-dot{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-4px);opacity:1}}
+  .card,.note-banner,.page-head{animation:fade-rise var(--dur-mid) var(--ease) both}
+  .pop{animation:pop var(--dur-mid) var(--ease) both;animation-delay:600ms}
+  .bar,.cap{transform-box:fill-box;transform-origin:bottom;animation:grow var(--dur-slow) var(--ease) both}
+  .draw,.donut-seg,.ring-seg{transition:stroke-dashoffset var(--dur-slow) var(--ease)}
+  details.out[open] pre,details.tools[open] .tool-list{animation:expand var(--dur-mid) var(--ease) both}
+  .live-dot{width:9px;height:9px;border-radius:50%;background:var(--primary);display:inline-block;vertical-align:middle;margin-left:10px;animation:breathe 2.4s var(--ease) infinite}
+  .dot-pulse{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block;flex:none;animation:breathe 2.8s var(--ease) infinite}
+  .shake-once{animation:shake 450ms var(--ease) 1 both}
+  .card.stat{transition:transform var(--dur-mid) var(--ease),box-shadow var(--dur-mid) var(--ease)}
+  .card.stat:hover{transform:translateY(-2px);box-shadow:var(--shadow-pop)}
+  .card.stat:hover .stat-num>svg{animation:wiggle 500ms var(--ease) 1}
+  .btn:active{transform:translateY(1px)}
+  .btn{transition:background var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease),transform var(--dur-fast) var(--ease)}
+  .reveal.show{animation:slide-down var(--dur-mid) var(--ease) both}
+  .hl-note{animation:note-hl 1.4s var(--ease) 1 both;border-radius:6px;padding:2px 5px}
+  /* skeletons: soft pastel sweep, no spinners */
+  .sk{background:linear-gradient(90deg,var(--surface-2) 25%,var(--sky) 50%,var(--surface-2) 75%);background-size:200% 100%;animation:shimmer 1.4s linear infinite;border-radius:8px;height:12px}
+  .sk.num{height:30px;border-radius:10px}
+  .sk.chip{height:22px;width:120px;border-radius:var(--r-pill)}
+  /* table rows */
+  tbody tr{position:relative}
+  .row-anim{animation:fade-rise var(--dur-mid) var(--ease) both}
+  tbody tr td:first-child{box-shadow:inset 2px 0 0 transparent;transition:box-shadow var(--dur-fast) var(--ease)}
+  tbody tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--primary)}
+  /* chart hover: highlight one, dim the rest, tooltip with exact value */
+  .bar.dimmed,.cap.dimmed{opacity:.35}
+  .bar.hl,.cap.hl{filter:brightness(.93) saturate(1.1)}
+  .chart-tip{position:fixed;z-index:60;pointer-events:none;background:var(--surface);border:1px solid var(--hairline);border-radius:var(--r-sm);box-shadow:var(--shadow-pop);padding:6px 10px;font-size:var(--t-xs);font-weight:700;color:var(--text);opacity:0;transform:translateY(4px);transition:opacity var(--dur-fast) var(--ease),transform var(--dur-fast) var(--ease);white-space:nowrap}
+  .chart-tip.on{opacity:1;transform:none}
+  /* chat typing indicator */
+  .tdot{display:inline-flex;gap:4px;align-items:center}
+  .tdot i{width:5px;height:5px;border-radius:50%;background:var(--primary);display:inline-block;animation:bounce-dot 1.2s var(--ease) infinite}
+  .tdot i:nth-child(2){animation-delay:.15s}
+  .tdot i:nth-child(3){animation-delay:.3s}
+  /* empty-state loop (logo shapes) */
+  @keyframes float-arch{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  @keyframes drift-a{0%,100%{transform:translate(0,0) rotate(0deg)}50%{transform:translate(10px,-14px) rotate(6deg)}}
+  @keyframes drift-b{0%,100%{transform:translate(0,0)}50%{transform:translate(-14px,10px)}}
+  @keyframes drift-c{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(8px,8px) scale(1.04)}}
+  .float-arch{animation:float-arch 4s var(--ease) infinite}
+  /* gradient use (e): soft background glow behind the page edge */
+  .bg-glow{position:fixed;inset:0;z-index:-1;pointer-events:none;background:
+    radial-gradient(560px 420px at 88% -6%, rgba(185,196,221,.50), transparent 70%),
+    radial-gradient(480px 380px at -4% 84%, rgba(239,203,190,.38), transparent 70%),
+    radial-gradient(420px 320px at 55% 110%, rgba(217,200,220,.30), transparent 70%)}
+
+  /* reduced motion: kill everything, show final values immediately */
+  @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms !important;animation-delay:0 !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;transition-delay:0ms !important}}
+  body.rm *,body.rm *::before,body.rm *::after{animation-duration:.01ms !important;animation-delay:0 !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;transition-delay:0ms !important}
+</style>
+</head>
+<body data-view="admin">
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-logo" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M9.2 16.8v-3.4a2.8 2.8 0 0 1 5.6 0v3.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M7 12h10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.3c2.3.2 3.9 1.6 4.4 4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.6v5.1c0 4.4-2.9 8.3-7 10.3-4.1-2-7-5.9-7-10.3V5.6L12 3z"/><path d="M9 11.6l2.1 2.1 4-4.2"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12.5a7.5 7.5 0 0 1-7.5 7.5c-1.3 0-2.6-.3-3.7-.9L4 20l1-4.6A7.5 7.5 0 1 1 20 12.5z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M15.8 15.8L20 20"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9.5a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 13.5 6 9.5z"/><path d="M10 19a2.2 2.2 0 0 0 4 0"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M8 10l4 4 4-4"/></symbol>
+  <symbol id="i-checkc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.3l2.4 2.4 4.6-4.9"/></symbol>
+  <symbol id="i-xc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4.5L21 19.5H3L12 4.5z"/><path d="M12 10v4.5M12 17h.01"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9v6M14.5 9v6"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.5 6.5a4 4 0 1 0 4.2 6.3L21 10l-7 7-1.8-1.8a4 4 0 0 1-6.3 4.2 4 4 0 0 1 5.3-5.9"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z"/><path d="M14.5 5.5l4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M15 4.5H7a2.5 2.5 0 0 0-2.5 2.5v10A2.5 2.5 0 0 0 7 19.5h8"/><path d="M12 12h9M17.5 8.5L21 12l-3.5 3.5"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+</svg>
+
+  <div class="bg-glow" aria-hidden="true"></div>
+
+<aside class="sidebar-pill" id="rail" aria-label="Primary">
+  <a class="brand" href="#" aria-label="Urumi home">
+    <span class="mark"><svg class="ic"><use href="#i-logo"/></svg></span>
+    <span class="rail-label brand-name" style="--i:0">Urumi<small>Gateway</small></span>
+  </a>
+  <nav class="rail-nav" aria-label="Primary">
+    <a class="rail-item" href="#" style="--i:1"><span class="rail-ic"><svg class="ic"><use href="#i-grid"/></svg></span><span class="rail-label">Overview</span></a>
+    <a class="rail-item active" href="#" style="--i:2"><span class="rail-ic"><svg class="ic"><use href="#i-server"/></svg></span><span class="rail-label">Servers</span></a>
+    <a class="rail-item" href="#" style="--i:3"><span class="rail-ic"><svg class="ic"><use href="#i-users"/></svg></span><span class="rail-label">Members and keys</span></a>
+    <a class="rail-item" href="#" style="--i:4"><span class="rail-ic"><svg class="ic"><use href="#i-shield"/></svg></span><span class="rail-label">Audit</span></a>
+    <a class="rail-item" href="#" style="--i:5"><span class="rail-ic"><svg class="ic"><use href="#i-chat"/></svg></span><span class="rail-label">Chat</span></a>
+  </nav>
+  <div class="rail-user">
+    <div class="user-card">
+      <span class="avatar" id="rail-avatar">AU</span>
+      <span class="rail-label who" style="--i:6"><b id="rail-email">admin@urumi.local</b><small id="rail-role">Administrator</small></span>
+    </div>
+    <button class="signout" type="button" style="--i:7"><span class="rail-ic"><svg class="ic"><use href="#i-logout"/></svg></span><span class="rail-label">Sign out</span></button>
+  </div>
+</aside>
+
+  <div class="main">
+    <header class="topbar">
+      <label class="search" title="Search behaviour: NEEDS DECISION (filter current page / jump to Servers / new endpoint)">
+        <svg class="ic sm"><use href="#i-search"/></svg>
+        <input type="search" placeholder="Search servers, tools, audit…" aria-label="Search">
+        <span class="kbd">⌘K</span>
+      </label>
+      <button class="icon-btn" type="button" aria-label="Notifications"><svg class="ic"><use href="#i-bell"/></svg><span class="dot"></span></button>
+      <div class="user-menu">
+        <button type="button">
+          <div class="avatar" id="top-avatar">AU</div>
+          <div class="um-name"><b id="top-email">admin@urumi.local</b><span id="top-role">Administrator</span></div>
+          <svg class="ic sm"><use href="#i-chev"/></svg>
+        </button>
+        <div class="menu-pop">
+          <div class="head">
+            <div class="avatar" id="pop-avatar">AU</div>
+            <div><b style="font-size:var(--t-md)" id="pop-email">admin@urumi.local</b><div class="small muted" id="pop-role">Administrator · GET /api/me</div></div>
+          </div>
+          <a href="#"><svg class="ic sm"><use href="#i-users"/></svg>Members &amp; keys</a>
+          <a href="#"><svg class="ic sm"><use href="#i-shield"/></svg>Audit trail</a>
+          <button type="button"><svg class="ic sm"><use href="#i-logout"/></svg>Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="page-head">
+        <div>
+          <h1>Servers</h1>
+          <p class="card-sub">Upstream MCP registry: live status, per-server tools, admin CRUD.</p>
+        </div>
+        <div class="row wrap">
+          <span class="chip chip-warn"><svg class="ic"><use href="#i-alert"/></svg>SAMPLE DATA</span>
+          <div class="seg" role="group" aria-label="View as">
+            <button type="button" data-viewbtn="admin" aria-pressed="true">Admin</button>
+            <button type="button" data-viewbtn="member" aria-pressed="false">Member</button>
+          </div>
+          <button class="btn btn-primary" type="button" data-only="admin" id="add-btn"><svg class="ic sm"><use href="#i-plus"/></svg>Add server</button>
+        </div>
+      </div>
+
+      <div class="note-banner" data-only="member">
+        <svg class="ic"><use href="#i-eye"/></svg>
+        <div><b>Viewing as member.</b> Only admins can add, edit, enable/disable or delete servers, the controls below are hidden for this role. <span class="src">GET /api/servers · role from /api/me</span></div>
+      </div>
+
+      <!-- summary -->
+      <section class="card" style="display:flex;gap:var(--s4);align-items:center;flex-wrap:wrap;justify-content:space-between">
+        <div class="row wrap" style="gap:var(--s3)">
+          <span class="card-title" style="font-size:var(--t-md)"><svg class="ic"><use href="#i-server"/></svg>6 registered</span>
+          <span class="chip chip-ok"><svg class="ic"><use href="#i-checkc"/></svg>4 connected</span>
+          <span class="chip chip-danger"><svg class="ic"><use href="#i-xc"/></svg>1 unreachable</span>
+          <span class="chip chip-neutral"><svg class="ic"><use href="#i-dot"/></svg>1 unknown</span>
+          <span class="chip chip-warn"><svg class="ic"><use href="#i-pause"/></svg>1 disabled</span>
+        </div>
+        <span class="src">GET /api/servers, counted client-side, no new endpoint</span>
+      </section>
+
+      <!-- table -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title"><svg class="ic"><use href="#i-server"/></svg>All servers</div>
+          <label class="search" style="max-width:280px;padding:6px 14px">
+            <svg class="ic sm"><use href="#i-search"/></svg>
+            <input type="search" id="srv-filter" placeholder="Filter by slug or URL…" aria-label="Filter servers" style="font-size:var(--t-sm)">
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table aria-label="Servers">
+            <thead>
+              <tr>
+                <th>Server</th><th>Status</th><th>Enabled</th><th>Tools</th><th data-only="admin">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="srv-tbody">
+              <tr>
+                <td data-label="Server"><div class="slug">woo</div><div class="url">http://woo-mcp.urumi.svc.cluster.local:8000/mcp</div></td>
+                <td data-label="Status"><span class="chip chip-ok"><svg class="ic"><use href="#i-checkc"/></svg>Connected</span></td>
+                <td data-label="Enabled" data-only="admin"><label class="switch"><input type="checkbox" checked aria-label="Enable woo"><span class="track"></span><span class="lbl">yes</span></label></td>
+                <td data-label="Enabled" data-only="member" class="small muted">yes</td>
+                <td data-label="Tools">
+                  <details class="tools"><summary>12 tools<svg class="ic"><use href="#i-chev"/></svg></summary>
+                    <div class="tool-list">
+                      <div class="tool-item"><span class="mono">woo__list_products</span><span>: list products</span></div>
+                      <div class="tool-item"><span class="mono">woo__get_product</span><span>: read one product</span></div>
+                      <div class="tool-item"><span class="mono">woo__create_product</span><span>: create product</span></div>
+                      <div class="tool-item"><span class="mono">woo__list_orders</span><span>: recent orders</span></div>
+                      <div class="tool-item"><span class="mono">woo__get_order</span><span>: full order detail</span></div>
+                      <div class="tool-item"><span class="mono">woo__create_order</span><span>: create order (write)</span></div>
+                      <div class="tool-item"><span class="mono">woo__list_customers</span><span>: customers</span></div>
+                      <div class="tool-item"><span class="mono">woo__get_sales_report</span><span>: totals</span></div>
+                      <div class="tool-item"><span class="mono">+4 more…</span></div>
+                    </div>
+                  </details>
+                </td>
+                <td data-label="Actions" data-only="admin">
+                  <div class="row" style="justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" type="button"><svg class="ic sm"><use href="#i-edit"/></svg>Edit</button>
+                    <button class="btn btn-danger btn-sm" type="button"><svg class="ic sm"><use href="#i-trash"/></svg>Delete</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Server"><div class="slug">notes</div><div class="url">http://demo-mcp-notes.urumi.svc.cluster.local:8000/mcp</div></td>
+                <td data-label="Status"><span class="chip chip-ok"><svg class="ic"><use href="#i-checkc"/></svg>Connected</span></td>
+                <td data-label="Enabled" data-only="admin"><label class="switch"><input type="checkbox" checked aria-label="Enable notes"><span class="track"></span><span class="lbl">yes</span></label></td>
+                <td data-label="Enabled" data-only="member" class="small muted">yes</td>
+                <td data-label="Tools">
+                  <details class="tools"><summary>6 tools<svg class="ic"><use href="#i-chev"/></svg></summary>
+                    <div class="tool-list">
+                      <div class="tool-item"><span class="mono">notes__list_notes</span></div>
+                      <div class="tool-item"><span class="mono">notes__get_note</span></div>
+                      <div class="tool-item"><span class="mono">notes__create_note</span><span>: write</span></div>
+                      <div class="tool-item"><span class="mono">notes__update_note</span><span>: write</span></div>
+                      <div class="tool-item"><span class="mono">notes__delete_note</span><span>: write</span></div>
+                      <div class="tool-item"><span class="mono">notes__search_notes</span></div>
+                    </div>
+                  </details>
+                </td>
+                <td data-label="Actions" data-only="admin">
+                  <div class="row" style="justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" type="button"><svg class="ic sm"><use href="#i-edit"/></svg>Edit</button>
+                    <button class="btn btn-danger btn-sm" type="button"><svg class="ic sm"><use href="#i-trash"/></svg>Delete</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Server"><div class="slug">time</div><div class="url">http://demo-mcp-time.urumi.svc.cluster.local:8000/mcp</div></td>
+                <td data-label="Status"><span class="chip chip-ok"><svg class="ic"><use href="#i-checkc"/></svg>Connected</span></td>
+                <td data-label="Enabled" data-only="admin"><label class="switch"><input type="checkbox" checked aria-label="Enable time"><span class="track"></span><span class="lbl">yes</span></label></td>
+                <td data-label="Enabled" data-only="member" class="small muted">yes</td>
+                <td data-label="Tools">
+                  <details class="tools"><summary>2 tools<svg class="ic"><use href="#i-chev"/></svg></summary>
+                    <div class="tool-list">
+                      <div class="tool-item"><span class="mono">time__get_time</span></div>
+                      <div class="tool-item"><span class="mono">time__get_date</span></div>
+                    </div>
+                  </details>
+                </td>
+                <td data-label="Actions" data-only="admin">
+                  <div class="row" style="justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" type="button"><svg class="ic sm"><use href="#i-edit"/></svg>Edit</button>
+                    <button class="btn btn-danger btn-sm" type="button"><svg class="ic sm"><use href="#i-trash"/></svg>Delete</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Server"><div class="slug">analytics</div><div class="url">https://analytics.internal.example.com/mcp</div><div class="err">last error: dial tcp 10.96.0.11:443: connect: no route to host</div></td>
+                <td data-label="Status"><span class="chip chip-danger"><svg class="ic"><use href="#i-xc"/></svg>Unreachable</span></td>
+                <td data-label="Enabled" data-only="admin"><label class="switch"><input type="checkbox" checked aria-label="Enable analytics"><span class="track"></span><span class="lbl">yes</span></label></td>
+                <td data-label="Enabled" data-only="member" class="small muted">yes</td>
+                <td data-label="Tools"><span class="chip chip-neutral"><svg class="ic"><use href="#i-xc"/></svg>0, probe failing</span></td>
+                <td data-label="Actions" data-only="admin">
+                  <div class="row" style="justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" type="button"><svg class="ic sm"><use href="#i-edit"/></svg>Edit</button>
+                    <button class="btn btn-danger btn-sm" type="button"><svg class="ic sm"><use href="#i-trash"/></svg>Delete</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Server"><div class="slug">files</div><div class="url">http://files-mcp.internal.example.com/mcp</div></td>
+                <td data-label="Status"><span class="chip chip-neutral"><svg class="ic"><use href="#i-dot"/></svg>Unknown</span></td>
+                <td data-label="Enabled" data-only="admin"><label class="switch"><input type="checkbox" checked aria-label="Enable files"><span class="track"></span><span class="lbl">yes</span></label></td>
+                <td data-label="Enabled" data-only="member" class="small muted">yes</td>
+                <td data-label="Tools"><span class="chip chip-neutral">awaiting first probe</span></td>
+                <td data-label="Actions" data-only="admin">
+                  <div class="row" style="justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" type="button"><svg class="ic sm"><use href="#i-edit"/></svg>Edit</button>
+                    <button class="btn btn-danger btn-sm" type="button"><svg class="ic sm"><use href="#i-trash"/></svg>Delete</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Server"><div class="slug">legacy-erp</div><div class="url">http://legacy-erp.internal.example.com/mcp</div></td>
+                <td data-label="Status"><span class="chip chip-warn"><svg class="ic"><use href="#i-pause"/></svg>Disabled</span></td>
+                <td data-label="Enabled" data-only="admin"><label class="switch"><input type="checkbox" aria-label="Enable legacy-erp"><span class="track"></span><span class="lbl">no</span></label></td>
+                <td data-label="Enabled" data-only="member" class="small muted">no</td>
+                <td data-label="Tools"><span class="small muted">excluded from /api/tools</span></td>
+                <td data-label="Actions" data-only="admin">
+                  <div class="row" style="justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" type="button"><svg class="ic sm"><use href="#i-edit"/></svg>Edit</button>
+                    <button class="btn btn-danger btn-sm" type="button"><svg class="ic sm"><use href="#i-trash"/></svg>Delete</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<nav class="bottomnav" aria-label="Primary mobile">
+  <a href="#"><svg class="ic"><use href="#i-grid"/></svg>Overview</a>
+  <a class="on" href="#"><svg class="ic"><use href="#i-server"/></svg>Servers</a>
+  <a href="#"><svg class="ic"><use href="#i-users"/></svg>Members</a>
+  <a href="#"><svg class="ic"><use href="#i-shield"/></svg>Audit</a>
+  <a href="#"><svg class="ic"><use href="#i-chat"/></svg>Chat</a>
+</nav>
+
+<!-- add-server modal (admin) -->
+<div class="modal-back" id="add-modal" data-only="admin">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Add server">
+    <div class="card-head" style="margin:0">
+      <div class="card-title"><svg class="ic"><use href="#i-server"/></svg>Add server</div>
+      <button class="btn btn-ghost btn-sm" type="button" id="add-close">Close</button>
+    </div>
+    <div class="field"><label for="f-slug">Slug</label><input id="f-slug" placeholder="my-mcp" ><div class="hint">^[a-z0-9-]+$, becomes the tool-name prefix</div></div>
+    <div class="field"><label for="f-url">URL</label><input id="f-url" placeholder="https://mcp.internal.example.com/mcp"></div>
+    <div class="grid-2">
+      <div class="field"><label for="f-auth">Auth type</label><select id="f-auth"><option>none</option><option>bearer</option><option>header</option></select></div>
+      <div class="field"><label for="f-timeout">Timeout (ms)</label><input id="f-timeout" value="10000"></div>
+    </div>
+    <div class="field"><label for="f-cred">Credential (optional)</label><input id="f-cred" type="password" placeholder="encrypted at rest, never returned"><div class="hint">Stored with Fernet; API only ever returns "***"</div></div>
+    <div class="row" style="justify-content:flex-end;margin-top:4px">
+      <button class="btn btn-ghost" type="button" id="add-cancel">Cancel</button>
+      <button class="btn btn-primary" type="button">Create server</button>
+    </div>
+    <div class="small faint">POST /api/servers, admin + CSRF. Edit → PATCH /api/servers/{id}, enable/disable → POST …/{id}/enable · /disable, delete → DELETE …/{id}.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var body = document.body;
+  function apply(){
+    document.querySelectorAll("[data-viewbtn]").forEach(function(b){
+      var on = b.getAttribute("data-viewbtn") === body.dataset.view;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    var member = body.dataset.view === "member";
+    document.getElementById("rail-avatar").textContent = member ? "PS" : "AU";
+    document.getElementById("rail-email").textContent = member ? "priya@urumi.local" : "admin@urumi.local";
+    document.getElementById("rail-role").textContent = member ? "Member" : "Administrator";
+    document.getElementById("top-avatar").textContent = member ? "PS" : "AU";
+    document.getElementById("top-email").textContent = member ? "priya@urumi.local" : "admin@urumi.local";
+    document.getElementById("top-role").textContent = member ? "Member" : "Administrator";
+    document.getElementById("pop-avatar").textContent = member ? "PS" : "AU";
+    document.getElementById("pop-email").textContent = member ? "priya@urumi.local" : "admin@urumi.local";
+    document.getElementById("pop-role").textContent = member ? "Member · GET /api/me" : "Administrator · GET /api/me";
+  }
+  document.querySelectorAll("[data-viewbtn]").forEach(function(b){
+    b.addEventListener("click", function(){ body.dataset.view = b.getAttribute("data-viewbtn"); apply(); });
+  });
+  if (new URLSearchParams(location.search).get("view") === "member") body.dataset.view = "member";
+  apply();
+
+  var f = document.getElementById("srv-filter");
+  f.addEventListener("input", function(){
+    var q = f.value.toLowerCase();
+    document.querySelectorAll("#srv-tbody tr").forEach(function(tr){
+      tr.style.display = tr.textContent.toLowerCase().indexOf(q) > -1 ? "" : "none";
+    });
+  });
+
+  var modal = document.getElementById("add-modal");
+  document.getElementById("add-btn").addEventListener("click", function(){ modal.classList.add("open"); });
+  function close(){ modal.classList.remove("open"); }
+  document.getElementById("add-close").addEventListener("click", close);
+  document.getElementById("add-cancel").addEventListener("click", close);
+  modal.addEventListener("click", function(e){ if (e.target === modal) close(); });
+})();
+</script>
+
+<script>
+(function(){
+  function reduced(){ return document.body.classList.contains("rm") || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+  var RM = reduced();
+
+  /* sidebar: ?expanded=1 forces the expanded (hover) state for the PNG mock */
+  var railEl = document.getElementById("rail");
+  if(railEl && new URLSearchParams(location.search).get("expanded") === "1") railEl.classList.add("force");
+
+  /* cards fade + rise, staggered 40ms */
+  var cards = document.querySelectorAll(".content > .card, .content > .page-head, .content > .note-banner, .content > section");
+  cards.forEach(function(el,i){ el.style.animationDelay = (i*40) + "ms"; });
+
+
+  /* table rows: first 12 staggered fade-in */
+  var rows = document.querySelectorAll("tbody tr");
+  for(var i=0;i<rows.length && i<12;i++){ rows[i].classList.add("row-anim"); rows[i].style.animationDelay = (i*40)+"ms"; }
+
+  /* stat counters: 0 to exact value over 700ms */
+  function animateCount(el){
+    var target = parseFloat(el.getAttribute("data-count"));
+    var dec = parseInt(el.getAttribute("data-decimals") || "0", 10);
+    var suffix = el.getAttribute("data-suffix") || "";
+    function fmt(v){ return v.toLocaleString("en-US",{minimumFractionDigits:dec, maximumFractionDigits:dec}) + suffix; }
+    if(RM){ el.textContent = fmt(target); return; }
+    var t0 = null;
+    function step(t){ if(!t0) t0 = t; var p = Math.min(1,(t-t0)/700); var e = 1-Math.pow(1-p,3);
+      el.textContent = fmt(target*e); if(p<1) requestAnimationFrame(step); else el.textContent = fmt(target); }
+    requestAnimationFrame(step);
+  }
+  document.querySelectorAll(".count").forEach(animateCount);
+
+  /* charts: bars grow (CSS), lines draw, donut/ring sweep */
+  document.querySelectorAll(".bar,.cap").forEach(function(el,i){ el.style.animationDelay = (i*30)+"ms"; });
+  document.querySelectorAll(".draw").forEach(function(el){
+    var len = el.getTotalLength ? el.getTotalLength() : 0; if(!len) return;
+    el.style.strokeDasharray = len;
+    if(RM){ el.style.strokeDashoffset = 0; return; }
+    el.style.strokeDashoffset = len;
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ el.style.strokeDashoffset = 0; }); });
+  });
+  document.querySelectorAll(".donut-seg,.ring-seg").forEach(function(el){
+    var r = parseFloat(el.getAttribute("r")) || 0;
+    var C = 2*Math.PI*r;
+    var target = parseFloat(getComputedStyle(el).strokeDashoffset) || 0;
+    var start = target - C;
+    if(RM){ el.style.strokeDashoffset = target; return; }
+    el.style.strokeDashoffset = start;
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ el.style.strokeDashoffset = target; }); });
+  });
+
+  /* chart hover: tooltip + highlight/dim */
+  var tip = document.createElement("div"); tip.className = "chart-tip"; document.body.appendChild(tip);
+  document.querySelectorAll("svg .bar, svg .cap").forEach(function(el){
+    var t = el.querySelector("title"); var txt = t ? t.textContent : "";
+    function on(e){
+      tip.textContent = txt; tip.classList.add("on");
+      tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 8, e.clientX + 12) + "px";
+      tip.style.top = (e.clientY - 36) + "px";
+      var svg = el.ownerSVGElement;
+      svg.querySelectorAll(".bar,.cap").forEach(function(o){ o.classList.toggle("dimmed", o !== el); });
+      el.classList.add("hl");
+    }
+    function off(){
+      tip.classList.remove("on");
+      var svg = el.ownerSVGElement;
+      svg.querySelectorAll(".bar,.cap").forEach(function(o){ o.classList.remove("dimmed"); });
+      el.classList.remove("hl");
+    }
+    el.addEventListener("mousemove", on); el.addEventListener("mouseleave", off);
+  });
+
+  /* status chips: Connected breathes, Unreachable shakes once, Disabled static */
+  document.querySelectorAll(".chip-ok").forEach(function(el){
+    if(el.textContent.trim() === "Connected"){
+      var d = document.createElement("span"); d.className = "dot-pulse"; d.setAttribute("aria-hidden","true");
+      el.insertBefore(d, el.firstChild);
+    }
+  });
+  document.querySelectorAll(".chip-danger").forEach(function(el){
+    if(el.textContent.trim() === "Unreachable" && !RM) el.classList.add("shake-once");
+  });
+
+  /* chat messages + tool chips slide in, staggered */
+  var msgs = document.querySelectorAll(".msg, .tool-call");
+  msgs.forEach(function(el,i){ el.classList.add("row-anim"); el.style.animationDelay = (i*70)+"ms"; });
+
+  /* motion toggle (mockup control for reduced-motion demo) */
+  var mt = document.getElementById("motion-toggle"), note = document.getElementById("rm-note");
+  function setRM(on){
+    document.body.classList.toggle("rm", on);
+    if(mt){ mt.textContent = "Motion: " + (on ? "off" : "on"); mt.setAttribute("aria-pressed", on ? "false" : "true"); }
+    if(note) note.hidden = !on;
+    if(on) document.querySelectorAll(".count").forEach(animateCount);
+  }
+  if(new URLSearchParams(location.search).get("rm") === "1") setRM(true);
+  if(mt) mt.addEventListener("click", function(){ setRM(!document.body.classList.contains("rm")); });
+})();
+</script>
+
+</body>
+</html>

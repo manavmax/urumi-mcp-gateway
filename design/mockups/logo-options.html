@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Urumi Gateway: logo options (SAMPLE mockup)</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#EEEDE8; --surface:#FFFFFF; --surface-2:#F6F5F1;
+    --hairline:#E4E2DB;
+    --text:#1E2430; --text-muted:#7A8190;
+    --primary:#4F6F94; --primary-hover:#425F82; --primary-tint:#DCE7F3;
+    --butter:#F3E6C4; --blush:#F4DCD8; --lilac:#E4DEF1; --sky:#DCE7F3; --sand:#EADFCB;
+    --ok-bg:#DDEDE4; --ok-text:#2F5D46;
+    --r-card:24px; --r-inner:16px; --r-sm:10px; --r-pill:999px;
+    --shadow-card:0 1px 2px rgba(30,36,48,.04), 0 12px 32px rgba(30,36,48,.06);
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
+    --font:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --t-xs:11px; --t-sm:12px; --t-md:13px; --t-base:14px; --t-lg:16px; --t-xl:20px;
+    --ease:cubic-bezier(.2,.8,.2,1); --dur-mid:300ms;
+  }
+  body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:var(--t-base);line-height:1.45;min-height:100vh}
+  .wrap{max-width:1120px;margin:0 auto;padding:var(--s6) var(--s5) var(--s7);display:grid;gap:var(--s5)}
+  h1{font-size:26px;letter-spacing:-.02em;line-height:1.1}
+  .sub{font-size:var(--t-sm);color:var(--text-muted);margin-top:6px;max-width:72ch}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s4)}
+  .card{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:var(--s5);display:grid;gap:var(--s4);align-content:start}
+  .card.pick{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint)}
+  .head{display:flex;align-items:center;justify-content:space-between;gap:var(--s2)}
+  .name{font-size:var(--t-lg);font-weight:750;letter-spacing:-.01em}
+  .badge{display:inline-flex;align-items:center;gap:5px;border-radius:var(--r-pill);padding:3px 10px;font-size:var(--t-xs);font-weight:700;background:var(--ok-bg);color:var(--ok-text)}
+  .stage{background:var(--surface-2);border:1px solid var(--hairline);border-radius:var(--r-inner);padding:var(--s5);display:grid;gap:var(--s4);justify-items:center}
+  .sizes{display:flex;align-items:flex-end;gap:var(--s5)}
+  .cap{font-size:var(--t-xs);color:var(--text-muted);text-align:center}
+  .why{font-size:var(--t-sm);color:var(--text-muted);display:grid;gap:6px}
+  .why b{color:var(--text)}
+  .notes{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:var(--s5);display:grid;gap:var(--s3)}
+  .notes h2{font-size:var(--t-lg);font-weight:750;letter-spacing:-.01em}
+  .notes ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:var(--t-sm);color:var(--text-muted)}
+  .notes code{font-family:var(--font-mono);font-size:var(--t-xs);background:var(--surface-2);border:1px solid var(--hairline);border-radius:6px;padding:1px 5px}
+  .sample-tag{position:fixed;top:16px;right:16px;z-index:10;display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--hairline);border-radius:var(--r-pill);padding:6px 12px;font-size:var(--t-xs);font-weight:700;letter-spacing:.06em;color:var(--text-muted);box-shadow:var(--shadow-card)}
+  .sample-tag i{width:8px;height:8px;border-radius:50%;background:var(--sand);display:inline-block}
+  @media (max-width:860px){ .grid{grid-template-columns:1fr} }
+  @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+</style>
+</head>
+<body>
+
+<div class="sample-tag"><i></i>SAMPLE: static mockup, no live data</div>
+
+<div class="wrap">
+  <header>
+    <h1>Logo options</h1>
+    <p class="sub">One concept family: a rounded square containing an arch (a doorway) with a short horizontal line passing through it, so the mark reads as a gateway. Flat single colour, ink <code>#1E2430</code> or dusty blue <code>#4F6F94</code>, no gradients and no sparkles.</p>
+  </header>
+
+  <div class="grid">
+    <!-- ============ option A: recommended ============ -->
+    <section class="card pick">
+      <div class="head">
+        <div class="name">A. Balanced arch</div>
+        <span class="badge">Recommended</span>
+      </div>
+      <div class="stage">
+        <div class="sizes">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-label="Option A at 24 pixels"><rect x="3" y="3" width="18" height="18" rx="5.5" fill="none" stroke="#1E2430" stroke-width="1.9"/><path d="M9.2 16.8v-3.4a2.8 2.8 0 0 1 5.6 0v3.4" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/><path d="M7 12h10" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <svg width="40" height="40" viewBox="0 0 24 24" role="img" aria-label="Option A at 40 pixels"><rect x="3" y="3" width="18" height="18" rx="5.5" fill="none" stroke="#1E2430" stroke-width="1.9"/><path d="M9.2 16.8v-3.4a2.8 2.8 0 0 1 5.6 0v3.4" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/><path d="M7 12h10" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </div>
+        <div class="cap">24px and 40px, ink</div>
+      </div>
+      <div class="why">
+        <span><b>Why this one:</b> the arch occupies about 40 percent of the square, so the doorway, the crossbar and the rounded square still separate cleanly at favicon size.</span>
+        <span>The line passes through the arch opening (not the apex), which is the only variant that keeps the gateway gesture at 16px.</span>
+        <span>Corner radius 5.5 stays friendly without turning the square into a circle.</span>
+      </div>
+    </section>
+
+    <!-- ============ option B ============ -->
+    <section class="card">
+      <div class="head">
+        <div class="name">B. Tall narrow arch</div>
+      </div>
+      <div class="stage">
+        <div class="sizes">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-label="Option B at 24 pixels"><rect x="4" y="2.5" width="16" height="19" rx="4.5" fill="none" stroke="#1E2430" stroke-width="1.9"/><path d="M10 17.2v-4.7a2 2 0 0 1 4 0v4.7" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/><path d="M6.5 12.6h11" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <svg width="40" height="40" viewBox="0 0 24 24" role="img" aria-label="Option B at 40 pixels"><rect x="4" y="2.5" width="16" height="19" rx="4.5" fill="none" stroke="#1E2430" stroke-width="1.9"/><path d="M10 17.2v-4.7a2 2 0 0 1 4 0v4.7" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/><path d="M6.5 12.6h11" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </div>
+        <div class="cap">24px and 40px, ink</div>
+      </div>
+      <div class="why">
+        <span><b>Not chosen:</b> the portrait square and narrow arch read as a door niche, and at 16px the crossbar crowds the arch shoulders.</span>
+        <span>Kept as a fallback if the mark ever needs a taller lockup.</span>
+      </div>
+    </section>
+
+    <!-- ============ option C ============ -->
+    <section class="card">
+      <div class="head">
+        <div class="name">C. Wide low arch</div>
+      </div>
+      <div class="stage">
+        <div class="sizes">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-label="Option C at 24 pixels"><rect x="2.5" y="4" width="19" height="16" rx="6" fill="none" stroke="#1E2430" stroke-width="1.9"/><path d="M8.4 16v-2.6a3.6 3.6 0 0 1 7.2 0V16" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/><path d="M6 11.2h12" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <svg width="40" height="40" viewBox="0 0 24 24" role="img" aria-label="Option C at 40 pixels"><rect x="2.5" y="4" width="19" height="16" rx="6" fill="none" stroke="#1E2430" stroke-width="1.9"/><path d="M8.4 16v-2.6a3.6 3.6 0 0 1 7.2 0V16" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/><path d="M6 11.2h12" fill="none" stroke="#1E2430" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </div>
+        <div class="cap">24px and 40px, ink</div>
+      </div>
+      <div class="why">
+        <span><b>Not chosen:</b> the wide radius and low arch collapse into a plain rounded box below 20px, and the crossbar sits too close to the top edge.</span>
+        <span>Good as an oversized watermark or illustration accent.</span>
+      </div>
+    </section>
+  </div>
+
+  <section class="notes">
+    <h2>Usage</h2>
+    <ul>
+      <li>Chosen mark: option A. Drawn once as an inline SVG symbol (<code>#i-logo</code>) and reused in every mockup at 24px and 40px, in ink <code>#1E2430</code> on light surfaces or white on the dusty blue primary.</li>
+      <li>Wordmark: "Urumi" in the system font stack, semibold, tight letter spacing. A small lighter "Gateway" label sits beside it on the login page only.</li>
+      <li>Favicon: <code>design/mockups/favicon.svg</code> uses a filled ink rounded square with the arch and line knocked out in white, so it reads on light and dark browser themes.</li>
+      <li>Minimum size 16px. Below that, drop the crossbar and keep the arch only.</li>
+      <li>No gradients, no sparkles, no glow, no robot or brain imagery, no purple to blue fade, no abstract swirl.</li>
+    </ul>
+  </section>
+</div>
+
+</body>
+</html>

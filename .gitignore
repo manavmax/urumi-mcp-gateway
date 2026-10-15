@@ -55,6 +55,9 @@ Thumbs.db
 # Artifacts (screenshots, live SSE dumps — not committed)
 artifacts/
 
+# Design mockup PNG renders (regenerate with node design/mockups/shoot.mjs)
+design/mockups/png/
+
 # Logs & tmp
 *.log
 /tmp/
