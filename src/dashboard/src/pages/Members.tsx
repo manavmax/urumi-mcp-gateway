@@ -123,23 +123,13 @@ export default function Members() {
           </div>
         </div>
 
-        {!isAdmin && (
-          <div className="note-banner">
-            <Icon name="eye" />
-            <div>
-              <b>Viewing as member.</b> <span className="mono">GET /api/users</span> is admin-only (403 here), so this view shows
-              your own keys only. You can create and revoke keys for yourself. <span className="src">GET /api/keys · role from /api/me</span>
-            </div>
-          </div>
-        )}
-
         {err && <div className="alert alert-error" role="alert">{err}</div>}
 
         {/* stats */}
         <section className="grid-4" aria-label="Membership summary">
           {isAdmin && (
             <div className="card stat">
-              <div className="stat-label">Members <span className="src">GET /api/users</span></div>
+              <div className="stat-label">Members</div>
               <div className="stat-num">{loading ? <span className="sk num" style={{ width: 60 }} /> : users.length}</div>
               <div className="stat-foot">
                 <span className="chip chip-accent"><Icon name="users" />{adminCount} admin · {memberCount} members</span>
@@ -148,7 +138,7 @@ export default function Members() {
           )}
           {isAdmin && (
             <div className="card stat">
-              <div className="stat-label">Active accounts <span className="src">GET /api/users</span></div>
+              <div className="stat-label">Active accounts</div>
               <div className="stat-num">{users.filter((u) => u.is_active).length} <span className="stat-unit">of {users.length}</span></div>
               <div className="stat-foot">
                 <span className="chip chip-neutral"><Icon name="dot" />{users.filter((u) => !u.is_active).length} deactivated</span>
@@ -157,20 +147,20 @@ export default function Members() {
           )}
           {!isAdmin && (
             <div className="card stat">
-              <div className="stat-label">Your role <span className="src">GET /api/me</span></div>
+              <div className="stat-label">Your role</div>
               <div className="stat-num" style={{ fontSize: 26 }}>Member</div>
               <div className="stat-foot"><span className="chip chip-accent">can chat · audit own rows · own keys</span></div>
             </div>
           )}
           <div className="card stat">
-            <div className="stat-label">API keys <span className="src">GET /api/keys</span></div>
+            <div className="stat-label">API keys</div>
             <div className="stat-num">{activeKeys.length} <span className="stat-unit">active</span></div>
             <div className="stat-foot">
               <span className="chip chip-neutral"><Icon name="pause" />{revokedKeys.length} revoked</span>
             </div>
           </div>
           <div className="card stat">
-            <div className="stat-label">Key storage <span className="src">db.api_keys</span></div>
+            <div className="stat-label">Key storage</div>
             <div className="stat-num" style={{ fontSize: 26 }}>SHA-256</div>
             <div className="stat-foot"><span className="chip chip-accent"><Icon name="lock" />raw key shown once</span></div>
           </div>

@@ -195,7 +195,7 @@ export default function OverviewMember() {
           <h1>Hello, {name}</h1>
         </div>
         <div className="head-actions">
-          <form className="search" title="Search behaviour: filters the current page" onSubmit={(e) => e.preventDefault()}>
+          <form className="search" onSubmit={(e) => e.preventDefault()}>
             <input type="search" placeholder="Search my calls, servers, tools" aria-label="Search" />
             <button className="search-go" type="submit" aria-label="Search"><Icon name="search" sm /></button>
           </form>
@@ -303,7 +303,7 @@ export default function OverviewMember() {
       <section className="bento activity-row" aria-label="My activity">
         {/* hero: my calls */}
         <div className="card stat hero">
-          <div className="stat-label">My calls, {windowDays} days <span className="src">GET /api/stats</span></div>
+          <div className="stat-label">My calls, {windowDays} days</div>
           <div className="stat-num">
             {stats ? myCalls.toLocaleString("en-US") : <span className="sk num" style={{ width: 100 }} />}
           </div>
@@ -313,7 +313,7 @@ export default function OverviewMember() {
         </div>
         {/* success rate sparkline */}
         <div className="card stat">
-          <div className="stat-label">Success rate, {windowDays} days <span className="src">GET /api/stats</span></div>
+          <div className="stat-label">Success rate, {windowDays} days</div>
           <div className="stat-num" style={{ fontSize: 30 }}>
             {mySuccessRate == null ? "n/a" : `${mySuccessRate}%`}
           </div>
@@ -335,7 +335,7 @@ export default function OverviewMember() {
         </div>
         {/* p95 latency sparkline */}
         <div className="card stat">
-          <div className="stat-label">p95 latency, {windowDays} days <span className="src">GET /api/stats</span></div>
+          <div className="stat-label">p95 latency, {windowDays} days</div>
           <div className="stat-num" style={{ fontSize: 30 }}>
             {fmtMs(myP95)}
           </div>
@@ -373,7 +373,7 @@ export default function OverviewMember() {
           <div className="card-head">
             <div>
               <div className="card-title">Calls per day</div>
-              <div className="card-sub">Last {windowDays} days · <span className="src">GET /api/stats</span></div>
+              <div className="card-sub">Last {windowDays} days</div>
             </div>
           </div>
           <svg viewBox="0 0 640 205" width="100%" role="img" aria-label="Bar chart of calls per day">
@@ -454,7 +454,7 @@ export default function OverviewMember() {
         <div className="card-head">
           <div>
             <div className="card-title"><Icon name="clock" />Recent activity</div>
-            <div className="card-sub">Latest tool calls · <span className="src">GET /api/audit?limit=8</span></div>
+            <div className="card-sub">Latest tool calls</div>
           </div>
           <Link className="link" to="/audit">Audit<Icon name="arrow-right" sm /></Link>
         </div>

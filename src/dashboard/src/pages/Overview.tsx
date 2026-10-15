@@ -148,11 +148,11 @@ export default function Overview() {
         <div>
           <h1>Hello, {displayName(user?.email) || "there"}</h1>
           <p className="card-sub">
-            Fleet health, tool-call volume and outcomes. Every number maps to a live endpoint, see source tags.
+            Fleet health, tool-call volume and outcomes.
           </p>
         </div>
         <div className="head-actions">
-          <form className="search" title="Search behaviour: filters the current page" onSubmit={(e) => e.preventDefault()}>
+          <form className="search" onSubmit={(e) => e.preventDefault()}>
             <input type="search" placeholder="Search servers, tools, audit" aria-label="Search" />
             <button className="search-go" type="submit" aria-label="Search"><Icon name="search" sm /></button>
           </form>
@@ -185,7 +185,7 @@ export default function Overview() {
       {/* row 1: four equal stat tiles, one gradient hero (use a) */}
       <section className="bento row1" aria-label="Key metrics">
         <div className="card stat hero">
-          <div className="stat-label">Tool calls, {windowDays} days <span className="src">NEW /api/stats</span></div>
+          <div className="stat-label">Tool calls, {windowDays} days</div>
           <div className="stat-num">{stats ? stats.audit.calls.toLocaleString("en-US") : <span className="sk num" style={{ width: 120 }} />}</div>
           <div className="small">across enabled servers</div>
           <div className="stat-foot">
@@ -193,7 +193,7 @@ export default function Overview() {
           </div>
         </div>
         <div className="card stat">
-          <div className="stat-label">Success rate, {windowDays} days <span className="src">NEW /api/stats</span></div>
+          <div className="stat-label">Success rate, {windowDays} days</div>
           <div className="stat-num">{rate == null ? "n/a" : `${rate}%`}</div>
           <svg width="100%" height="34" viewBox="0 0 140 34" preserveAspectRatio="none" role="img" aria-label="Mini bar sparkline of daily success">
             <title>Daily success rate (live data)</title>
@@ -210,7 +210,7 @@ export default function Overview() {
           </div>
         </div>
         <div className="card stat">
-          <div className="stat-label">p95 latency, {windowDays} days <span className="src">NEW /api/stats</span></div>
+          <div className="stat-label">p95 latency, {windowDays} days</div>
           <div className="stat-num">{p95.value}<span className="stat-unit">{p95.unit}</span></div>
           <svg width="100%" height="34" viewBox="0 0 140 34" preserveAspectRatio="none" role="img" aria-label="Line squiggle of p95 latency">
             <title>p95 latency trend (live data)</title>
@@ -243,7 +243,6 @@ export default function Overview() {
           <div className="stat-label">Servers connected</div>
           <div className="stat-num">{connected} <span className="stat-unit">of {servers.length}</span></div>
           <div className="small muted">{unreachable} unreachable, {disabled} disabled</div>
-          <div className="stat-foot"><span className="src">GET /api/servers</span></div>
         </div>
       </section>
 
@@ -253,7 +252,7 @@ export default function Overview() {
           <div className="card-head">
             <div>
               <div className="card-title">Tool calls per day</div>
-              <div className="card-sub">Last {windowDays} days, bars = calls, cap = errors · <span className="src">NEW /api/stats</span></div>
+              <div className="card-sub">Last {windowDays} days, bars = calls, cap = errors</div>
             </div>
             <div className="row small muted">
               <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#C9D2E2", display: "inline-block" }}></span>calls</span>
@@ -309,7 +308,7 @@ export default function Overview() {
         </div>
         {/* gradient use (b): half-ring gauge, very soft gradient fill */}
         <div className="card stat" style={{ alignContent: "center", justifyItems: "center", textAlign: "center" }}>
-          <div className="stat-label" style={{ justifySelf: "start" }}>Success rate, {windowDays} days <span className="src">NEW /api/stats</span></div>
+          <div className="stat-label" style={{ justifySelf: "start" }}>Success rate, {windowDays} days</div>
           <svg width="200" height="118" viewBox="0 0 200 118" role="img" aria-label="Half-ring gauge showing the success rate">
             <title>Success rate gauge (live data)</title>
             <path d="M16 100 A84 84 0 0 1 184 100" fill="none" stroke="#F0EFEB" strokeWidth="14" strokeLinecap="round" />
@@ -356,7 +355,6 @@ export default function Overview() {
             <span className="chip chip-accent"><Icon name="key" />{activeKeys} active keys</span>
           </div>
           <Link className="link" to="/members" style={{ marginTop: 6 }}>Manage keys<Icon name="arrow-right" sm /></Link>
-          <span className="src" style={{ marginTop: 6 }}>GET /api/me · GET /api/keys</span>
         </div>
       </section>
 
@@ -366,7 +364,7 @@ export default function Overview() {
           <div className="card-head">
             <div>
               <div className="card-title">Recent activity</div>
-              <div className="card-sub">Latest tool calls · <span className="src">GET /api/audit?limit=8</span></div>
+              <div className="card-sub">Latest tool calls</div>
             </div>
             <Link className="link" to="/audit">Audit<Icon name="arrow-right" sm /></Link>
           </div>
@@ -388,7 +386,7 @@ export default function Overview() {
           <div className="card-head">
             <div>
               <div className="card-title">Tools overview</div>
-              <div className="card-sub">Exposed tools by server · <span className="src">GET /api/tools</span></div>
+              <div className="card-sub">Exposed tools by server</div>
             </div>
           </div>
           {servers.length === 0 && <div className="small muted">No servers registered yet.</div>}
@@ -430,7 +428,6 @@ export default function Overview() {
               </span>
             </div>
           ))}
-          <span className="src" style={{ marginTop: 8 }}>GET /api/servers</span>
         </div>
       </section>
 

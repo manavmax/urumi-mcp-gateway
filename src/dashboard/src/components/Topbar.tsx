@@ -45,7 +45,6 @@ export function Topbar() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <span className="kbd">⌘K</span>
       </label>
       <button className="icon-btn" type="button" aria-label="Notifications">
         <Icon name="bell" />
@@ -62,7 +61,7 @@ export function Topbar() {
             <div className="avatar">{initials(user?.email)}</div>
             <div>
               <b style={{ fontSize: "var(--t-md)" }}>{user?.email}</b>
-              <div className="small muted">{roleLabel} · GET /api/me</div>
+              <div className="small muted">{roleLabel}</div>
             </div>
           </div>
           <Link to="/members"><Icon name="users" sm />Members &amp; keys</Link>

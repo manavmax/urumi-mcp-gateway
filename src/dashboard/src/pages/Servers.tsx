@@ -138,16 +138,6 @@ export default function Servers() {
           </div>
         </div>
 
-        {!isAdmin && (
-          <div className="note-banner">
-            <Icon name="eye" />
-            <div>
-              <b>Viewing as member.</b> Only admins can add, edit, enable/disable or delete servers, the controls below are
-              hidden for this role. <span className="src">GET /api/servers · role from /api/me</span>
-            </div>
-          </div>
-        )}
-
         {err && <div className="alert alert-error" role="alert">{err}</div>}
 
         {/* summary */}
@@ -159,7 +149,6 @@ export default function Servers() {
             <span className="chip chip-neutral"><Icon name="dot" />{counts.unknown} unknown</span>
             <span className="chip chip-warn"><Icon name="pause" />{counts.disabled} disabled</span>
           </div>
-          <span className="src">GET /api/servers, counted client-side, no new endpoint</span>
         </section>
 
         {/* table */}

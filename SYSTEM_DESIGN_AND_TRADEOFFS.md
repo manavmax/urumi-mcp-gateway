@@ -36,3 +36,39 @@ Timeout 10s per call, health probe 15s, breaker open 30s, audit async queue (10k
 ## Stand-out
 
 VPS deploy, per-tool RBAC (members read-only), deny-by-default NetworkPolicy + SSRF validator, optional `search_tools` meta-tool for many-server scale.
+
+## API map
+
+Every dashboard tile/card and its live endpoint. "Admin" scope means the member
+response is scoped to the signed-in user (server-side); "Member" rows are the
+own-account values shown to a non-admin.
+
+| Page | Tile or card | Endpoint | Role scope |
+|---|---|---|---|
+| Overview (admin) | Fleet health subtitle, tool-call volume, success rate, p95 latency, per-day chart, delta vs previous window | `GET /api/stats?range=` | Admin sees all users; member sees own rows |
+| Overview (admin) | Servers connected / unreachable / disabled | `GET /api/servers` | Read-only, both roles |
+| Overview (admin) | My account (name, role, active keys) | `GET /api/me` + `GET /api/keys` | Own account only |
+| Overview (admin) | Recent activity (latest 8 calls) | `GET /api/audit?limit=8` | Admin sees all; member sees own rows |
+| Overview (admin) | Tools overview (exposed tools by server) | `GET /api/tools` | Read-only, both roles |
+| Overview (member) | My calls / success rate / p95 / per-day chart | `GET /api/stats?range=` (member branch: `own_calls_total`, `own_api_key_calls`, `own_keys_active`) | Own account only |
+| Overview (member) | Servers connected (permissioned read) | `GET /api/servers` | Read-only, both roles |
+| Overview (member) | Recent activity | `GET /api/audit?limit=8` | Own rows only |
+| Overview (member) | Tools I can use | `GET /api/tools` | Read-only, both roles |
+| Overview (member) | Getting-started steps (create key, connect client, first call) | `GET /api/stats` (own counters) + `GET /api/keys` | Own account only |
+| Servers | Registered / connected / unreachable / unknown / disabled summary | `GET /api/servers` | Read-only, both roles |
+| Servers | All servers table (status, enabled, tools) | `GET /api/servers` + `GET /api/tools` | Read-only; admin CRUD via `POST/PATCH/DELETE /api/servers` + `POST /api/servers/{id}/enable|disable` |
+| Members | Members / active accounts summary (admin) | `GET /api/users` | Admin only (403 for member) |
+| Members | Your role (member) | `GET /api/me` | Own account only |
+| Members | API keys summary + keys table | `GET /api/keys` | Admin sees all keys; member sees own |
+| Members | Key storage note (SHA-256, shown once) | `GET /api/keys` | Both roles |
+| Members | Invite member form | `POST /api/users` | Admin only |
+| Members | Delete member row | `DELETE /api/users/{id}` | Admin only |
+| Members | Revoke key row | `POST /api/keys/{id}/revoke` | Own keys (member) or any (admin) |
+| Members | New-key reveal card | `POST /api/keys` | Own account (member) or on behalf (admin) |
+| Audit | Scoping banner, filter form, table | `GET /api/audit` | Admin sees all + user filter; member own rows only |
+| Audit | CSV export | `GET /api/audit/export` | Admin only, capped 5000 rows |
+| Chat | Thread, SSE tokens + tool chips, model badge | `POST /api/chat` (SSE) | Both roles; member acts as themselves |
+| Chat | History search | Client-side filter over the loaded thread history | — |
+| Topbar | Signed-in user + role | `GET /api/me` | Own account only |
+| Sidebar/Overview | Page search | Client-side filter of the current page (no endpoint) | — |
+
