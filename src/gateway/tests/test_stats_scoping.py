@@ -199,6 +199,39 @@ async def test_stats_never_leak_secrets(harness):
 
 
 @pytest.mark.asyncio
+async def test_stats_counts_exact_when_sample_cap_exceeded(harness, monkeypatch):
+    """The duration-percentile sample is capped (and ordered newest first), but the
+    headline counts must stay exact SQL aggregates: with the cap lowered below the
+    window's row count, calls/success/errors still describe every row, and the
+    percentiles are deterministic (newest rows, never an arbitrary subset)."""
+    from routes import stats as stats_routes
+
+    app, session_factory = harness
+    monkeypatch.setattr(stats_routes, "DURATION_FETCH_CAP", 2)
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        member_id = (await db.execute(select(User.id).where(User.email == MEMBER["email"]))).scalar_one()
+        for i in range(4):
+            db.add(AuditLog(id=7000 + i, ts=now - timedelta(hours=i + 1), user_id=member_id,
+                            server_slug="bulk", tool_exposed_name="t__bulk", tool_upstream_name="ping",
+                            request_id=uuid.uuid4(), duration_ms=10 + i, outcome="success"))
+        await db.commit()
+    async with _role_client(app, MEMBER["email"], MEMBER["password"]) as (client, headers):
+        first = (await client.get("/api/stats", headers=headers)).json()
+        again = (await client.get("/api/stats", headers=headers)).json()
+        # member seeded rows (2) + the 4 new rows = 6, far beyond the cap of 2
+        assert first["audit"]["calls"] == 6, "counts are exact, never a capped sample"
+        assert first["audit"]["success"] == 6
+        assert first["audit"]["success_rate"] == 100.0
+        assert sum(row["calls"] for row in first["audit"]["per_day"]) == 6
+        # percentiles come from the newest 2 rows only (durations 10, 11): stable
+        assert first["audit"]["p95_ms"] == 11
+        assert first["audit"]["p95_ms"] == again["audit"]["p95_ms"]
+        # own_api_key_calls is an exact count too (1 seeded api-key row in window)
+        assert first["own_api_key_calls"] == 1
+
+
+@pytest.mark.asyncio
 async def test_csv_export_admin_only(harness):
     app, _session_factory = harness
     async with _anon_client(app) as anon:

@@ -2,6 +2,8 @@
 
 Window: a named range, default the approved 14 days. Admin = every user's
 calls; member = only their own audit rows (same scoping rule as /api/audit).
+Counts are exact SQL aggregates; only the duration percentiles come from a
+bounded sample (newest rows first, so the cap degrades deterministically).
 All queries are parameterized SQLAlchemy selects; no raw SQL, no argument
 values or credentials in the response.
 """
@@ -27,8 +29,9 @@ RANGE_WINDOWS: dict[str, timedelta] = {
     "14d": timedelta(days=14),
 }
 
-# Percentiles and the per-day series are computed in Python over the window's
-# rows: portable across Postgres (prod) and sqlite (tests), bounded by a cap.
+# Percentiles are computed in Python over the newest rows of the window:
+# portable across Postgres (prod) and sqlite (tests), bounded by a cap. Counts
+# and the per-day series are exact SQL aggregates and never see the cap.
 DURATION_FETCH_CAP = 50000
 
 
@@ -37,6 +40,11 @@ def _percentile(sorted_values: list[int], q: float) -> int:
         return 0
     idx = min(len(sorted_values) - 1, max(0, round(q * (len(sorted_values) - 1))))
     return sorted_values[idx]
+
+
+def _day_key(value) -> str:
+    """func.date() yields a date object on Postgres and a string on sqlite."""
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
 
 @router.get("")
@@ -56,37 +64,48 @@ async def get_stats(
     if not is_admin:
         scope.append(AuditLog.user_id == user.id)
 
-    # One bounded fetch covers counts, per-day, durations and top tools.
-    res = await db.execute(
-        select(
-            AuditLog.ts,
-            AuditLog.duration_ms,
-            AuditLog.outcome,
-            AuditLog.tool_exposed_name,
-            AuditLog.api_key_id,
-        )
+    # Exact outcome counts (one group-by, no row fetch).
+    outcome_res = await db.execute(
+        select(AuditLog.outcome, func.count()).where(*scope).group_by(AuditLog.outcome)
+    )
+    by_outcome: Counter = Counter({o: int(n) for o, n in outcome_res.all()})
+
+    # Exact per-day calls/errors (group by day and outcome, then fold).
+    day_res = await db.execute(
+        select(func.date(AuditLog.ts), AuditLog.outcome, func.count())
         .where(*scope)
+        .group_by(func.date(AuditLog.ts), AuditLog.outcome)
+    )
+    per_day: dict[str, dict] = {}
+    for day_val, outcome, n in day_res.all():
+        bucket = per_day.setdefault(_day_key(day_val), {"calls": 0, "errors": 0})
+        bucket["calls"] += int(n)
+        if outcome != "success":
+            bucket["errors"] += int(n)
+
+    # Exact top tools (bounded, deterministic tiebreak).
+    tool_res = await db.execute(
+        select(AuditLog.tool_exposed_name, func.count())
+        .where(*scope)
+        .group_by(AuditLog.tool_exposed_name)
+        .order_by(func.count().desc(), AuditLog.tool_exposed_name)
+        .limit(5)
+    )
+    top_tools = [{"tool": tool, "calls": int(n)} for tool, n in tool_res.all()]
+
+    # Duration sample for the percentiles: newest rows first, so when the cap
+    # ever binds it trims the oldest rows instead of an arbitrary subset.
+    dur_res = await db.execute(
+        select(AuditLog.ts, AuditLog.duration_ms)
+        .where(*scope)
+        .order_by(AuditLog.ts.desc())
         .limit(DURATION_FETCH_CAP)
     )
-    rows = res.all()
-
-    by_outcome: Counter = Counter()
     durations: list[int] = []
-    tool_counter: Counter = Counter()
-    per_day: dict[str, dict] = {}
-    own_api_key_calls = 0
-    for ts, duration_ms, outcome, tool_name, api_key_id in rows:
-        by_outcome[outcome] += 1
+    day_durations: dict[str, list[int]] = {}
+    for ts, duration_ms in dur_res.all():
         durations.append(duration_ms)
-        tool_counter[tool_name] += 1
-        day = ts.date().isoformat()
-        bucket = per_day.setdefault(day, {"calls": 0, "errors": 0, "durations": []})
-        bucket["calls"] += 1
-        if outcome != "success":
-            bucket["errors"] += 1
-        bucket["durations"].append(duration_ms)
-        if api_key_id is not None:
-            own_api_key_calls += 1
+        day_durations.setdefault(ts.date().isoformat(), []).append(duration_ms)
 
     calls = sum(by_outcome.values())
     success = by_outcome.get("success", 0)
@@ -102,21 +121,19 @@ async def get_stats(
     prev_calls = int(prev_res.scalar() or 0)
 
     # Fill every day of the window (including empty days) so the chart has a
-    # complete series with no gaps.
+    # complete series with no gaps. Calls/errors per day are exact; the per-day
+    # p95 comes from the newest-rows duration sample.
     per_day_series: list[dict] = []
     day = (now - window).date()
     while day <= now.date():
         key = day.isoformat()
-        bucket = per_day.get(key)
-        if bucket:
-            per_day_series.append({
-                "date": key,
-                "calls": bucket["calls"],
-                "errors": bucket["errors"],
-                "p95_ms": _percentile(sorted(bucket["durations"]), 0.95),
-            })
-        else:
-            per_day_series.append({"date": key, "calls": 0, "errors": 0, "p95_ms": 0})
+        counts = per_day.get(key, {"calls": 0, "errors": 0})
+        per_day_series.append({
+            "date": key,
+            "calls": counts["calls"],
+            "errors": counts["errors"],
+            "p95_ms": _percentile(sorted(day_durations.get(key, [])), 0.95),
+        })
         day += timedelta(days=1)
 
     servers_res = await db.execute(select(Server.status, func.count()).group_by(Server.status))
@@ -129,8 +146,6 @@ async def get_stats(
         .where(Server.enabled.is_(True))
     )
     tools_exposed = int(tools_res.scalar() or 0)
-
-    top_tools = [{"tool": tool, "calls": n} for tool, n in tool_counter.most_common(5)]
 
     out = {
         "range": range,
@@ -160,5 +175,10 @@ async def get_stats(
             .where(ApiKey.user_id == user.id, ApiKey.revoked_at.is_(None))
         )
         out["own_keys_active"] = int(keys_res.scalar() or 0)
-        out["own_api_key_calls"] = own_api_key_calls
+        key_calls_res = await db.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(*scope, AuditLog.api_key_id.is_not(None))
+        )
+        out["own_api_key_calls"] = int(key_calls_res.scalar() or 0)
     return out
