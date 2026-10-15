@@ -5,12 +5,12 @@
 
    Contents, in a bento layout like the admin page:
      1. Greeting row ("Hello, <name>") + pill search
-     2. "Getting started" card — 3 steps, real state, hidden once all done
-     3. "Connect your client" card — MCP URL, usage note, active key count
-     4. "My activity" — 3 tiles: calls (hero), success rate, p95 latency
-     5. "Tools I can use" — grouped by server, status badge, click for description
-     6. "Recent activity" — last 8 audit rows
-     7. "Try in chat" — 3 suggestion cards, navigate with prefill (not sent)
+     2. "Getting started" card: 3 steps, real state, hidden once all done
+     3. "Connect your client" card: MCP URL, usage note, active key count
+     4. "My activity": 3 tiles: calls (hero), success rate, p95 latency
+     5. "Tools I can use": grouped by server, status badge, click for description
+     6. "Recent activity": last 8 audit rows
+     7. "Try in chat": 3 suggestion cards, navigate with prefill (not sent)
 */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -405,7 +405,7 @@ export default function OverviewMember() {
             </g>
           </svg>
         </div>
-        {/* Tools I can use — same visual as the servers page tool list */}
+        {/* Tools I can use: same visual as the servers page tool list */}
         <div className="card">
           <div className="card-head">
             <div className="card-title" style={{ fontSize: "var(--t-md)" }}><Icon name="wrench" />Tools I can use</div>

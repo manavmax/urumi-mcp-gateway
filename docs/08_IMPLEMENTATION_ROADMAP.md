@@ -73,7 +73,7 @@
 
 - [ ] Provision $6/mo VPS, install k3s, ingress-nginx, (optional) cert-manager + letsencrypt
 - [ ] `helm upgrade --install urumi ./helm -f values-prod.yaml` — verify store + dashboard + /mcp from internet
-- [ ] Document `what changes through values` in README + SYSTEM_DESIGN
+- [ ] Document `what changes through values` in README + `SYSTEM_DESIGN_AND_TRADEOFFS.md`
 - **Exit:** VPS URLs work; demo can be recorded against either env
 
 ## Day 12 — Demo Rehearsal + Definition of Done

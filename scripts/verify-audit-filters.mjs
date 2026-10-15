@@ -124,7 +124,7 @@ async function run() {
   }
 
   const failed = results.filter((r) => !r.ok);
-  check("summary", failed.length === 0, failed.length ? `${failed.length} check(s) FAIL` : `${results.length - 1}/${results.length} checks pass`);
+  check("summary", failed.length === 0, failed.length ? `${failed.length} check(s) FAIL` : `${results.length}/${results.length} checks pass`);
   if (failed.length) process.exit(1);
   console.log("\nAUDIT FILTER CHECKS PASSED");
 }
