@@ -250,22 +250,24 @@ export default function Members() {
             </button>
           </div>
 
-          <div className="reveal" hidden={!lastKey}>
-            <div className="row"><Icon name="lock" style={{ color: "var(--primary-hover)" }} /><b>New key: copy now, shown once</b></div>
-            <div className="row">
-              <div className="keybox"><code>{lastKey || ""}</code></div>
-              <button className="btn btn-secondary" type="button"
-                onClick={async () => {
-                  if (!lastKey) return;
-                  await navigator.clipboard.writeText(lastKey);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1400);
-                }}>
-                <Icon name="copy" sm />{copied ? "Copied" : "Copy"}
-              </button>
+          {lastKey && (
+            <div className="reveal">
+              <div className="row"><Icon name="lock" style={{ color: "var(--primary-hover)" }} /><b>New key: copy now, shown once</b></div>
+              <div className="row">
+                <div className="keybox"><code>{lastKey}</code></div>
+                <button className="btn btn-secondary" type="button"
+                  onClick={async () => {
+                    if (!lastKey) return;
+                    await navigator.clipboard.writeText(lastKey);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1400);
+                  }}>
+                  <Icon name="copy" sm />{copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <div className="small muted">This key will not be shown again. Store it in your secret manager, the gateway only keeps a SHA-256 digest.</div>
             </div>
-            <div className="small muted">This key will not be shown again. Store it in your secret manager, the gateway only keeps a SHA-256 digest.</div>
-          </div>
+          )}
 
           <table aria-label="API keys">
             <thead>

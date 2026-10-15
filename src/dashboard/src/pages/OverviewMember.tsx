@@ -196,7 +196,7 @@ export default function OverviewMember() {
         </div>
         <div className="head-actions">
           <form className="search" onSubmit={(e) => e.preventDefault()}>
-            <input type="search" placeholder="Search my calls, servers, tools" aria-label="Search" />
+            <input type="search" placeholder="Search…" aria-label="Search" />
             <button className="search-go" type="submit" aria-label="Search"><Icon name="search" sm /></button>
           </form>
         </div>

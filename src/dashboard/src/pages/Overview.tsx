@@ -153,7 +153,7 @@ export default function Overview() {
         </div>
         <div className="head-actions">
           <form className="search" onSubmit={(e) => e.preventDefault()}>
-            <input type="search" placeholder="Search servers, tools, audit" aria-label="Search" />
+            <input type="search" placeholder="Search…" aria-label="Search" />
             <button className="search-go" type="submit" aria-label="Search"><Icon name="search" sm /></button>
           </form>
         </div>
@@ -297,13 +297,15 @@ export default function Overview() {
               )}
             </g>
           </svg>
-          <div className="float-chip" style={{ right: 24, top: 64 }}>
-            <span className="lab">Success rate, {windowDays} days</span>
-            <span className="val">{rate == null ? "n/a" : `${rate}%`} {delta && <span className={`delta ${delta.dir}`}><Icon name="arrow-up" />{delta.text}</span>}</span>
-          </div>
-          <div className="float-chip" style={{ right: 24, bottom: 58 }}>
-            <span className="lab">p95 latency</span>
-            <span className="val">{p95.value}{p95.unit}</span>
+          <div className="float-chips">
+            <div className="float-chip">
+              <span className="lab">Success rate, {windowDays} days</span>
+              <span className="val">{rate == null ? "n/a" : `${rate}%`} {delta && <span className={`delta ${delta.dir}`}><Icon name="arrow-up" />{delta.text}</span>}</span>
+            </div>
+            <div className="float-chip">
+              <span className="lab">p95 latency</span>
+              <span className="val">{p95.value}{p95.unit}</span>
+            </div>
           </div>
         </div>
         {/* gradient use (b): half-ring gauge, very soft gradient fill */}

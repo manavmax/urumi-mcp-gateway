@@ -206,9 +206,11 @@ h1 { font-size: 28px; letter-spacing: -.02em; line-height: 1.1; font-weight: 700
 .stat.hero { background: var(--grad-A); box-shadow: var(--shadow-card); }
 .stat.hero .stat-label, .stat.hero .stat-unit, .stat.hero .stat-sub { color: var(--text); }
 .stat.hero .src { background: rgba(255,255,255,.65); color: var(--text); }
-/* floating white mini-cards inside the wide chart card */
+/* floating white mini-cards in a reserved band under the wide chart card:
+   flowing (not absolute) so they can never cover the chart subtitle or bars */
 .chart-card { position: relative; }
-.float-chip { position: absolute; background: var(--surface); border-radius: var(--r-inner); box-shadow: var(--shadow-pop); padding: 10px 14px; display: grid; gap: 4px; z-index: 2; }
+.float-chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 4px; }
+.float-chip { background: var(--surface); border-radius: var(--r-inner); box-shadow: var(--shadow-pop); padding: 10px 14px; display: grid; gap: 4px; }
 .float-chip .lab { font-size: var(--t-xs); font-weight: 650; color: var(--text-muted); }
 .float-chip .val { font-size: var(--t-lg); font-weight: 700; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
 /* feed rows: thin vertical accent bar per row, time under the line */
@@ -410,7 +412,7 @@ tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--ink); }
 /* ---------- family F overrides (servers, members, audit) ---------- */
 .fam-f .content { padding: var(--s5) var(--s6) var(--s7); max-width: 1280px; gap: var(--s4); }
 .fam-f h1 { font-size: 26px; }
-.fam-f .page-head { align-items: flex-end; }
+.fam-f .page-head { align-items: flex-start; }
 .fam-f .card-title { font-weight: 750; }
 .fam-f .stat-num { font-weight: 750; }
 .fam-f .src { border: 1px solid var(--hairline); }
