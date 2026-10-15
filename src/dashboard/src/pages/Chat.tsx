@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName } from "../lib/search";
 import { clearHistory, loadHistory, saveSession, type ChatSession, type ChatTurn } from "../lib/history";
@@ -43,8 +44,6 @@ function toolOutput(output: unknown): { text: string; truncated: boolean } {
     truncated: true,
   };
 }
-const OUTCOME_CHIP = (o: string) => (o === "success" ? "chip-ok" : o === "timeout" || o === "circuit_open" ? "chip-warn" : "chip-danger");
-const OUTCOME_ICON = (o: string): "check-circle" | "alert" | "x-circle" => (o === "success" ? "check-circle" : o === "timeout" || o === "circuit_open" ? "alert" : "x-circle");
 function relTime(ts: number): string {
   const secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
   if (secs < 60) return "just now";
@@ -244,7 +243,7 @@ export default function Chat() {
                       <div className="tool-call">
                         <div className="head">
                           <span className="name">{m.tool}</span>
-                          <span className={`chip ${OUTCOME_CHIP(m.outcome || "")}`}><Icon name={OUTCOME_ICON(m.outcome || "")} />{m.outcome || "tool"}</span>
+                          <span className={`chip ${outcomeChip(m.outcome || "").cls}`}><Icon name={outcomeChip(m.outcome || "").icon} />{m.outcome || "tool"}</span>
                         </div>
                         {m.content && (
                           <details className="out">

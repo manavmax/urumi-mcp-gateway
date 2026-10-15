@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type ApiKeyRow, type AuditRow, type Server, type Stats, type StatsRange, type Tool } from "../lib/api";
+import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName, initials } from "../lib/search";
 import { useMockupMotion } from "../lib/motion";
@@ -39,8 +40,6 @@ function relative(iso: string): string {
   if (hours < 24) return `${hours} h ago`;
   return `${Math.round(hours / 24)} d ago`;
 }
-const OUTCOME_ICON = (o: string) => (o === "success" ? "check-circle" : o === "timeout" || o === "circuit_open" ? "alert" : "x-circle");
-const OUTCOME_CHIP = (o: string) => (o === "success" ? "chip-ok" : o === "timeout" || o === "circuit_open" ? "chip-warn" : "chip-danger");
 
 export default function Overview() {
   const { user } = useAuth();
@@ -379,7 +378,7 @@ export default function Overview() {
                 <div className="feed-sub">{r.user_email || "unknown user"} · {relative(r.ts)}</div>
               </div>
               <div className="feed-meta">
-                <span className={`chip ${OUTCOME_CHIP(r.outcome)}`}><Icon name={OUTCOME_ICON(r.outcome)} />{r.outcome}</span>
+                <span className={`chip ${outcomeChip(r.outcome).cls}`}><Icon name={outcomeChip(r.outcome).icon} />{r.outcome}</span>
                 <span className="small faint mono">{fmtMs(r.duration_ms)}</span>
               </div>
             </div>

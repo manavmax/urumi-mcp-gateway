@@ -6,6 +6,7 @@
    from/to on the client exactly as the mockup documents. */
 import { useEffect, useMemo, useState } from "react";
 import { api, type AuditRow } from "../lib/api";
+import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { useSearch } from "../lib/search";
 import { useMockupMotion } from "../lib/motion";
@@ -41,13 +42,6 @@ function relative(iso: string): string {
   if (hours < 24) return `${hours} h ago`;
   return `${Math.round(hours / 24)} d ago`;
 }
-const OUTCOME_CHIP = (o: string): { cls: string; icon: "check-circle" | "alert" | "x-circle" | "deny" } => {
-  if (o === "success") return { cls: "chip-ok", icon: "check-circle" };
-  if (o === "timeout" || o === "circuit_open") return { cls: "chip-warn", icon: "alert" };
-  if (o === "permission_denied") return { cls: "chip-neutral", icon: "deny" };
-  return { cls: "chip-danger", icon: "x-circle" };
-};
-
 export default function Audit() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -242,7 +236,7 @@ export default function Audit() {
               </thead>
               <tbody>
                 {shown.map((r) => {
-                  const chip = OUTCOME_CHIP(r.outcome);
+                  const chip = outcomeChip(r.outcome);
                   return (
                     <tr key={r.id}>
                       <td data-label="Time">
