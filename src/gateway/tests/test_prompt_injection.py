@@ -37,11 +37,6 @@ def _tool_messages(messages: list[dict]) -> list[dict]:
     return [m for m in messages if m.get("role") == "tool"]
 
 
-def _injection_markers_in(msg: dict) -> bool:
-    c = msg.get("content") or ""
-    return "BEGIN TOOL OUTPUT" in c and "untrusted_output" in c
-
-
 def _billing_fields() -> list[tuple[str, str]]:
     """Billing fields woo__get_order returns inside `billing` (verified against the live
     deployment: the full object including first_name, last_name, company, address_1).
@@ -120,6 +115,8 @@ def test_billing_fields_injection_stays_in_tool_role(monkeypatch):
 
 def test_tool_output_never_becomes_system_role(monkeypatch):
     """Poison inside a notes__list_notes result stays in role=tool, never system."""
+    from chat.agent import _tool_output_envelope_intact
+
     poison_payload = {"notes": [{"id": 1, "text": POISON}]}
     captured: list[list[dict]] = []
 
@@ -156,8 +153,8 @@ def test_tool_output_never_becomes_system_role(monkeypatch):
     tool_msgs = _tool_messages(second)
     assert len(tool_msgs) == 1
     assert POISON in tool_msgs[0]["content"]
-    # Envelope present (per-turn marker + JSON field)
-    assert _injection_markers_in(tool_msgs[0])
+    # Envelope present (per-turn marker + JSON field) — the production helper
+    assert _tool_output_envelope_intact(tool_msgs[0]["content"])
     # The envelope must declare untrusted_output
     assert '"untrusted_output"' in tool_msgs[0]["content"]
     # Total system messages across the turn == 1 (the original SYSTEM_PROMPT)
@@ -291,9 +288,12 @@ def _sig400(exc_message: str = "400 Function call is missing a thought_signature
 
 
 def _assert_envelope_intact(content: str) -> None:
-    assert "BEGIN TOOL OUTPUT" in content, "per-turn random delimiter missing"
-    assert "END TOOL OUTPUT" in content, "per-turn random delimiter (END) missing"
-    assert '"untrusted_output"' in content, "JSON envelope field missing"
+    """The boundary the gateway enforces: per-turn BEGIN/END delimiters + JSON envelope.
+    Delegates to the production helper so the test asserts the same markers the code
+    checks, never a weaker hand-rolled copy."""
+    from chat.agent import _tool_output_envelope_intact
+
+    assert _tool_output_envelope_intact(content), "tool-output envelope must stay intact"
 
 
 def _messages_with_poison(calls: list[list[dict]], poison: str) -> list[dict]:
