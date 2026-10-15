@@ -119,18 +119,11 @@ export default function Audit() {
     setExporting(true);
     setErr("");
     try {
-      await api.exportAuditCsv({
-        user_id: isAdmin ? filters.user || undefined : undefined,
-        server: filters.server || undefined,
-        tool: filters.tool || undefined,
-        outcome: filters.outcome || undefined,
-        ...(RANGES[rangeIdx]
-          ? {
-              from: new Date(Date.now() - RANGES[rangeIdx].days! * 86400000).toISOString(),
-              to: new Date().toISOString(),
-            }
-          : {}),
-      });
+      /* export exactly what the table is showing: the same committed filters and
+         range window the last fetch used, minus the page's limit/offset (the CSV
+         is the full result set, admin-only and server-capped at 5000 rows) */
+      const { limit, offset, ...csvParams } = apiParams;
+      await api.exportAuditCsv(csvParams);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {

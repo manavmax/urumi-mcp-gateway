@@ -51,7 +51,7 @@ async function run() {
 
     let requests = [];
     page.on("request", (r) => {
-      if (r.url().includes("/api/audit") && !r.url().includes("/api/audit/export")) requests.push(r.url());
+      if (r.url().includes("/api/audit")) requests.push(r.url());
     });
 
     await page.goto(AUDIT_URL, { waitUntil: "networkidle" });
@@ -95,6 +95,25 @@ async function run() {
       );
       const rowsNow = await page.locator("table tbody tr").count();
       check("filtered page still renders rows (not an empty offset)", rowsNow > 0, `${rowsNow} row(s)`);
+
+      /* 5. CSV export mirrors the table's committed params (Fix 6): same filters
+            and range window, no page limit/offset */
+      requests = [];
+      await page.click(".seg button:has-text('Week')");
+      await waitForAuditRequest(() => requests.length);
+      await page.waitForTimeout(300);
+      requests = [];
+      await page.click("button.btn-secondary:has-text('CSV export')");
+      const exported = await waitForAuditRequest(() => requests.length);
+      await page.waitForTimeout(300);
+      const first = requests[0] || "(no request)";
+      check("CSV export sends exactly one request", exported === 1 && requests.length === 1, first);
+      check(
+        "CSV export carries the table's filters and range window, not a fresh re-derivation",
+        first.includes("/api/audit/export") && /[?&]tool=seed_tool/.test(first) && /[?&]server=seedtest/.test(first) && /[?&]from=/.test(first) && /[?&]to=/.test(first),
+        first,
+      );
+      check("CSV export omits the table page limit/offset", !/[?&]limit=/.test(first) && !/[?&]offset=/.test(first), first);
     } else {
       check("pagination checks (needs >100 audit rows)", true, "SKIPPED: fewer than 100 audit rows (see header to seed)");
     }
