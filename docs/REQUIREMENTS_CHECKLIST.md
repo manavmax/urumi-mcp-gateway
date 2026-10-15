@@ -43,14 +43,14 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 
 | # | DoD step | Status | Command / test | Result observed this session |
 |---|---|---|---|---|
-| 1 | Open store, add product to cart, checkout COD, see order in Woo Admin | DONE | `curl store.127.0.0.1.nip.io` + cart/COD check in wordpress pod + Woo REST order create | store 200; cart with product shows `"payment_methods":["cod"]` (COD OFFERED); Woo REST order #87 created (COD, pending) and visible via `woo__list_orders` |
+| 1 | Open store, add product to cart, checkout COD, see order in Woo Admin | DONE | `node scripts/verify-checkout.mjs` (real browser storefront flow) | real browser: product page -> add to cart -> block checkout -> Cash on delivery -> Place Order; Store API POST returned **order 95 (status processing)**; order confirmed via gateway `woo__list_orders`; test order deleted after. 7/7 PASS. |
 
 ### Phase B — Chat as User A
 
 | # | DoD step | Status | Command / test | Result observed this session |
 |---|---|---|---|---|
 | 2 | Chat "Create a product 'Urumi Tee' price $29.99" | DONE | `node scripts/verify-llm.py` in pod | multi-step loop ran `woo__create_product` -> created product, then `woo__list_orders`; audit rows `woo__create_product | success` |
-| 3 | Hand-place order for that product | DONE | Woo REST order create (see Phase A #1) | order #87 for Urumi Shoes (COD) placed |
+| 3 | Hand-place order for that product | PARTIAL | `node scripts/verify-checkout.mjs` (browser storefront flow) | the browser flow now places a real order through the storefront (order 95, Urumi Shoes), but it was for a different product than the one the chat created in DoD 2, so the literal "hand-place order for THAT product" variant is not fully demonstrated |
 | 4 | Chat "What orders came in today?" -> returns the order | DONE | `POST /api/chat/completions` + `woo__list_orders` probe | order #87 appears in `woo__list_orders` output (id 87, pending, COD) |
 
 ### Phase C — External MCP client as User B
@@ -67,7 +67,7 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 |---|---|---|---|---|
 | 8 | Revoke User B key -> next tools/call -> 401 | DONE | req-on-behalf probe | revoked key -> `401 {"error":{"code":-32000,"message":"invalid or revoked key"}}` |
 | 9 | Disable one upstream -> its tools vanish from chat + client tools/list | DONE | req-on-behalf probe (disable `time`) | client `tools/list` dropped `time__*` (11 -> 9 tools), `woo__*` intact; chat agent only loads enabled servers (`chat/agent.py:231`) |
-| 10 | `kubectl delete pod <woo-mcp-pod>` -> other servers still respond; dashboard shows Unreachable; then restore | DONE | killpod probe (scale deploy to 0, observe, restore to 1) | dashboard showed `woo = Unreachable`; `time__get_current_time` still 200 and tools/list still listed time__+notes__; after restore `woo = Connected` and `woo__list_products` 200. (A bare `kubectl delete pod` recreates in ~30s, faster than the 15s health probe, so the reliable observation used scale-to-0.) |
+| 10 | `kubectl delete pod <woo-mcp-pod>` -> other servers still respond; dashboard shows Unreachable; then restore | PARTIAL | killpod probe (scale deploy to 0, observe, restore to 1) | with the pod gone (scale-to-0) the dashboard showed `woo = Unreachable`, `time__get_current_time` still 200, tools/list still listed time__+notes__; after restore `woo = Connected` and `woo__list_products` 200. **Gap:** the plain `kubectl delete pod` path can MISS the Unreachable window (the pod re-creates in ~30s vs the 15s health probe); the reliable observation required scale-to-0, so the literal DoD command is only verified as PARTIAL. A lower `health_interval_seconds` would make the bare delete path observable. |
 | 11 | Audit log shows every call with correct user attribution | DONE | `psql` query on `audit_logs` join users | rows attributed to `admin@urumi.local` for gateway, `woo__*`, `time__*` calls with outcome + duration |
 
 ---
@@ -136,8 +136,8 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 | OAuth on gateway | NOT DONE | — | explicitly skipped per docs/00 §7 |
 | Many-tools handling (`search_tools` meta-tool) | NOT DONE | — | no `search_tools`/`execute_tool` in `src/gateway` |
 | Hosted MCP servers (image -> deploy) | NOT DONE | — | blueprint only |
-| **Security hardening (SSRF + RBAC + NP)** | DONE | verify-gateway.py SSRF probes + pod network tests | SSRF: `POST /api/servers` with 127.0.0.1 -> 400 "Blocked IP"; RBAC 403s; NetworkPolicy default-deny verified (dashboard pod cannot reach any upstream, gateway can) |
-| **Scaling (multi-replica, stateless)** | DONE | `kubectl scale deploy/urumi-gateway --replicas=2` then tools/list x6 | 6/6 tools/list OK (11 tools) across 2 replicas with no session affinity — stateless aggregation works; scaled back to 1 |
+| **Security hardening (SSRF + RBAC + NP)** | PARTIAL | verify-gateway.py SSRF probes + pod network tests + `kubectl get deploy,sts -o json` + `kubectl get role,rolebinding -n urumi` | SSRF validator and default-deny NetworkPolicy verified live (127.0.0.1 -> 400, dashboard pod cannot reach any upstream). **Open items (not verified):** non-root containers (only some containers set `runAsNonRoot`; no pod-level `securityContext`; wordpress + mariadb run as root — the documented local-VM delta); ServiceAccount token mounting (`automountServiceAccountToken` is `None` on every workload — the default SA token is mounted); least-privilege RBAC (only a `urumi-wp-setup` Role exists; every workload uses the default SA with no least-privilege bindings). List these as open. |
+| **Scaling (multi-replica, stateless)** | PARTIAL | `kubectl scale deploy/urumi-gateway --replicas=2` then tools/list x6 | 6/6 tools/list OK (11 tools) across 2 replicas with no session affinity — stateless aggregation works; scaled back to 1. **Gap:** the rate limiter is per-key but in-memory (`_rate_buckets`), so it is NOT shared across replicas and there is no user-level limit (no Redis); a per-user or per-key *distributed* limit is not implemented. |
 | Observability (metrics) | NOT DONE | `grep metrics src/gateway` | no `/metrics` endpoint (documented as optional in docs/00 §7) |
 | Upgrades/rollback | PARTIAL | `make deploy` (rollout restart) | image rebuild + `kubectl rollout restart` verified; `helm upgrade --atomic`/`rollback` documented but not re-run this session |
 
@@ -151,7 +151,7 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 | Can an admin revoke a key on behalf of a member? | DONE | admin `DELETE /api/keys/<member key id>` | 200 `{"revoked": true}` |
 | Does revoking a key reject the next call? | DONE | `/mcp tools/list` with the revoked key | 401 `invalid or revoked key` |
 | Does disabling a server remove its tools from chat and the external client? | DONE | disable `time` then `/mcp tools/list` + code check `chat/agent.py:231` | tools/list drops `time__*`; chat loads only `Server.enabled.is_(True)` |
-| Does killing an upstream pod leave the others working and show Unreachable? (restore after) | DONE | killpod probe (scale 0 -> observe -> scale 1) | `woo` Unreachable in dashboard while down; `time__` still 200; after restore `woo` Connected + `woo__list_products` 200 |
+| Does killing an upstream pod leave the others working and show Unreachable? (restore after) | PARTIAL | killpod probe (scale 0 -> observe -> scale 1) | `woo` Unreachable in dashboard while down; `time__` still 200; after restore `woo` Connected + `woo__list_products` 200. Same evidence as DoD 10: PARTIAL because the bare `kubectl delete pod` path was not directly observed (scale-to-0 was used). |
 | Are all Helm workloads probed with requests and limits? | DONE | `kubectl get deploy,sts -o json` | every container has liveness+readiness (+startup where applicable) and requests+limits |
 | Are Woo MCP and other upstreams unreachable from outside and from non-gateway pods? | DONE | NetworkPolicy + ingress + pod probes | ingress exposes only store+dashboard; woo-mcp/demo-time/demo-notes are ClusterIP-only; from dashboard pod all 3 time out; from gateway pod all 3 reachable |
 
@@ -159,20 +159,27 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 
 ## 6. Summary
 
-- **DONE:** 39 rows
-- **PARTIAL:** 3 rows (VPS deployment, per-tool read-only permission, upgrades/rollback re-run)
+- **DONE:** 48 rows (DoD 1 storefront checkout is DONE via `scripts/verify-checkout.mjs`)
+- **PARTIAL:** 9 rows (VPS deployment, DoD 3 hand-place order, DoD 10 bare delete-pod Unreachable window, per-tool read-only permission, Security hardening open items, Scaling distributed rate limit, upgrades/rollback re-run, kill-pod audit item)
 - **NOT DONE:** 5 rows (multi-store, OAuth, `search_tools`, hosted MCP servers, metrics endpoint)
 
 ### Smallest fixes for PARTIAL / NOT DONE
 
+- **DoD 1 (storefront checkout):** DONE via `scripts/verify-checkout.mjs` (real browser: product page -> cart -> block-checkout with COD -> place order -> confirm via Store API POST + `woo__list_orders` -> delete test order). 7/7 PASS on 2026-10-16 (order 95, status processing).
+- **DoD 3 (hand-place order):** hand-place the order through the storefront checkout for the exact product the chat created (DoD 2's product), not a different one; then confirm it via `woo__list_orders`.
+- **DoD 10 (bare `kubectl delete pod` Unreachable window):** lower `health_interval_seconds` (e.g. 5s) or verify with a pod that takes >1 interval to become Ready, so the health loop observes the down window on a literal pod delete.
 - **VPS deployment:** run `helm upgrade --install urumi ./helm -f helm/values-prod.yaml` against a k3s node with a real domain and confirm store/dashboard/`/mcp` over the internet. The chart is ready; only the live run is missing.
 - **Per-tool read-only permission (members read-only):** add a `permissions` table keyed by `(role, server_slug, tool)` and filter in `gw_mcp/router.py` `tools/call` (return `permission_denied` for member write tools) + in `chat/agent.py` tool loading. Small, contained change.
+- **Security hardening open items:** (1) set pod-level `securityContext.runAsNonRoot: true` (+ `runAsUser`/`runAsGroup`) on every workload and make wordpress/mariadb run non-root (remove the documented local-VM delta); (2) set `automountServiceAccountToken: false` on workloads that never call the API (dashboard, demo-*, woo-mcp, mariadb, wordpress); (3) create a least-privilege Role/RoleBinding for the gateway (only what it needs) and stop using the default SA.
+- **Scaling (distributed rate limit):** the per-key limiter is in-memory (`_rate_buckets`) so it is not shared across replicas and there is no user-level limit; back it with Redis (or a shared store) when running >1 replica, or document single-replica as the supported topology.
 - **Upgrades/rollback:** run `helm upgrade --atomic` with an image tag bump then `helm rollback` against the local kind cluster and record the outcome.
 - **Multi-store / OAuth / `search_tools` / hosted MCP / metrics:** genuinely unimplemented; each is a separate feature behind the docs/00 §7 gate ("only after core E2E green + demo rehearsed twice"). The core E2E is green, so any one could be picked next; the recommended first pick is per-tool permissions (smallest, biggest security story).
 
 ### Not verified in this session (state honestly)
 
 - Live VPS (k3s) deployment and a real internet-facing URL — no VPS was reachable here.
-- The storefront browser checkout (`/checkout/` nonce flow) — the order was created via the Woo REST API (the same path the MCP server uses), not by clicking through the block-checkout UI; the Store API nonce dance was not completed.
+- The hand-placed-order DoD variant (DoD 3) — order 95 was placed via the real storefront but for a different product (Urumi Shoes), not the chat-created one.
+- Bare `kubectl delete pod` Unreachable window (DoD 10) — the reliable observation used scale-to-0 then scale-to-1; the plain delete path was not observed.
+- Non-root containers, ServiceAccount token mounting, least-privilege RBAC (security hardening open items).
+- Distributed / per-user rate limiting (Scaling gap).
 - `helm upgrade --atomic` + `helm rollback` — documented, not re-run.
-- `kubectl delete pod` alone can miss the Unreachable window (pod re-creates in ~30s vs 15s health probe); the reliable observation used scale-to-0 then scale-to-1. A lower `health_interval_seconds` would make the bare delete-path observable.
