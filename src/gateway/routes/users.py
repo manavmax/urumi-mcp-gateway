@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+from audit.admin_events import key_ref, login_failed_event_allowed, record_admin_event
 from auth.keys import create_api_key, revoke_api_key
 from auth.rbac import (
     get_current_user_via_session,
@@ -44,9 +45,29 @@ async def login(body: LoginBody, response: Response, db: AsyncSession = Depends(
     email = body.email.strip().lower()
     res = await db.execute(select(User).where(User.email == email))
     user = res.scalars().first()
+    reason = ""
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="invalid credentials")
-    if not await verify_password(user.password_hash, body.password):
+        reason = "invalid_credentials" if not user else "inactive"
+    elif not await verify_password(user.password_hash, body.password):
+        reason = "invalid_credentials"
+    if reason:
+        # login.failed trail (ADR-034): attempted email + time + reason only, NEVER
+        # the password. One source (attempted email) can write at most
+        # LOGIN_FAILED_EVENT_LIMIT rows per window (the same in-memory rate-limit
+        # pattern as /mcp and check-now), so bad-login floods cannot flood the
+        # table. The write commits here because this event IS the completed action;
+        # the 401 below rolls the request session back otherwise.
+        if login_failed_event_allowed(email):
+            record_admin_event(
+                db,
+                actor_user_id=None,
+                action="login.failed",
+                target_type="login",
+                target_ref=email,
+                outcome="failure",
+                details={"reason": reason},
+            )
+            await db.commit()
         raise HTTPException(status_code=401, detail="invalid credentials")
     cookie_val, csrf = create_session_cookie(user.id)
     set_session_cookie(response, cookie_val)
@@ -87,6 +108,15 @@ async def create_user(body: UserCreate, request: Request, db: AsyncSession = Dep
     u = User(email=email, password_hash=pw_hash, role=body.role)
     db.add(u)
     await db.flush()
+    # user.invite trail: email + role only, the password never leaves the request
+    record_admin_event(
+        db,
+        actor_user_id=user.id,
+        action="user.invite",
+        target_type="user",
+        target_ref=u.email,
+        details={"role": body.role, "user_id": str(u.id)},
+    )
     await db.commit()
     return {"id": str(u.id), "email": u.email, "role": u.role}
 
@@ -100,6 +130,7 @@ async def delete_user(user_id: uuid.UUID, request: Request, db: AsyncSession = D
         raise HTTPException(status_code=404, detail="user not found")
     if u.id == admin.id:
         raise HTTPException(status_code=400, detail="cannot delete self")
+    record_admin_event(db, actor_user_id=admin.id, action="user.delete", target_type="user", target_ref=u.email)
     await db.delete(u)
     await db.commit()
     return None
@@ -151,6 +182,16 @@ async def create_key(body: KeyCreate, request: Request, db: AsyncSession = Depen
             # from None: the ValueError payload says nothing the client may see
             raise HTTPException(status_code=400, detail="invalid user_id") from None
     row, raw_key = await create_api_key(db, target_user_id)
+    # key.create trail: prefix + last4 and the owner id ONLY. The raw key above is
+    # shown once in the response and must never appear in the trail.
+    record_admin_event(
+        db,
+        actor_user_id=user.id,
+        action="key.create",
+        target_type="key",
+        target_ref=key_ref(row.prefix, row.last4),
+        details={"owner_user_id": str(target_user_id), "key_id": str(row.id)},
+    )
     await db.commit()
     return {
         "id": str(row.id),
@@ -173,6 +214,14 @@ async def revoke_key(key_id: uuid.UUID, request: Request, db: AsyncSession = Dep
         raise HTTPException(status_code=403, detail="not allowed to revoke this key")
     # revoke_api_key() returns False only for an unknown id, already 404'd above,
     # so this stays idempotent and the result is not a new response field.
+    record_admin_event(
+        db,
+        actor_user_id=user.id,
+        action="key.revoke",
+        target_type="key",
+        target_ref=key_ref(row.prefix, row.last4),
+        details={"owner_user_id": str(row.user_id), "key_id": str(row.id)},
+    )
     await revoke_api_key(db, key_id)
     await db.commit()
     return {"revoked": True}

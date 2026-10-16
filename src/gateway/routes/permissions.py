@@ -7,6 +7,7 @@ CSRF-protected. Unknown tool or server names are rejected (422).
 
 from __future__ import annotations
 
+from audit.admin_events import bounded_diff, record_admin_event
 from auth.rbac import require_admin, verify_csrf
 from db.models import Server, Tool, ToolPermission
 from db.session import get_db
@@ -87,11 +88,23 @@ async def put_permissions(
 
     # replace the member policy wholesale (single Save button semantics)
     old = (await db.execute(select(ToolPermission).where(ToolPermission.role == ROLE))).scalars().all()
+    old_keys = {f"{r.server_slug}__*" if r.tool_name is None else r.tool_name for r in old}
+    new_keys = {f"{r.server_slug}__*" if r.tool_name is None else r.tool_name for r in body.rules}
     for r in old:
         await db.delete(r)
     await db.flush()
     for rule in body.rules:
         db.add(ToolPermission(role=ROLE, server_slug=rule.server_slug, tool_name=rule.tool_name, created_by=user.id))
+    # ONE permission.change event per PUT with the direction diff:
+    # "added" = rules newly denied, "removed" = rules lifted (allowed again)
+    record_admin_event(
+        db,
+        actor_user_id=user.id,
+        action="permission.change",
+        target_type="permission",
+        target_ref=ROLE,
+        details=bounded_diff(sorted(new_keys - old_keys), sorted(old_keys - new_keys)),
+    )
     await db.commit()
 
     return await _policy_payload(db)
