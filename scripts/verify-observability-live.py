@@ -52,7 +52,7 @@ def _mcp_headers(token: str) -> dict[str, str]:
 
 
 async def _temp_admin_key() -> tuple[str, object]:
-    from auth.keys import create_api_key, revoke_api_key
+    from auth.keys import create_api_key
     from db.models import User
     from db.session import get_session_factory
     from sqlalchemy import select
@@ -128,7 +128,6 @@ async def main() -> None:
         t0 = time.monotonic()
         prev_status = None
         flips: dict[str, float] = {}
-        recovered = False
         start = time.monotonic()
         print("t_s, target_status, category, alert?, " + ", ".join(f"{s}_res" for s in OTHERS) + ", checked_delta_s")
 
@@ -144,20 +143,19 @@ async def main() -> None:
                     last_probe[s] = now
                     last_status[s] = await _call(client, PROBE[s][0], PROBE[s][1])
                 probes.append(last_status[s])
+            was_unreachable = prev_status == "Unreachable"
             if prev_status is not None and status != prev_status:
                 flips.setdefault(status, now - t0)
             prev_status = status
             checked_delta = ""
             if row.get("checked"):
-                checked_delta = f"{max(0, round((now - row['checked'].timestamp())))}s"
+                checked_delta = f"{max(0, round(now - row['checked'].timestamp()))}s"
             print(
                 f"{round(now - t0, 1)}, {status}, {row.get('category')}, "
                 f"{'Y' if TARGET in alerts else 'n'}, " + ", ".join(probes) + f", {checked_delta}",
                 flush=True,
             )
-            if status == "Connected" and prev_status == "Unreachable":
-                recovered = True
-            if recovered and status == "Connected":
+            if status == "Connected" and was_unreachable:
                 break
             await asyncio.sleep(1.0)
 

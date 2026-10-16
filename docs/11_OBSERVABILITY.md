@@ -80,6 +80,23 @@ exact SQL counts, empty days filled). Sorted by calls, descending.
 - A bare `kubectl delete pod` (woo-mcp) is observable: the 5s interval catches the
   down window that the old 15s interval used to miss.
 
+### Live proof (measured, 2026-10-16, kind cluster)
+
+A plain `kubectl delete pod` on the woo-mcp pod (three runs: in-pod API observer +
+a Playwright watcher reloading the real dashboard Servers page):
+
+- pod deleted at T; last successful check had been up to 5s earlier; the first
+  scheduled check after the pod stopped answering flips the row to **Unreachable**
+  within one 5s interval (observed: `connection_refused` immediately, or `timeout`
+  with the 2s probe timeout while the pod was mid-termination; the dashboard row
+  showed `timeout, checked 0 s ago, last ok 8 s ago, 2.0 s Unreachable`);
+- the admin banner appeared in the same interval
+  ("woo is unreachable since 8s. Reason: timeout." + Open server / Check now);
+- `time` and `notes` tools/call stayed `ok` on every probe throughout the outage;
+- the replacement pod came Ready in ~10-15s and the status flipped back to
+  **Connected** within ~6-10s of that (total Unreachable window ≈ 12s), well
+  inside the 10s-after-recovery target; the banner cleared with the next poll.
+
 ## 5. What is deliberately NOT stored
 
 Raw exception text, URLs with credentials, request/response bodies, headers and
