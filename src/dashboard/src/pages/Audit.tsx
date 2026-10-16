@@ -5,7 +5,7 @@
    so the button is live and passes the current filters. Range buttons compute
    from/to on the client exactly as the mockup documents. */
 import { useEffect, useMemo, useState } from "react";
-import { api, type AuditRow } from "../lib/api";
+import { api, type AdminEventRow, type AuditRow } from "../lib/api";
 import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { useSearch } from "../lib/search";
@@ -46,13 +46,17 @@ export default function Audit() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { query } = useSearch();
+  const [tab, setTab] = useState<"tool" | "admin">("tool");
   const [rows, setRows] = useState<AuditRow[]>([]);
+  const [adminRows, setAdminRows] = useState<AdminEventRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [adminTotal, setAdminTotal] = useState(0);
   const [err, setErr] = useState("");
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rangeIdx, setRangeIdx] = useState(-1);
   const [filters, setFilters] = useState({ user: "", server: "", tool: "", outcome: "", offset: 0 });
+  const [adminOffset, setAdminOffset] = useState(0);
   /* text/select filters are a draft until Apply: every keystroke used to refetch
      the whole audit page, and changing a filter while paged deep into the
      results kept a stale offset (empty pages). Range and pagination still apply
@@ -78,16 +82,28 @@ export default function Audit() {
     return params;
   }, [filters, rangeIdx, isAdmin]);
 
+  const adminApiParams = useMemo(() => ({
+    limit: LIMIT,
+    offset: adminOffset,
+  }), [adminOffset]);
+
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setErr("");
     (async () => {
       try {
-        const res = await api.listAudit(apiParams);
-        if (!alive) return;
-        setRows(res.logs);
-        setTotal(res.total);
+        if (tab === "tool") {
+          const res = await api.listAudit(apiParams);
+          if (!alive) return;
+          setRows(res.logs);
+          setTotal(res.total);
+        } else {
+          const res = await api.listAdminEvents(adminApiParams);
+          if (!alive) return;
+          setAdminRows(res.events);
+          setAdminTotal(res.total);
+        }
       } catch (e: unknown) {
         if (alive) setErr(e instanceof Error ? e.message : String(e));
       } finally {
@@ -97,7 +113,7 @@ export default function Audit() {
     return () => {
       alive = false;
     };
-  }, [apiParams]);
+  }, [tab, apiParams, adminApiParams]);
 
   useMockupMotion(loading);
 
@@ -107,6 +123,10 @@ export default function Audit() {
     ? rows.filter((r) =>
         `${r.user_email || ""} ${r.server_slug} ${r.tool_exposed_name} ${r.tool_upstream_name} ${r.outcome}`.toLowerCase().includes(q))
     : rows;
+  const adminShown = q
+    ? adminRows.filter((r) =>
+        `${r.actor_email || ""} ${r.action} ${r.target_ref} ${r.outcome}`.toLowerCase().includes(q))
+    : adminRows;
   const successes = rows.filter((r) => r.outcome === "success").length;
 
   async function exportCsv() {
@@ -135,147 +155,228 @@ export default function Audit() {
           </div>
           <div className="row wrap">
             {isAdmin && (
-              <button className="btn btn-secondary" type="button" onClick={exportCsv} disabled={exporting}
-                title="Exports the current filters, capped at 5000 rows">
-                <Icon name="download" sm />{exporting ? "Exporting…" : "CSV export"}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="note-banner">
-          <Icon name="eye" />
-          <div>
-            <b>Scoping:</b> admins see all rows and can filter by user; members see only their own rows (enforced server-side).
-            The user filter below is hidden for members.
-          </div>
-        </div>
-
-        {/* filters */}
-        <section className="card">
-          <div className="card-head">
-            <div className="card-title"><Icon name="filter" />Filters</div>
-          </div>
-          <form className="filters" onSubmit={(e) => { e.preventDefault(); setFilters((f) => ({ ...draft, offset: 0 })); }}>
-            {isAdmin && (
-              <div className="field grow">
-                <label htmlFor="f-user">User (admin)</label>
-                <input id="f-user" placeholder="email or id, any" value={draft.user}
-                  onChange={(e) => setDraft({ ...draft, user: e.target.value })} />
-              </div>
-            )}
-            <div className="field">
-              <label htmlFor="f-server">Server</label>
-              <input id="f-server" placeholder="slug, any" value={draft.server}
-                onChange={(e) => setDraft({ ...draft, server: e.target.value })} />
-            </div>
-            <div className="field grow">
-              <label htmlFor="f-tool">Tool</label>
-              <input id="f-tool" placeholder="exposed name, any" value={draft.tool}
-                onChange={(e) => setDraft({ ...draft, tool: e.target.value })} />
-            </div>
-            <div className="field">
-              <label htmlFor="f-outcome">Outcome</label>
-              <select id="f-outcome" value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })}>
-                <option value="">any outcome</option>
-                <option value="success">success</option>
-                <option value="timeout">timeout</option>
-                <option value="upstream_error">upstream_error</option>
-                <option value="circuit_open">circuit_open</option>
-                <option value="permission_denied">permission_denied</option>
-                <option value="validation_error">validation_error</option>
-              </select>
-            </div>
-            <div className="field" style={{ flex: "0 0 auto" }}>
-              <label>Range</label>
-              <div className="seg" role="group" aria-label="Range">
-                {RANGES.map((r, i) => (
-                  <button key={r.label} type="button" className={rangeIdx === i ? "on" : ""} aria-pressed={rangeIdx === i}
-                    onClick={() => { setRangeIdx(rangeIdx === i ? -1 : i); setFilters((f) => ({ ...f, offset: 0 })); }}>
-                    {r.label}
+              <>
+                <div className="seg" role="group" aria-label="Audit view">
+                  <button type="button" className={tab === "tool" ? "on" : ""} aria-pressed={tab === "tool"}
+                    onClick={() => { setTab("tool"); setFilters((f) => ({ ...f, offset: 0 })); }}>
+                    Tool calls
                   </button>
-                ))}
-              </div>
-            </div>
-            <button className="btn btn-primary" type="submit">Apply</button>
-            <button className="btn btn-ghost" type="reset"
-              onClick={() => { setDraft({ user: "", server: "", tool: "", outcome: "" }); setFilters({ user: "", server: "", tool: "", outcome: "", offset: 0 }); setRangeIdx(-1); }}>
-              Clear
-            </button>
-          </form>
-        </section>
+                  <button type="button" className={tab === "admin" ? "on" : ""} aria-pressed={tab === "admin"}
+                    onClick={() => { setTab("admin"); setAdminOffset(0); }}>
+                    Admin activity
+                  </button>
+                </div>
+                <button className="btn btn-secondary" type="button" onClick={exportCsv} disabled={exporting}
+                  title="Exports the current filters, capped at 5000 rows">
+                  <Icon name="download" sm />{exporting ? "Exporting…" : "CSV export"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
 
-        {/* table */}
-        <section className="card">
-          <div className="card-head">
+        {tab === "tool" && (
+          <div className="note-banner">
+            <Icon name="eye" />
             <div>
-              <div className="card-title"><Icon name="shield" />Tool calls</div>
-              <div className="card-sub">
-                Total <b className="mono">{total.toLocaleString("en-US")}</b>, showing <b className="mono">{rows.length ? filters.offset + 1 : 0} to {filters.offset + rows.length}</b> (limit {LIMIT}) · sorted newest first
+              <b>Scoping:</b> admins see all rows and can filter by user; members see only their own rows (enforced server-side).
+              The user filter below is hidden for members.
+            </div>
+          </div>
+        )}
+
+        {/* filters (tool calls only) */}
+        {tab === "tool" && (
+          <section className="card">
+            <div className="card-head">
+              <div className="card-title"><Icon name="filter" />Filters</div>
+            </div>
+            <form className="filters" onSubmit={(e) => { e.preventDefault(); setFilters((f) => ({ ...draft, offset: 0 })); }}>
+              {isAdmin && (
+                <div className="field grow">
+                  <label htmlFor="f-user">User (admin)</label>
+                  <input id="f-user" placeholder="email or id, any" value={draft.user}
+                    onChange={(e) => setDraft({ ...draft, user: e.target.value })} />
+                </div>
+              )}
+              <div className="field">
+                <label htmlFor="f-server">Server</label>
+                <input id="f-server" placeholder="slug, any" value={draft.server}
+                  onChange={(e) => setDraft({ ...draft, server: e.target.value })} />
+              </div>
+              <div className="field grow">
+                <label htmlFor="f-tool">Tool</label>
+                <input id="f-tool" placeholder="exposed name, any" value={draft.tool}
+                  onChange={(e) => setDraft({ ...draft, tool: e.target.value })} />
+              </div>
+              <div className="field">
+                <label htmlFor="f-outcome">Outcome</label>
+                <select id="f-outcome" value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })}>
+                  <option value="">any outcome</option>
+                  <option value="success">success</option>
+                  <option value="timeout">timeout</option>
+                  <option value="upstream_error">upstream_error</option>
+                  <option value="circuit_open">circuit_open</option>
+                  <option value="permission_denied">permission_denied</option>
+                  <option value="validation_error">validation_error</option>
+                </select>
+              </div>
+              <div className="field" style={{ flex: "0 0 auto" }}>
+                <label>Range</label>
+                <div className="seg" role="group" aria-label="Range">
+                  {RANGES.map((r, i) => (
+                    <button key={r.label} type="button" className={rangeIdx === i ? "on" : ""} aria-pressed={rangeIdx === i}
+                      onClick={() => { setRangeIdx(rangeIdx === i ? -1 : i); setFilters((f) => ({ ...f, offset: 0 })); }}>
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button className="btn btn-primary" type="submit">Apply</button>
+              <button className="btn btn-ghost" type="reset"
+                onClick={() => { setDraft({ user: "", server: "", tool: "", outcome: "" }); setFilters({ user: "", server: "", tool: "", outcome: "", offset: 0 }); setRangeIdx(-1); }}>
+                Clear
+              </button>
+            </form>
+          </section>
+        )}
+
+        {/* tool calls table */}
+        {tab === "tool" && (
+          <section className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title"><Icon name="shield" />Tool calls</div>
+                <div className="card-sub">
+                  Total <b className="mono">{total.toLocaleString("en-US")}</b>, showing <b className="mono">{rows.length ? filters.offset + 1 : 0} to {filters.offset + rows.length}</b> (limit {LIMIT}) · sorted newest first
+                </div>
+              </div>
+              <span className="row small muted">
+                {rows.length > 0 && (
+                  <span className="chip chip-ok"><Icon name="check-circle" />{Math.round((successes / rows.length) * 100)}% success</span>
+                )}
+              </span>
+            </div>
+            {err && <div className="err" role="alert">{err}</div>}
+            {loading ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                <span className="sk" style={{ width: "90%" }} />
+                <span className="sk" style={{ width: "75%" }} />
+                <span className="sk" style={{ width: "82%" }} />
+              </div>
+            ) : shown.length === 0 ? (
+              <div className="small muted">No audit rows for the current filters.</div>
+            ) : (
+              <table aria-label="Audit log">
+                <thead>
+                  <tr><th>Time</th><th>User</th><th>Server</th><th>Tool</th><th>Outcome</th><th>Duration</th><th>Request</th></tr>
+                </thead>
+                <tbody>
+                  {shown.map((r) => {
+                    const chip = outcomeChip(r.outcome);
+                    return (
+                      <tr key={r.id}>
+                        <td data-label="Time">
+                          <div className="small">{fmtTs(r.ts)}</div>
+                          <div className="sub">{relative(r.ts)}</div>
+                        </td>
+                        <td data-label="User">
+                          <div className="small mono">{r.user_email || "unknown"}</div>
+                          {r.user_id && <div className="sub">{r.user_id.slice(0, 8)}…</div>}
+                        </td>
+                        <td data-label="Server" className="small mono">{r.server_slug}</td>
+                        <td data-label="Tool">
+                          <div className="tool-name">{r.tool_exposed_name}</div>
+                          <div className="sub">upstream: {r.tool_upstream_name}</div>
+                        </td>
+                        <td data-label="Outcome">
+                          <span className={`chip ${chip.cls}`}><Icon name={chip.icon} />{r.outcome}</span>
+                          {r.error_code && r.error_code !== r.outcome && <div className="sub">code: {r.error_code}</div>}
+                        </td>
+                        <td data-label="Duration" className="small mono">{fmtDuration(r.duration_ms)}</td>
+                        <td data-label="Request" className="small mono" title={r.request_id}>{r.request_id.slice(0, 8)}…</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+            <div className="pager">
+              <span className="small muted">
+                Showing {rows.length ? filters.offset + 1 : 0} to {filters.offset + rows.length} of <b className="mono">{total.toLocaleString("en-US")}</b> · offset {filters.offset} · limit {LIMIT}
+              </span>
+              <div className="row">
+                <button className="btn btn-secondary btn-sm" type="button" disabled={filters.offset === 0}
+                  onClick={() => setFilters((f) => ({ ...f, offset: Math.max(0, f.offset - LIMIT) }))}>Prev</button>
+                <button className="btn btn-secondary btn-sm" type="button" disabled={rows.length < LIMIT}
+                  onClick={() => setFilters((f) => ({ ...f, offset: f.offset + LIMIT }))}>Next</button>
               </div>
             </div>
-            <span className="row small muted">
-              {rows.length > 0 && (
-                <span className="chip chip-ok"><Icon name="check-circle" />{Math.round((successes / rows.length) * 100)}% success</span>
-              )}
-            </span>
-          </div>
-          {err && <div className="err" role="alert">{err}</div>}
-          {loading ? (
-            <div style={{ display: "grid", gap: 10 }}>
-              <span className="sk" style={{ width: "90%" }} />
-              <span className="sk" style={{ width: "75%" }} />
-              <span className="sk" style={{ width: "82%" }} />
+          </section>
+        )}
+
+        {/* admin activity table */}
+        {tab === "admin" && (
+          <section className="card">
+            <div className="card-head">
+              <div>
+                <div className="card-title"><Icon name="shield" />Admin activity</div>
+                <div className="card-sub">
+                  Total <b className="mono">{adminTotal.toLocaleString("en-US")}</b>, showing <b className="mono">{adminRows.length ? adminOffset + 1 : 0} to {adminOffset + adminRows.length}</b> (limit {LIMIT}) · sorted newest first
+                </div>
+              </div>
             </div>
-          ) : shown.length === 0 ? (
-            <div className="small muted">No audit rows for the current filters.</div>
-          ) : (
-            <table aria-label="Audit log">
-              <thead>
-                <tr><th>Time</th><th>User</th><th>Server</th><th>Tool</th><th>Outcome</th><th>Duration</th><th>Request</th></tr>
-              </thead>
-              <tbody>
-                {shown.map((r) => {
-                  const chip = outcomeChip(r.outcome);
-                  return (
-                    <tr key={r.id}>
-                      <td data-label="Time">
-                        <div className="small">{fmtTs(r.ts)}</div>
-                        <div className="sub">{relative(r.ts)}</div>
-                      </td>
-                      <td data-label="User">
-                        <div className="small mono">{r.user_email || "unknown"}</div>
-                        {r.user_id && <div className="sub">{r.user_id.slice(0, 8)}…</div>}
-                      </td>
-                      <td data-label="Server" className="small mono">{r.server_slug}</td>
-                      <td data-label="Tool">
-                        <div className="tool-name">{r.tool_exposed_name}</div>
-                        <div className="sub">upstream: {r.tool_upstream_name}</div>
-                      </td>
-                      <td data-label="Outcome">
-                        <span className={`chip ${chip.cls}`}><Icon name={chip.icon} />{r.outcome}</span>
-                        {r.error_code && r.error_code !== r.outcome && <div className="sub">code: {r.error_code}</div>}
-                      </td>
-                      <td data-label="Duration" className="small mono">{fmtDuration(r.duration_ms)}</td>
-                      <td data-label="Request" className="small mono" title={r.request_id}>{r.request_id.slice(0, 8)}…</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-          <div className="pager">
-            <span className="small muted">
-              Showing {rows.length ? filters.offset + 1 : 0} to {filters.offset + rows.length} of <b className="mono">{total.toLocaleString("en-US")}</b> · offset {filters.offset} · limit {LIMIT}
-            </span>
-            <div className="row">
-              <button className="btn btn-secondary btn-sm" type="button" disabled={filters.offset === 0}
-                onClick={() => setFilters((f) => ({ ...f, offset: Math.max(0, f.offset - LIMIT) }))}>Prev</button>
-              <button className="btn btn-secondary btn-sm" type="button" disabled={rows.length < LIMIT}
-                onClick={() => setFilters((f) => ({ ...f, offset: f.offset + LIMIT }))}>Next</button>
+            {err && <div className="err" role="alert">{err}</div>}
+            {loading ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                <span className="sk" style={{ width: "90%" }} />
+                <span className="sk" style={{ width: "75%" }} />
+                <span className="sk" style={{ width: "82%" }} />
+              </div>
+            ) : adminShown.length === 0 ? (
+              <div className="small muted">No admin events for the current filters.</div>
+            ) : (
+              <table aria-label="Admin activity">
+                <thead>
+                  <tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Outcome</th></tr>
+                </thead>
+                <tbody>
+                  {adminShown.map((r) => {
+                    const chip = outcomeChip(r.outcome);
+                    return (
+                      <tr key={r.id}>
+                        <td data-label="Time">
+                          <div className="small">{fmtTs(r.ts)}</div>
+                          <div className="sub">{relative(r.ts)}</div>
+                        </td>
+                        <td data-label="Actor">
+                          <div className="small mono">{r.actor_email || "unknown"}</div>
+                          {r.actor_user_id && <div className="sub">{r.actor_user_id.slice(0, 8)}…</div>}
+                        </td>
+                        <td data-label="Action" className="small mono">{r.action}</td>
+                        <td data-label="Target" className="small mono">{r.target_ref}</td>
+                        <td data-label="Outcome">
+                          <span className={`chip ${chip.cls}`}><Icon name={chip.icon} />{r.outcome}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+            <div className="pager">
+              <span className="small muted">
+                Showing {adminRows.length ? adminOffset + 1 : 0} to {adminOffset + adminRows.length} of <b className="mono">{adminTotal.toLocaleString("en-US")}</b> · offset {adminOffset} · limit {LIMIT}
+              </span>
+              <div className="row">
+                <button className="btn btn-secondary btn-sm" type="button" disabled={adminOffset === 0}
+                  onClick={() => setAdminOffset(Math.max(0, adminOffset - LIMIT))}>Prev</button>
+                <button className="btn btn-secondary btn-sm" type="button" disabled={adminRows.length < LIMIT}
+                  onClick={() => setAdminOffset(adminOffset + LIMIT)}>Next</button>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
       </main>
     </>
   );
