@@ -487,7 +487,7 @@ export default function Overview() {
                             <span className={`chip ${st.cls}`}><Icon name={st.icon} />{!s.enabled ? "Disabled" : s.status}</span>
                           </td>
                           <td data-label="Calls">{stat?.calls ?? 0}</td>
-                          <td data-label="Error rate">{stat?.error_rate == null ? "—" : `${stat.error_rate}%`}</td>
+                          <td data-label="Error rate">{stat?.error_rate == null ? "-" : `${stat.error_rate}%`}</td>
                           <td data-label="p95">{fmtMs(stat?.p95_ms ?? 0)}</td>
                           <td data-label="Trend">
                             <svg width="120" height="28" viewBox="0 0 120 28" preserveAspectRatio="none" role="img" aria-label={`Daily calls sparkline for ${s.slug}`}>
