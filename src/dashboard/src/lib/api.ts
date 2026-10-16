@@ -97,6 +97,17 @@ export type AuditRow = {
   error_code: string | null;
   client_ip: string | null;
 };
+export type AdminEventRow = {
+  id: number;
+  ts: string;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  action: string;
+  target_type: string;
+  target_ref: string;
+  outcome: string;
+  details: Record<string, unknown>;
+};
 
 /* GET /api/stats (new with the Overview page). Admin scope sees every user's
    calls; a member only ever sees their own, enforced server-side. */
@@ -251,6 +262,13 @@ export const api = {
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
     const q = qs.toString();
     return request<{ logs: AuditRow[]; total: number; limit: number; offset: number }>(`/api/audit${q ? `?${q}` : ""}`);
+  },
+
+  listAdminEvents: (params: Record<string, string | number | undefined> = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+    const q = qs.toString();
+    return request<{ events: AdminEventRow[]; total: number; limit: number; offset: number }>(`/api/admin-events${q ? `?${q}` : ""}`);
   },
 
   // Chat SSE: caller handles EventSource/fetch stream
