@@ -252,4 +252,74 @@ rule removal restores, PUT 403/CSRF/422, GET shape) and the extended
 calls, audited) were written before the enforcement wiring; run against the
 pre-implementation tree they fail (10 failures), with it the full suite is green.
 
+## 2026-10-17: Admin action trail ADR-034
+
+**What changed.** A new append-only `admin_events` table (Alembic migration
+`005_admin_events`) records admin actions with actor, target, outcome and non-secret
+details: `server.create/update/enable/disable/delete`, `user.invite/delete`,
+`key.create/revoke`, `permission.change`, and `login.failed` (attempted email + time
+only). The table is the single destination for the question "who did what, when, did it
+work".
+
+The **secrecy contract** is enforced in the recorder (`audit/admin_events.py`):
+- Server credentials are stored ONLY as `credential_changed: true` or `credential_removed: true`
+- API keys appear ONLY as `prefix...last4` plus the owner's user id (never the raw key, never the digest)
+- Passwords are NEVER stored (not even a hash)
+- Request bodies are NEVER stored
+- `login.failed` details are only `{"reason": "invalid_credentials"|"inactive"}`
+- `target_ref` is a non-secret reference (slug, email, user id, key prefix+last4)
+- All detail dicts are small bounded objects of field names and counts, never free text
+
+**Write model.** `record_admin_event()` only calls `db.add()` into the caller's session.
+The route's existing commit lands action + event together; a failure (400/exception)
+rolls both back, so a failed action cannot leave a success event behind (pinned by
+`test_failed_server_create_no_success_event` in `tests/test_admin_events.py`).
+`login.failed` commits its own row because the event IS the completed action; the
+rate-limited write prevents a flood of bad logins from flooding the trail.
+
+**login.failed rate limiting.** One source (the attempted email) can write at most
+`LOGIN_FAILED_EVENT_LIMIT` (10) rows per `LOGIN_FAILED_WINDOW_SECONDS` (60s). Beyond
+that the write is silently dropped. This uses the same in-memory rate-limit pattern
+as the per-key MCP limiter.
+
+**No mutation API.** There is deliberately NO POST/PUT/PATCH/DELETE on the trail router:
+- All mutation attempts return 405 (confirmed by tests)
+- `make demo-reset` is the ONE sanctioned wipe for admin_events (TRUNCATE, same
+  documented exception as audit_logs)
+
+**API.** `GET /api/admin-events` (admin only, members get 403) is paginated with
+filters by actor (user id or email), action and date range. Actor emails are resolved
+in the same query pattern as `GET /api/audit`. The response shape:
+```json
+{"total": N, "limit": 100, "offset": 0, "events": [
+  {"id": 1, "ts": "...", "actor_user_id": "uuid|null", "actor_email": "email|null",
+   "action": "server.create", "target_type": "server", "target_ref": "slug",
+   "outcome": "success|failure", "details": {}}
+]}
+```
+
+**Dashboard.** The Audit page (`src/dashboard/src/pages/Audit.tsx`) gains a segmented
+control "Tool calls | Admin activity" (admins only; members never see it). The Admin
+activity view shows time, actor, action, target and outcome in the same table style
+as the tool calls table, with independent pagination. The `listAdminEvents` API method
+was added to `src/dashboard/src/lib/api.ts`.
+
+**Tests.** `tests/test_admin_events.py` (24 tests covering: secrecy checks with planted
+secret strings that must never appear in any stored/returned byte; one event per action
+with correct actor; member 403 on GET; all mutation endpoints 405; rate limit per
+source; failed action leaves no success event; pagination; action and actor filters).
+
+**Why.** The brief required an audit trail for admin actions ("who did what"). Separating
+it from the per-call `audit_logs` table keeps each table focused: one for tool calls,
+one for admin actions. The secrecy contract prevents credential leakage through the
+trail. The transactional write model eliminates the class of bug where a success event
+exists for a rolled-back action.
+
+**Known trade-offs.** The rate limiter is in-memory (per-process, not shared). On a
+multi-worker gateway, each worker has its own limit window. This is the same trade-off
+as the per-key MCP rate limiter and is acceptable for the demo. A future Redis-backed
+limiter would fix it at the cost of infrastructure complexity. `user.role_change` does
+not exist as an API endpoint yet; when it is added, it should call `record_admin_event`
+following the same pattern.
+
 

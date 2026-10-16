@@ -27,3 +27,29 @@ Admin-supplied URL validated at write (`validate_url`: no userinfo, https, block
 
 ## Additional
 Secrets encrypted at rest (k3s `--secrets-encryption` / aescbc), `securityContext` non-root readOnly, minimal SA RBAC, `httpx` timeouts, no secrets in logs, TLS on prod (cert-manager). Audit partitioned, append-only, admin-read.
+
+## Admin Action Trail (ADR-034)
+The `admin_events` table answers "who did what, when, did it work" for admin dashboard actions.
+
+**What it records:** `server.create`, `server.update`, `server.enable`, `server.disable`, `server.delete`, `user.invite`, `user.delete`, `key.create`, `key.revoke`, `permission.change`, and `login.failed` (attempted email + time only). `user.role_change` is not yet implemented.
+
+**What it does NOT record:**
+- Per-call tool invocation (that's `audit_logs`)
+- Passwords, password hashes, or any part of a credential value
+- Raw API keys (only `prefix...last4` appears)
+- Full request bodies or headers
+- The content of a failed login attempt beyond the email and reason label
+
+**Secrecy guarantees:**
+- Server credentials appear ONLY as `credential_changed: true` or `credential_removed: true` — never the value, never a hash
+- API keys appear ONLY as `prefix...last4` in `target_ref` plus the owner's user id in `details` — never the raw key, never the sha256 digest
+- `login.failed` details are only `{"reason": "invalid_credentials"|"inactive"}` and a 60s/10-event cap per attempted email prevents log flooding
+
+**Transaction guarantee:** The event is written in the SAME transaction as the action it describes. A failed action (400 response, exception) rolls both the action and the success event back together.
+
+**What one member can see:** Members get 403 on `GET /api/admin-events`. They see no admin activity UI (the segmented control is admin-only on the dashboard).
+
+**What one admin can see:** Admins see all events with actor email resolved. No credential or key material is included in any response.
+
+**demo-reset clears it:** `make demo-reset CONFIRM=yes` runs `TRUNCATE TABLE admin_events` inside the gateway pod, the same documented exception as `audit_logs`. There is no other mutation API for this table.
+
