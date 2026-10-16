@@ -4,7 +4,12 @@
 Upstream creds (Woo CK/CS), gateway API keys, audit log, WP DB/content, LLM key. Attackers: malicious member, malicious upstream, external SSRF.
 
 ## Shared Upstream Credentials
-Member never sees credential: `GET /api/servers` masks it, credential Fernet-encrypted in PG, injected server-side at proxy time only. Member capability is gated by per-tool RBAC (`member` can read products/orders, not create/update; `tools/list` filtered, `tools/call` 403 on deny). Audit logs every call; abuse is visible and revocable.
+Member never sees credential: `GET /api/servers` masks it, credential Fernet-encrypted in PG, injected server-side at proxy time only. Member capability is gated by per-tool permissions (ADR-033, default allow-all). Audit logs every call; abuse is visible and revocable.
+
+## Per-Role Tool Permissions (ADR-033)
+Deny rules live in the `tool_permissions` table (role, server_slug, tool_name NULL = whole server) and are enforced by ONE core (`gw_mcp/permissions.py`) used by both listing and calling, on `/mcp` and in the chat agent. **What a member cannot do**: call a tool an admin denied (rejected before any upstream contact, standard unknown-tool error, no existence leak), see it in `tools/list`, or reach it through a prompt injection in chat (the agent routes through the same check). Every denial writes an audit row with outcome `permission_denied` under the caller's identity.
+
+**Default-allow risks (documented, accepted for the demo):** (1) with an empty deny table members can call write tools (`woo__create_product`) — the demo policy must be applied live via the Permissions panel; (2) a tool that appears on an upstream *after* the policy was written is allowed by default until an admin denies it — the policy names tools, it does not name allow-lists. Mitigations: every call is audited, admins can restrict any time, `make demo-reset` clears rules, and the chat agent refuses tools absent from the filtered list.
 
 ## Why Client Tokens Not Passed Through
 Two auth domains: gateway user keys (`Bearer <user-key>`, argon2id) vs upstream creds (`Bearer <upstream>`). Gateway terminates client auth and originates upstream auth — never forwards the header. Compromised upstream cannot learn user keys; rotating one doesn't revoke the other.

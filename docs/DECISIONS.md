@@ -192,7 +192,64 @@ section headings that repeat the title, uppercase eyebrows and dev-doc helper se
 3. The mockups are static and still render the removed lines, so the parity selector specs were
    adjusted (.src and the fleet page-head sub) rather than editing the mockups, which are the
    frozen reference.
-4. The removed Members sentence was the expiry dev note; the create flow sets no expiry, so the
-   keys table keeps showing "never" and no expiry UI was implied.
+4. The removed Members sentence was the expiry dev note; the create flow sets no expiry, so
+   the keys table keeps showing "never" and no expiry UI was implied.
+
+## 2026-10-16: per-role tool permissions, member deny rules (ADR-033)
+
+**What changed.** Admins can now restrict which tools the MEMBER role may call. The policy
+lives in a new `tool_permissions` table (Alembic migration `003_tool_permissions`): deny
+rules of (role, server_slug, tool_name) where tool_name is the EXPOSED name
+(`woo__create_product`) or NULL for a whole-server deny, plus created_by/created_at and a
+CHECK constraint that only allows role='member'. Admins always have all tools; an empty
+table is the default allow-all policy and changes nothing (DoD demo untouched).
+
+Enforcement is ONE function set in the routing core (`gw_mcp/permissions.py`):
+`deny_rules_for_role` reads the rules live on every request (no cache that survives a
+change), `tool_denied` is the single predicate, `filter_tools_for_user` filters
+`tools/list` (external `/mcp`, `GET /api/tools`, and the chat agent's tool load), and
+`assert_call_allowed` checks the namespaced exposed name BEFORE routing upstream. A denied
+call returns the standard unknown-tool error (no existence leak), never reaches the
+upstream, and writes an audit row with outcome `permission_denied` under the caller. The
+chat agent additionally audits a forced (prompt-injection) call to a denied tool as
+`permission_denied` and streams it with that outcome.
+
+API: `GET /api/permissions` (admin) returns every server with its tools and the
+member-denied flag plus a restricted count; `PUT /api/permissions` (admin only,
+CSRF-protected, `require_admin` server-side) replaces the member policy wholesale and
+validates that every server and tool name exists (422 otherwise). Members get 403.
+Dashboard: a Permissions panel on the Servers page (admins only) — tools grouped by
+server, Admin column locked on, Member toggle, restricted count, one Save button with a
+success state. Members get no permission UI; restricted tools are absent from their
+tools/list, Servers page and Overview "Tools I can use". `make demo-reset` clears the
+table back to allow-all.
+
+**Why.** Stand-out item 2 of the brief (per-role tool permissions). Security-critical
+features get one server-side code path, so both the external MCP client and the chat
+agent cannot drift. Deny rules (not allow lists) keep the default policy allow-all so the
+Definition of Done (member creates products in chat) passes unchanged.
+
+**Alternatives considered.**
+- Per-user rules: rejected; the brief scopes permissions to roles, and per-user rules
+  would duplicate the audit/keys ownership model for no demo gain.
+- Allow-list per role: rejected as default policy; allow-lists silently break when a new
+  upstream tool appears (it would be hidden for members until manually allowed) and the
+  brief demands default-allow with the deny policy applied live.
+- Caching the deny set: rejected; the table is tiny and read per call, so no invalidation
+  bug can survive a policy change (pinned by a test).
+
+**Known trade-offs.** A newly appearing upstream tool is allowed for members by default
+(documented in THREAT_MODEL.md); admins must add a deny rule (or deny the whole server)
+after registering such an upstream. The deny table is read twice per call path (list +
+call) instead of cached — trivial for the demo's row counts. Only role='member' can hold
+rules; a future admin-restriction would need a migration (the check constraint).
+
+**Tests first.** `tests/test_tool_permissions.py` (12 tests: default policy, listing
+filter for member vs admin, real SDK client over streamable HTTP, denied call rejected
+with zero upstream calls + `permission_denied` audit row, policy change on next call,
+rule removal restores, PUT 403/CSRF/422, GET shape) and the extended
+`test_prompt_injection.py` (chat agent refuses an injected denied tool, zero upstream
+calls, audited) were written before the enforcement wiring; run against the
+pre-implementation tree they fail (10 failures), with it the full suite is green.
 
 

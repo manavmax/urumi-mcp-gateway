@@ -110,6 +110,43 @@ make verify-llm        # prove the live key: chat streams, multi-step tool loop,
 
 Point `gateway.llm.existingSecret` at your own pre-created Secret (key `OPENAI_API_KEY`) to skip the chart-rendered one entirely.
 
+## Tool permissions — restrict what members may call (ADR-033)
+
+By default every member may use every tool of every enabled server (default
+allow-all). Admins can restrict individual tools for the whole MEMBER role; admins
+always have all tools.
+
+**In the dashboard:** Servers → **Permissions** → tools grouped by server, one Member
+toggle per tool (Admin is locked on for everyone) → **Save**. The restricted count is
+shown in the panel head. Members see no permission UI; a restricted tool is simply
+absent from their tools list, the Servers page and the member Overview "Tools I can use".
+
+**With the API** (admin session cookie; the PUT is CSRF-protected, so grab the token
+from `GET /api/auth/me`'s `csrf_token`):
+
+```bash
+TOKEN=$(curl -s -c /tmp/c.txt -X POST https://dashboard.<domain>/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@urumi.local","password":"..."}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["csrf_token"])')
+
+# deny example: members keep woo__list_orders + woo__get_order, lose the write tools
+curl -s -X PUT https://dashboard.<domain>/api/permissions \
+  -b /tmp/c -H "X-CSRF-Token: $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"rules":[{"server_slug":"woo","tool_name":"woo__create_product"},
+                {"server_slug":"woo","tool_name":"woo__update_order_status"}]}'
+
+# allow everything again: empty rules list (or make demo-reset CONFIRM=yes)
+curl -s -X PUT .../api/permissions -H "X-CSRF-Token: $CSRF" -d '{"rules":[]}'
+```
+
+Behaviour, in one paragraph: a denied tool disappears from `tools/list` for members and
+a direct call to it is rejected with the standard unknown-tool error **before** any
+upstream is contacted — the same enforcement core covers the external `/mcp` endpoint
+and the chat agent, so a prompt-injection attempt that talks the model into naming a
+denied tool is rejected too. Every denial is audited with outcome `permission_denied`.
+Unknown server or tool names are rejected by the API (422); policy changes take effect
+on the very next call (no cache). `make demo-reset` clears the table back to allow-all.
+
 ## Demo reset — `make demo-reset`
 
 Between demo takes the cluster should be put back into a known state. `make demo-reset` does
@@ -131,8 +168,9 @@ The seed set (the products that survive) is an auditable file, not a hidden rule
 | every WooCommerce product that is not a seed product (REST `force=true`) | the seed products (`URUMI-TEE-001`, `URUMI-HOODIE-001`), store settings, COD, tax/shipping |
 | every WooCommerce order (all statuses) | all Kubernetes Secrets and PVCs, and the Helm release (the script never runs `helm`) |
 | every row in `audit_logs` (ids restart at 1) | the gateway admin user `admin@urumi.local` and its API keys |
-| every non-admin user + their API keys | the 3 seeded upstreams `woo`/`time`/`notes`, their encrypted credentials, the Fernet state |
-| all notes (in-memory store → `rollout restart` + `rollout status` of `urumi-demo-notes`) | any non-seeded server you added — it is listed in the summary, never deleted |
+| every `tool_permissions` deny rule (back to default allow-all) | the 3 seeded upstreams `woo`/`time`/`notes`, their encrypted credentials, the Fernet state |
+| every non-admin user + their API keys | any non-seeded server you added — it is listed in the summary, never deleted |
+| all notes (in-memory store → `rollout restart` + `rollout status` of `urumi-demo-notes`) | |
 
 Safety guarantees (ADR-032): refuses unless `kubectl config current-context` is a `kind-*`
 cluster whose API server is on loopback and the namespace is `urumi`; the only cluster
