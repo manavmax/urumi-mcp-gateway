@@ -4,6 +4,12 @@ gateway:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
+  # Upstream health probing (docs/11_OBSERVABILITY.md): default 5s interval / 2s probe
+  # timeout - the values.yaml default. Kept here explicitly so the live "kill the pod,
+  # watch it flip" demo is reproducible and the cadence is visible in the local values.
+  health:
+    intervalSeconds: 5
+    timeoutSeconds: 2
   llm:
     # Gemini's OpenAI-compatible endpoint + a current flash model (local override only;
     # prod stays whatever values.yaml sets). The key lives in the gateway-llm Secret,

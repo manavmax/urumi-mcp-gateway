@@ -1,12 +1,19 @@
-"""Background health loop (docs/02 §3.4, 04 lifespan).
+"""Background health loop (docs/02 §3.4, 04 lifespan, docs/11_OBSERVABILITY).
 
-Probes every enabled server with a lightweight tools/list and updates servers.status.
+Probes every enabled server with a lightweight tools/list and updates servers.status
+plus the health-tracking columns (last_checked_at, last_ok_at, last_latency_ms,
+last_error_category). Passive detection: an upstream call or tools/list that fails with
+a connection-level error marks the server Unreachable immediately (see aggregator.py and
+router.py) - no waiting for this loop. Interval is a Helm value, default 5 seconds, and
+each check has a 2 second timeout. While Unreachable the loop still runs, so recovery
+flips the status back within ~one interval of the pod returning.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from config import get_settings
 from db.models import Server
@@ -14,6 +21,8 @@ from db.session import get_session_factory
 from sqlalchemy import select
 
 from gw_mcp.aggregator import fetch_and_cache_tools
+from gw_mcp.categorize import classify
+from gw_mcp.health_state import record_failure, record_success
 
 logger = logging.getLogger("gateway.health")
 
@@ -25,18 +34,17 @@ async def probe_once():
         res = await db.execute(select(Server).where(Server.enabled.is_(True)))
         servers = list(res.scalars().all())
         for s in servers:
+            started = time.monotonic()
             try:
                 await asyncio.wait_for(
                     fetch_and_cache_tools(db, s, timeout_seconds=settings.health_timeout_seconds),
                     timeout=settings.health_timeout_seconds + 2,
                 )
-                s.status = "Connected"
-                s.last_error = None
+                record_success(s, latency_ms=int((time.monotonic() - started) * 1000))
                 logger.debug("health ok %s", s.slug)
             except Exception as exc:
-                s.status = "Unreachable"
-                s.last_error = str(exc)[:500]
-                logger.warning("health fail %s: %s", s.slug, exc)
+                record_failure(s, classify(exc), latency_ms=int((time.monotonic() - started) * 1000))
+                logger.warning("health fail %s category=%s", s.slug, s.last_error_category)
         try:
             await db.commit()
         except Exception:

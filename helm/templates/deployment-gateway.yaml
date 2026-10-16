@@ -98,6 +98,14 @@ spec:
             # missing key means "no admin bootstrap" instead of a committed default.
             - name: GATEWAY_ADMIN_PASSWORD
               valueFrom: { secretKeyRef: { name: gateway-admin, key: password } }
+            # Upstream health probing cadence (docs/11_OBSERVABILITY.md): the loop runs
+            # every intervalSeconds and each probe has a timeoutSeconds budget. Defaults
+            # 5s/2s; a bare `kubectl delete pod` Unreachable window becomes observable and
+            # recovery flips the status within ~10s. Helm values, not code constants.
+            - name: HEALTH_INTERVAL_SECONDS
+              value: {{ .Values.gateway.health.intervalSeconds | default 5 | quote }}
+            - name: HEALTH_TIMEOUT_SECONDS
+              value: {{ .Values.gateway.health.timeoutSeconds | default 2 | quote }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:

@@ -65,8 +65,12 @@ class Settings(BaseSettings):
 
     # upstream defaults
     default_timeout_ms: int = 10000
-    health_interval_seconds: int = 15
-    health_timeout_seconds: int = 5
+    # Health loop interval / per-check timeout (Helm gateway.health.intervalSeconds /
+    # timeoutSeconds, default 5s / 2s - docs/11_OBSERVABILITY.md). 5s lets a bare
+    # `kubectl delete pod` Unreachable window be observed, and the recovery flip lands
+    # within ~10s of the pod coming back (while Unreachable the loop keeps running).
+    health_interval_seconds: int = 5
+    health_timeout_seconds: int = 2
     breaker_failure_threshold: int = 3
     breaker_reset_seconds: int = 60
 
@@ -134,6 +138,8 @@ def get_settings() -> Settings:
         "OPENAI_MODEL": "openai_model",
         "OPENAI_MODELS": "openai_models",
         "OPENAI_MAX_MODELS_PER_TURN": "openai_max_models_per_turn",
+        "HEALTH_INTERVAL_SECONDS": "health_interval_seconds",
+        "HEALTH_TIMEOUT_SECONDS": "health_timeout_seconds",
         "SESSION_SECRET": "session_secret",
         "GATEWAY_ADMIN_PASSWORD": "admin_password",
     }

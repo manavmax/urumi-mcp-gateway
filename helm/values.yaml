@@ -79,6 +79,14 @@ gateway:
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
+  # Upstream health probing (docs/11_OBSERVABILITY.md). intervalSeconds is how often
+  # the background loop probes every enabled upstream; timeoutSeconds bounds one probe.
+  # Default 5s / 2s: a bare `kubectl delete pod` Unreachable window is observable, and
+  # recovery flips the status back within ~10s of the pod returning (the loop keeps
+  # running while a server is Unreachable). These are Helm values, not code constants.
+  health:
+    intervalSeconds: 5
+    timeoutSeconds: 2
   # LLM wiring for the chat assistant. No API key is ever committed here (the brief
   # forbids committed secrets): the chart renders a `gateway-llm` Secret whose key
   # OPENAI_API_KEY is looked up from the cluster and left EMPTY until an operator

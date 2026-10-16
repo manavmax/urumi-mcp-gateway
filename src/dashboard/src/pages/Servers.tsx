@@ -21,6 +21,32 @@ const STATUS_CHIP = (status: string): { cls: string; icon: "check-circle" | "x-c
   return { cls: "chip-neutral", icon: "dot" };
 };
 
+/* Health-detail line for the admin Servers row: "<category>, checked X ago,
+   last ok Y ago, Z ms" with unknown parts omitted. Category human labels come
+   from the server-safe label (last_error). */
+function relative(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return `${secs} s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+function healthLine(s: Server): string {
+  const parts: string[] = [];
+  if (s.last_error_category) parts.push(s.last_error || s.last_error_category);
+  if (s.last_checked_at) parts.push(`checked ${relative(s.last_checked_at)}`);
+  if (s.last_ok_at) parts.push(`last ok ${relative(s.last_ok_at)}`);
+  if (typeof s.last_latency_ms === "number") {
+    parts.push(s.last_latency_ms >= 1000 ? `${(s.last_latency_ms / 1000).toFixed(1)} s` : `${s.last_latency_ms} ms`);
+  }
+  return parts.join(", ");
+}
+
 export default function Servers() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -39,6 +65,8 @@ export default function Servers() {
   const [permSaving, setPermSaving] = useState(false);
   const [permSaved, setPermSaved] = useState(false);
   const [permErr, setPermErr] = useState("");
+  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [checkError, setCheckError] = useState("");
 
   /* member tool access draft: true = allowed, false = restricted (denied) */
   function draftFromPayload(servers: PermissionServer[]) {
@@ -164,6 +192,21 @@ export default function Servers() {
     await load();
   }
 
+  async function checkNow(s: Server) {
+    if (checkingId) return;
+    setCheckingId(s.id);
+    setCheckError("");
+    try {
+      await api.checkServer(s.id);
+      await load();
+    } catch (e: unknown) {
+      setCheckError(e instanceof Error ? e.message : String(e));
+      await load();
+    } finally {
+      setCheckingId(null);
+    }
+  }
+
   const counts = useMemo(() => {
     let connected = 0, unreachable = 0, unknown = 0, disabled = 0;
     for (const s of servers) {
@@ -204,6 +247,7 @@ export default function Servers() {
         </div>
 
         {err && <div className="alert alert-error" role="alert">{err}</div>}
+        {checkError && <div className="alert alert-error" role="alert">{checkError}</div>}
 
         {/* summary */}
         <section className="card" style={{ display: "flex", gap: "var(--s4)", alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" }}>
@@ -254,7 +298,7 @@ export default function Servers() {
                       <td data-label="Server">
                         <div className="slug">{s.slug}</div>
                         <div className="url">{s.url}</div>
-                        {s.last_error && <div className="err">last error: {s.last_error.slice(0, 160)}</div>}
+                        {isAdmin && healthLine(s) && <div className="url health-line" data-health-line>{healthLine(s)}</div>}
                       </td>
                       <td data-label="Status">
                         <span className={`chip ${st.cls}`}><Icon name={st.icon} />{!s.enabled ? "Disabled" : s.status}</span>
@@ -292,6 +336,9 @@ export default function Servers() {
                       {isAdmin && (
                         <td data-label="Actions">
                           <div className="row" style={{ justifyContent: "flex-end" }}>
+                            <button className="btn btn-secondary btn-sm" type="button" disabled={checkingId !== null} onClick={() => checkNow(s)}>
+                              <Icon name="dot" sm />{checkingId === s.id ? "Checking..." : "Check now"}
+                            </button>
                             <button className="btn btn-secondary btn-sm" type="button" onClick={() => setModal({ mode: "edit", server: s })}>
                               <Icon name="edit" sm />Edit
                             </button>

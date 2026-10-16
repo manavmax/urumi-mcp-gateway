@@ -108,6 +108,10 @@ def make_server(*, slug: str, enabled: bool = True, timeout_ms: int = 500):
         enabled=enabled,
         status="Unknown",
         last_error=None,
+        last_checked_at=None,
+        last_ok_at=None,
+        last_latency_ms=None,
+        last_error_category=None,
         timeout_ms=timeout_ms,
     )
 

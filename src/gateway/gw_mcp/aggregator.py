@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -144,8 +145,12 @@ async def fanout_list_tools(db: AsyncSession, servers: list[Server], timeout_sec
     from gw_mcp.breaker import breaker
 
     async def fetch_one(s: Server):
+        from gw_mcp.categorize import classify
+        from gw_mcp.health_state import record_failure, record_success
+
         if breaker.is_open(s.id):
             return {"server": s.slug, "error": "circuit open", "circuit": True}
+        started = time.monotonic()
         try:
             rows = await fetch_and_cache_tools(db, s, timeout_seconds=timeout_seconds)
             # convert rows to exposed dicts
@@ -158,16 +163,14 @@ async def fanout_list_tools(db: AsyncSession, servers: list[Server], timeout_sec
                         "inputSchema": r.input_schema,
                     }
                 )
-            # mark connected
-            s.status = "Connected"
-            s.last_error = None
+            # mark connected + record health timings
+            record_success(s, latency_ms=int((time.monotonic() - started) * 1000))
             breaker.record_success(s.id)
             return {"server": s.slug, "tools": tools}
         except Exception as exc:
             breaker.record_failure(s.id)
-            s.status = "Unreachable"
-            s.last_error = str(exc)[:500]
-            return {"server": s.slug, "error": str(exc)[:500]}
+            record_failure(s, classify(exc), latency_ms=int((time.monotonic() - started) * 1000))
+            return {"server": s.slug, "error": s.last_error}
 
     results = await asyncio.gather(*[fetch_one(s) for s in servers], return_exceptions=True)
     all_tools: list[dict] = []

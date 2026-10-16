@@ -84,7 +84,19 @@ class Server(Base):
     credential_key_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[str] = mapped_column(Text, default="Unknown", nullable=False)
+    # last_error holds ONLY a safe human label (from gw_mcp.categorize.category_label),
+    # never raw exception text - an exception message may embed a URL with credentials,
+    # a header or a token, and nothing like that may be stored or returned.
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Observability (docs/11_OBSERVABILITY.md): when this server was last checked /
+    # last known healthy, the last measured latency, and the stable error category
+    # (connection_refused|timeout|dns_failure|tls_error|http_error:<code>|
+    # invalid_response|auth_rejected|other). Updated on every health check and on
+    # every upstream call outcome; admins-only in API responses.
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_error_category: Mapped[str | None] = mapped_column(Text, nullable=True)
     timeout_ms: Mapped[int] = mapped_column(Integer, default=10000, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)

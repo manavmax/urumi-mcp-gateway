@@ -59,6 +59,11 @@ export type Server = {
   timeout_ms: number;
   created_at: string;
   updated_at: string;
+  /* observability (docs/11_OBSERVABILITY.md) - admins only; members never get them */
+  last_checked_at?: string | null;
+  last_ok_at?: string | null;
+  last_latency_ms?: number | null;
+  last_error_category?: string | null;
 };
 export type Tool = {
   name: string;
@@ -144,6 +149,9 @@ export const api = {
     request<Server>(`/api/servers/${id}/enable`, { method: "POST", csrf: true }),
   disableServer: (id: string) =>
     request<Server>(`/api/servers/${id}/disable`, { method: "POST", csrf: true }),
+  /* Admin "Check now": immediate health probe of one server, rate limited server-side. */
+  checkServer: (id: string) =>
+    request<Server>(`/api/servers/${id}/check`, { method: "POST", csrf: true }),
 
   listUsers: () => request<{ users: { id: string; email: string; role: string; is_active: boolean; created_at: string }[] }>("/api/users"),
   createUser: (data: { email: string; password: string; role: string }) =>

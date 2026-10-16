@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
 import httpx
 from config import get_settings
@@ -17,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from gw_mcp.aggregator import split_exposed
 from gw_mcp.breaker import breaker
+from gw_mcp.categorize import classify
+from gw_mcp.health_state import record_failure, record_success
 
 logger = logging.getLogger("gateway.router")
 
@@ -253,20 +256,19 @@ async def call_tool_routed(
     if breaker.is_open(server.id):
         raise RuntimeError(f"Upstream {slug} circuit open")
 
+    started = time.monotonic()
     try:
         result = await asyncio.wait_for(
             proxy_call(server, upstream, arguments, timeout_seconds=timeout_seconds),
             timeout=(timeout_seconds or server.timeout_ms / 1000.0) + 1,
         )
         breaker.record_success(server.id)
-        # keep status connected on success
-        server.status = "Connected"
-        server.last_error = None
+        # keep status connected on success + record health timings
+        record_success(server, latency_ms=int((time.monotonic() - started) * 1000))
         return result
     except TimeoutError as exc:
         breaker.record_failure(server.id)
-        server.status = "Unreachable"
-        server.last_error = "timeout"
+        record_failure(server, "timeout", latency_ms=int((time.monotonic() - started) * 1000))
         raise TimeoutError(f"Upstream {slug} timed out") from exc
     except ValueError:
         raise
@@ -275,7 +277,6 @@ async def call_tool_routed(
         # without this, a proxy that fails with RuntimeError would hammer a dead
         # upstream forever without ever tripping the breaker (found by tests).
         breaker.record_failure(server.id)
-        server.status = "Unreachable"
-        server.last_error = str(exc)[:500]
-        logger.warning("proxy_call failed for %s/%s: %s", slug, upstream, exc)
+        record_failure(server, classify(exc), latency_ms=int((time.monotonic() - started) * 1000))
+        logger.warning("proxy_call failed for %s/%s category=%s", slug, upstream, classify(exc))
         raise RuntimeError(f"Upstream {slug} error: {exc}") from exc
