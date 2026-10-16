@@ -141,6 +141,18 @@ export type ApiKeyRow = {
   created_at: string;
 };
 
+export type AdminAlert = {
+  slug: string;
+  kind: string;
+  status: string;
+  category: string | null;
+  reason: string;
+  unreachable_since: string | null;
+  calls_1h?: number;
+  errors_1h?: number;
+};
+export type AlertsPayload = { admin: AdminAlert[] } | { member: { slugs: string[] } };
+
 export const api = {
   me: () => request<Me>("/api/me"),
   login: (email: string, password: string) =>
@@ -164,6 +176,16 @@ export const api = {
   /* Admin "Check now": immediate health probe of one server, rate limited server-side. */
   checkServer: (id: string) =>
     request<Server>(`/api/servers/${id}/check`, { method: "POST", csrf: true }),
+  /* Look up a server by slug to get its id for checkServer (alerts carry slug only). */
+  checkServerBySlug: async (slug: string) => {
+    const res = await request<{ servers: Server[] }>("/api/servers");
+    const srv = res.servers.find((s) => s.slug === slug);
+    if (!srv) throw new Error(`server ${slug} not found`);
+    return request<Server>(`/api/servers/${srv.id}/check`, { method: "POST", csrf: true });
+  },
+
+  /* Next-best-action banner state (docs/11_OBSERVABILITY.md §3). */
+  alerts: () => request<AlertsPayload>("/api/alerts"),
 
   listUsers: () => request<{ users: { id: string; email: string; role: string; is_active: boolean; created_at: string }[] }>("/api/users"),
   createUser: (data: { email: string; password: string; role: string }) =>

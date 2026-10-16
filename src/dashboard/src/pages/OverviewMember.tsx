@@ -19,6 +19,7 @@ import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName } from "../lib/search";
 import { useMockupMotion } from "../lib/motion";
+import AlertBanner from "../components/AlertBanner";
 import { Icon } from "../components/icons";
 
 const RANGES: { key: StatsRange; label: string }[] = [
@@ -203,6 +204,9 @@ export default function OverviewMember() {
       </header>
 
       {err && <div className="alert alert-error" role="alert">{err}</div>}
+
+      {/* calm member notice when some servers are unavailable (docs/11_OBSERVABILITY.md §3) */}
+      <AlertBanner role="member" />
 
       <div className="row wrap" style={{ gap: 8, justifyContent: "space-between" }}>
         <div className="row wrap" style={{ gap: 8 }}>

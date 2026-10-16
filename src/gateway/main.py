@@ -181,6 +181,7 @@ def create_app() -> FastAPI:
         )
 
     # routes
+    from routes.alerts import router as alerts_router
     from routes.audit import router as audit_router
     from routes.chat import router as chat_router
     from routes.health import router as health_router
@@ -193,6 +194,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(mcp_router)
+    app.include_router(alerts_router)
     app.include_router(permissions_router)
     app.include_router(servers_router)
     app.include_router(users_router)

@@ -12,6 +12,7 @@ import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName, initials } from "../lib/search";
 import { useMockupMotion } from "../lib/motion";
+import AlertBanner from "../components/AlertBanner";
 import { Icon } from "../components/icons";
 
 const RANGES: { key: StatsRange; label: string }[] = [
@@ -167,6 +168,9 @@ export default function Overview() {
       </header>
 
       {err && <div className="alert alert-error" role="alert">{err}</div>}
+
+      {/* next-best-action banner (admin, docs/11_OBSERVABILITY.md §3) */}
+      <AlertBanner role="admin" />
 
       <div className="row wrap" style={{ gap: 8, justifyContent: "space-between" }}>
         <div className="row wrap" style={{ gap: 8 }}>

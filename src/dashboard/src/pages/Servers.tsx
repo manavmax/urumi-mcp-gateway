@@ -12,6 +12,7 @@ import { useSearch } from "../lib/search";
 import { useMockupMotion } from "../lib/motion";
 import { Topbar } from "../components/Topbar";
 import { ServerForm, type ServerFormValues } from "../components/ServerForm";
+import AlertBanner from "../components/AlertBanner";
 import { Icon } from "../components/icons";
 
 const STATUS_CHIP = (status: string): { cls: string; icon: "check-circle" | "x-circle" | "pause" | "dot" } => {
@@ -248,6 +249,9 @@ export default function Servers() {
 
         {err && <div className="alert alert-error" role="alert">{err}</div>}
         {checkError && <div className="alert alert-error" role="alert">{checkError}</div>}
+
+        {/* next-best-action banner (admin, docs/11_OBSERVABILITY.md §3) */}
+        <AlertBanner role="admin" />
 
         {/* summary */}
         <section className="card" style={{ display: "flex", gap: "var(--s4)", alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" }}>

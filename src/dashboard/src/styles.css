@@ -232,6 +232,23 @@ tbody tr:hover { background: var(--primary-tint); }
 .slug { font-weight: 750; font-family: var(--font-mono); font-size: var(--t-md); }
 .url { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--text-muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .err { font-size: var(--t-xs); color: var(--bad-text); background: var(--bad-bg); border-radius: 8px; padding: 4px 8px; margin-top: 6px; max-width: 300px; }
+.health-line { margin-top: 3px; max-width: none; white-space: normal; }
+
+/* ---------- next-best-action banner (docs/11_OBSERVABILITY.md §3) ---------- */
+.banner { display: flex; gap: var(--s3); align-items: flex-start; background: var(--bad-bg); border: 1px solid var(--bad-bg); border-radius: var(--r-inner); padding: var(--s3) var(--s4); font-size: var(--t-sm); margin-bottom: var(--s4); }
+.banner > .ic { color: var(--bad-text); margin-top: 2px; flex: none; }
+.banner-calm { background: var(--primary-tint); border-color: var(--primary-tint); }
+.banner-calm > .ic { color: var(--primary-hover); }
+.banner-body { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.banner-body b { color: var(--bad-text); }
+.banner-more { color: var(--text-faint); }
+.banner-actions { display: inline-flex; gap: var(--s2); margin-left: auto; }
+.banner-close { flex: none; background: none; border: none; cursor: pointer; color: var(--text-faint); padding: 2px; border-radius: 6px; }
+.banner-close:hover { color: var(--text); }
+@media (max-width: 640px) {
+  .banner-actions { margin-left: 0; width: 100%; }
+  .banner { flex-wrap: wrap; }
+}
 .email { font-weight: 650; font-size: var(--t-md); }
 .mono-cell { font-family: var(--font-mono); font-size: var(--t-md); }
 .tool-name { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 700; }

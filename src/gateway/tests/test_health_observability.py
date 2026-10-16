@@ -17,7 +17,8 @@ import errno
 import json
 import socket
 import ssl
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -275,3 +276,72 @@ async def test_check_now_admin_only_and_rate_limited(harness):
     async with _role_client(app, ADMIN["email"], ADMIN["password"]) as (admin2, _):
         r = await admin2.post(f"/api/servers/{sid}/check", headers={})
         assert r.status_code == 403, "check now without CSRF must be rejected"
+
+
+# ---------------------------------------------------------------------------
+# 4. /api/alerts next-best-action banner state (Item 3)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_alerts_admin_unreachable_member_calm(harness):
+    """Unreachable enabled server -> admin alert row; member gets slugs only."""
+    app, _sf = harness
+    async with _role_client(app, ADMIN["email"], ADMIN["password"]) as (admin, ah), \
+            _role_client(app, MEMBER["email"], MEMBER["password"]) as (member, mh):
+        ra = await admin.get("/api/alerts", headers=ah)
+        assert ra.status_code == 200, ra.text
+        admin_rows = ra.json()["admin"]
+        assert len(admin_rows) == 1
+        alert = admin_rows[0]
+        assert alert["slug"] == "sink" and alert["kind"] == "unreachable"
+        assert alert["category"] == "connection_refused"
+        assert alert["reason"] == "connection refused"
+        assert "credential" not in str(alert).lower()
+
+        rm = await member.get("/api/alerts", headers=mh)
+        assert rm.status_code == 200
+        member_payload = rm.json()
+        assert "admin" not in member_payload, "member must never see the admin rows"
+        assert member_payload["member"]["slugs"] == ["sink"]
+
+
+@pytest.mark.asyncio
+async def test_alerts_high_error_rate_rule(harness):
+    """Error rate over the last hour > 20% with >= 5 calls triggers the banner."""
+    from db.models import AuditLog
+
+    app, sf = harness
+    now = datetime.now(UTC)
+    async with sf() as db:
+        # sink is currently Connected but has a bad last hour: 6 calls, 2 errors (33%)
+        srv = (await db.execute(select(Server).where(Server.slug == "sink"))).scalar_one()
+        srv.status = "Connected"
+        srv.last_error_category = None
+        srv.last_error = None
+        for i in range(6):
+            db.add(AuditLog(id=5000 + i, ts=now - timedelta(minutes=30), server_slug="sink",
+                            tool_exposed_name="sink__a", tool_upstream_name="a",
+                            request_id=uuid.uuid4(), duration_ms=10,
+                            outcome="success" if i < 4 else "upstream_error"))
+        await db.commit()
+    async with _role_client(app, ADMIN["email"], ADMIN["password"]) as (admin, ah):
+        rows = (await admin.get("/api/alerts", headers=ah)).json()["admin"]
+    assert len(rows) == 1
+    assert rows[0]["kind"] == "high_error_rate"
+    assert rows[0]["reason"].startswith("33.3% error rate")
+
+
+@pytest.mark.asyncio
+async def test_alerts_healthy_is_empty(harness):
+    """No alerts when every enabled server is Connected and error rate is low."""
+    app, sf = harness
+    async with sf() as db:
+        srv = (await db.execute(select(Server).where(Server.slug == "sink"))).scalar_one()
+        srv.status = "Connected"
+        srv.last_error_category = None
+        srv.last_error = None
+        await db.commit()
+    async with _role_client(app, ADMIN["email"], ADMIN["password"]) as (admin, ah), \
+            _role_client(app, MEMBER["email"], MEMBER["password"]) as (member, mh):
+        assert (await admin.get("/api/alerts", headers=ah)).json()["admin"] == []
+        assert (await member.get("/api/alerts", headers=mh)).json()["member"]["slugs"] == []
