@@ -13,6 +13,7 @@ import asyncio
 import time
 import uuid
 
+from audit.admin_events import record_admin_event
 from auth.rbac import get_current_user_via_session, require_admin, verify_csrf
 from config import get_settings
 from db.models import Server
@@ -103,6 +104,18 @@ async def create_server_route(
             enabled=body.enabled,
             allowed_host_suffixes=settings.allowed_host_suffix_list(),
             allowed_domains=settings.allowed_domains_list(),
+        )
+        # Same transaction as the action: the commit below lands event + server
+        # together; a failure (400/exception) rolls both back, so a failed action
+        # can never leave a success event (ADR-034). details never contain the
+        # credential value - only the fact that one was set.
+        record_admin_event(
+            db,
+            actor_user_id=user.id,
+            action="server.create",
+            target_type="server",
+            target_ref=body.slug,
+            details={"auth_type": body.auth_type, "has_credential": bool(body.credential)},
         )
         await db.commit()
     except ValueError as exc:
@@ -201,6 +214,31 @@ async def patch_server_route(
             allowed_host_suffixes=settings.allowed_host_suffix_list(),
             allowed_domains=settings.allowed_domains_list(),
         )
+        # server.update event: field NAMES only, and a credential is recorded as
+        # the flag credential_changed/credential_removed - never a value or hash.
+        changed = [
+            name
+            for name, val in (
+                ("slug", body.slug),
+                ("url", body.url),
+                ("auth_type", body.auth_type),
+                ("header_name", body.header_name),
+                ("timeout_ms", body.timeout_ms),
+                ("enabled", body.enabled),
+            )
+            if val is not None
+        ]
+        details: dict = {"fields": changed}
+        if body.credential is not None:
+            details["credential_changed" if body.credential else "credential_removed"] = True
+        record_admin_event(
+            db,
+            actor_user_id=user.id,
+            action="server.update",
+            target_type="server",
+            target_ref=srv.slug,
+            details=details,
+        )
         await db.commit()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -220,6 +258,7 @@ async def disable_server_route(
         raise HTTPException(status_code=404, detail="server not found")
     srv.enabled = False
     srv.status = "Disabled"
+    record_admin_event(db, actor_user_id=user.id, action="server.disable", target_type="server", target_ref=srv.slug)
     await db.commit()
     return _server_out(srv, is_admin=True)
 
@@ -237,6 +276,7 @@ async def enable_server_route(
         raise HTTPException(status_code=404, detail="server not found")
     srv.enabled = True
     srv.status = "Unknown"
+    record_admin_event(db, actor_user_id=user.id, action="server.enable", target_type="server", target_ref=srv.slug)
     await db.commit()
     return _server_out(srv, is_admin=True)
 
@@ -252,6 +292,9 @@ async def delete_server_route(
     srv = await get_server(db, server_id)
     if not srv:
         raise HTTPException(status_code=404, detail="server not found")
+    # recorded before the delete so the slug is on the event; same transaction,
+    # so a failed delete rolls the event back too
+    record_admin_event(db, actor_user_id=user.id, action="server.delete", target_type="server", target_ref=srv.slug)
     await delete_server(db, srv)
     await db.commit()
     return None
