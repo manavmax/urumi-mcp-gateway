@@ -10,8 +10,9 @@ see scripts/demo-reset-woo.py).
 Modes
 -----
 --dry-run            read-only: print what WOULD change, change nothing
---reset              truncate audit_logs; delete every non-admin user (their API keys
-                     cascade); optionally --with-demo-users
+--reset              truncate audit_logs and tool_permissions (default allow-all
+                     policy); delete every non-admin user (their API keys
+                      cascade); optionally --with-demo-users
 --verify             force a health probe, assert the 3 seeded upstreams are Connected
                      and tools/list returns 11 tools (woo 6 / time 2 / notes 3)
 
@@ -38,7 +39,7 @@ import httpx
 from auth.keys import create_api_key, hash_key, revoke_api_key
 from auth.rbac import hash_password
 from config import get_settings
-from db.models import ApiKey, AuditLog, Server, User
+from db.models import ApiKey, AuditLog, Server, ToolPermission, User
 from db.session import get_session_factory
 from gw_mcp.health import probe_once
 from registry.crud import INTERNAL_DEFAULTS
@@ -83,6 +84,7 @@ async def gateway_state() -> dict:
     factory = get_session_factory()
     async with factory() as db:
         audit_rows = (await db.execute(select(func.count()).select_from(AuditLog))).scalar() or 0
+        perm_rules = (await db.execute(select(func.count()).select_from(ToolPermission))).scalar() or 0
         users = list((await db.execute(select(User).order_by(User.created_at))).scalars().all())
         keys = list((await db.execute(select(ApiKey))).scalars().all())
         servers = list((await db.execute(select(Server).order_by(Server.slug))).scalars().all())
@@ -96,6 +98,7 @@ async def gateway_state() -> dict:
         keys_by_owner[k.user_id] = keys_by_owner.get(k.user_id, 0) + 1
     return {
         "audit_rows": audit_rows,
+        "perm_rules": perm_rules,
         "admins": admins,
         "members": members,
         "keys_by_owner": keys_by_owner,
@@ -161,10 +164,11 @@ async def dry_run() -> int:
     state = await gateway_state()
     notes_count, notes_err = await count_notes()
 
-    print("== Gateway (audit_logs / users / api_keys / servers) ==")
+    print("== Gateway (audit_logs / tool_permissions / users / api_keys / servers) ==")
     print(
         f"audit_logs: {state['audit_rows']} rows -> would be TRUNCATEd (ids restart at 1)"
     )
+    print(f"tool_permissions: {state['perm_rules']} deny rule(s) -> would be TRUNCATEd (default allow-all)")
     print(
         f"users: {len(state['admins']) + len(state['members'])} total | "
         f"KEEP {len(state['admins'])} admin | DELETE {len(state['members'])} non-admin"
@@ -263,6 +267,14 @@ async def reset(with_demo_users: bool) -> int:
         remaining = (await db.execute(select(func.count()).select_from(AuditLog))).scalar() or 0
         print(f"audit_logs: {remaining} rows remain")
 
+        # 1b. tool_permissions: back to the default allow-all policy (ADR-033). The
+        # demo applies the example member deny policy live; the reset clears it.
+        perm_rows = (await db.execute(select(func.count()).select_from(ToolPermission))).scalar() or 0
+        print(f"tool_permissions: deleting {perm_rows} deny rule(s) (default allow-all)")
+        await db.execute(text("TRUNCATE TABLE tool_permissions"))
+        remaining_perm = (await db.execute(select(func.count()).select_from(ToolPermission))).scalar() or 0
+        print(f"tool_permissions: {remaining_perm} rules remain")
+
         # 2. non-admin users; api_keys cascade, exactly like DELETE /api/users/{id}
         print(f"users: deleting {len(member_rows)} non-admin user(s) (+ {member_key_count} api keys)")
         for user, key_count in member_rows:
@@ -292,6 +304,7 @@ async def reset(with_demo_users: bool) -> int:
         {
             "mode": "reset",
             "audit_rows_deleted": audit_rows,
+            "perm_rules_deleted": perm_rows,
             "users_deleted": [user.email for user, _count in member_rows],
             "keys_deleted": member_key_count,
             "admins_kept": admin_emails,

@@ -17,7 +17,8 @@
 # What it deletes / keeps is decided by scripts/demo-seeds.json (auditable) and the
 # two in-pod workers it drives:
 #   scripts/demo-reset-woo.py   (woo-mcp pod)    Woo REST products + orders
-#   scripts/demo-reset.py       (gateway pod)    audit_logs, non-admin users/keys,
+#   scripts/demo-reset.py       (gateway pod)    audit_logs, tool_permissions,
+#                                               non-admin users/keys,
 #                                               notes count, demo users, verification
 #
 # Usage:
@@ -40,7 +41,8 @@ usage() {
 usage: scripts/demo-reset.sh [--with-demo-users] [--check-only]
 
   (no flags)     DRY RUN - prints what would be deleted, changes nothing
-  CONFIRM=yes    performs the reset (Woo products/orders, audit_logs, non-admin
+  CONFIRM=yes    performs the reset (Woo products/orders, audit_logs,
+                 tool_permissions back to allow-all, non-admin
                  users + their API keys, all notes), then verifies 3 Connected
                  upstreams and tools/list = 11 tools
   --with-demo-users   additionally create demo-a@urumi.local (admin) and
@@ -228,7 +230,8 @@ if gw:
     if gw.get("mode") == "reset":
         print(
             f"  Gateway: {gw.get('audit_rows_deleted', 0)} audit_logs rows, "
-            f"{len(gw.get('users_deleted', []))} non-admin users, {gw.get('keys_deleted', 0)} api keys"
+            f"{len(gw.get('users_deleted', []))} non-admin users, {gw.get('keys_deleted', 0)} api keys, "
+            f"{gw.get('perm_rules_deleted', 0)} tool-permission rules cleared"
         )
         for email in gw.get("users_deleted", []):
             print(f"    deleted user: {email}")
