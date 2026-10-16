@@ -128,6 +128,49 @@ def _is_write_tool(name: str) -> bool:
     return upstream.split("_", 1)[0].lower() in WRITE_VERBS
 
 
+async def _audit_tool_denied(db: AsyncSession, user, exposed_name: str, request_id: str) -> None:
+    """Write the permission_denied audit row for a chat tool call that was denied.
+
+    Mirrors the /mcp route's denied-call audit (same outcome, same user attribution)
+    so a chat denial is visible in the audit trail exactly like an MCP denial.
+    """
+    from audit.queue import log_audit
+    from gw_mcp.aggregator import split_exposed
+
+    try:
+        slug, _ = split_exposed(exposed_name)
+    except Exception:
+        slug = "unknown"
+    srv_id = None
+    try:
+        from db.models import Server as _Server
+        from sqlalchemy import select as _select
+        _r = await db.execute(_select(_Server.id).where(_Server.slug == slug))
+        srv_id = _r.scalar_one_or_none()
+    except Exception:
+        srv_id = None
+    try:
+        _rid = uuid.UUID(str(request_id)) if not isinstance(request_id, uuid.UUID) else request_id
+    except Exception:
+        _rid = uuid.uuid4()
+    await log_audit(
+        user_id=user.id,
+        api_key_id=None,
+        server_id=srv_id,
+        server_slug=slug,
+        tool_exposed_name=exposed_name,
+        tool_upstream_name=exposed_name.split("__", 1)[-1] if "__" in exposed_name else exposed_name,
+        request_id=_rid,
+        duration_ms=0,
+        outcome="permission_denied",
+        error_code="permission_denied",
+    )
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
+
 def _sanitize_llm_schema(schema):
     """Reduce an MCP tool JSON Schema to the subset the common function-calling
     dialect accepts, without changing what the tool means (docs/04 §6, docs/09).
@@ -223,17 +266,19 @@ def _sanitize(text: str) -> str:
     return sanitize(text)
 
 
-async def _get_allowed_tools(db: AsyncSession) -> list[dict]:
+async def _get_allowed_tools(db: AsyncSession, user) -> list[dict]:
     from db.models import Server
     from gw_mcp.aggregator import list_cached_tools
+    from gw_mcp.permissions import filter_tools_for_user
 
-    # for now, all enabled servers' cached tools; RBAC filtering can be added per-user later
+    # enabled servers' cached tools; per-role deny rules hide denied tools (members)
     res = await db.execute(select(Server).where(Server.enabled.is_(True)))
     servers = list(res.scalars().all())
     if not servers:
         return []
     ids = [s.id for s in servers]
-    return await list_cached_tools(db, ids)
+    tools = await list_cached_tools(db, ids)
+    return await filter_tools_for_user(db, user, tools)
 
 
 async def chat_loop(
@@ -252,7 +297,7 @@ async def chat_loop(
         yield {"type": "text", "content": "Chat is not configured: the gateway-llm Secret has an empty OPENAI_API_KEY. Put a real key in it (or set gateway.llm.existingSecret) and upgrade - urumi.io/llm-secret-checksum rolls the gateway pod for you."}
         return
 
-    allowed_tools = await _get_allowed_tools(db)
+    allowed_tools = await _get_allowed_tools(db, user)
     openai_tools = _to_openai_tools(allowed_tools)
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}, *conversation]
 
@@ -442,10 +487,24 @@ async def chat_loop(
             # Validate against allowed set
             allowed_names = {t["name"] for t in allowed_tools}
             if name not in allowed_names:
-                result = {"error": f"unknown tool '{name}'; allowed: {sorted(allowed_names)[:10]}"}
-                outcome = "validation_error"
+                # A denied tool is already filtered out of `allowed_tools` (the SAME
+                # enforcement core /mcp uses), so this is either a genuinely unknown tool
+                # or a prompt-injection attempt at a hidden one. Either way it is never
+                # routed upstream. A denied (hidden) tool is audited as permission_denied.
+                try:
+                    from gw_mcp.permissions import assert_call_allowed
+
+                    await assert_call_allowed(db, user, name)
+                except PermissionError:
+                    result = {"error": f"unknown tool '{name}'"}
+                    outcome = "permission_denied"
+                else:
+                    result = {"error": f"unknown tool '{name}'; allowed: {sorted(allowed_names)[:10]}"}
+                    outcome = "validation_error"
                 yield {"type": "tool_call", "tool": name, "outcome": outcome, "output": result}
                 messages.append(_build_tool_message(tc.id, tool_marker, name, result))
+                if outcome == "permission_denied":
+                    await _audit_tool_denied(db, user, name, str(request_id))
                 continue
 
             # Route via gateway (impersonate user)

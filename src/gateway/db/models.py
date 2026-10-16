@@ -1,6 +1,6 @@
 """SQLAlchemy async models — docs/04 §3.
 
-Tables: users, api_keys, servers, tools, audit_logs
+Tables: users, api_keys, servers, tools, audit_logs, tool_permissions
 All PKs are UUIDs except audit_logs (BIGSERIAL).
 """
 
@@ -133,4 +133,33 @@ class AuditLog(Base):
         ),
         Index("ix_audit_ts", "ts"),
         Index("ix_audit_user_ts", "user_id", "ts"),
+    )
+
+
+class ToolPermission(Base):
+    """Deny rule for the member role (docs/DECISIONS.md ADR-033, docs/09 §2).
+
+    - role: which role the rule applies to (only 'member' is enforced today; admins
+      always have all tools, so their rules would be pointless and are rejected).
+    - server_slug: the upstream's slug the rule is about.
+    - tool_name: the EXPOSED name (e.g. 'woo__create_product'), or NULL for a whole
+      server. Exposed names include the slug prefix so a rule is unambiguous.
+    - created_by: which admin wrote the rule (SET NULL when the user is deleted).
+    - created_at: when the rule was written.
+    A rule is read live on every tools/list and tools/call: no caching survives a
+    policy change, so the next call always reflects the current policy.
+    """
+
+    __tablename__ = "tool_permissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    server_slug: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("role IN ('member')", name="ck_tool_permissions_role"),
+        Index("ix_tool_permissions_role_server", "role", "server_slug"),
     )

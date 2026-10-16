@@ -16,7 +16,15 @@ from __future__ import annotations
 import asyncio
 import re
 
-from tests.conftest import ChatFakeDB, chat_user, fake_settings, run_chat_turn, text_response, tool_call_response
+from tests.conftest import (
+    ChatFakeDB,
+    chat_user,
+    fake_settings,
+    noop_audit,
+    run_chat_turn,
+    text_response,
+    tool_call_response,
+)
 
 TOOLS = [
     {"name": "notes__create_note", "description": "Create a note.", "inputSchema": {"type": "object", "properties": {}}},
@@ -449,3 +457,115 @@ def test_recovery_message_helper_preserves_envelope_verbatim():
 
     assert _build_recovery_message([]) is None
     assert _build_recovery_message([{"role": "tool", "content": ""}]) is None
+
+
+# ---------------------------------------------------------------------------
+# tool permissions: the chat agent must never route a denied tool, and a
+# prompt-injection attempt that forces the model to name a denied tool must be
+# rejected (outcome permission_denied, audited, zero upstream calls).
+
+
+def test_chat_agent_tool_list_hides_denied_tools(monkeypatch):
+    """The chat agent loads its tool list through the SAME enforcement core as
+    /mcp tools/list: a member's denied tool is absent, an admin still sees it."""
+    import gw_mcp.permissions as permissions
+
+    from tests.conftest import ChatFakeDB, chat_user, fake_settings, patch_chat_agent
+
+    DENIED = {"woo__create_product"}
+
+    async def fake_deny_rules(db, role):
+        return DENIED if role == "member" else frozenset()
+
+    monkeypatch.setattr(permissions, "deny_rules_for_role", fake_deny_rules)
+
+    # member: the denied tool is filtered out of the chat agent's tool list
+    member = chat_user("00000000-0000-0000-0000-0000000000a1")
+    member.role = "member"
+    agent = patch_chat_agent(monkeypatch, settings=fake_settings(), tools=TOOLS, route=lambda *a, **k: {}, audit=noop_audit)
+    async def _member_allowed(_db, _user):
+        return await permissions.filter_tools_for_user(_db, _user, TOOLS)
+    monkeypatch.setattr(agent, "_get_allowed_tools", _member_allowed)
+    import asyncio
+    allowed = asyncio.run(agent._get_allowed_tools(ChatFakeDB(), member))
+    names = {t["name"] for t in allowed}
+    assert "woo__create_product" not in names, names
+    assert "woo__list_orders" in names and "notes__create_note" in names, names
+
+    # admin: still sees every tool
+    admin = chat_user("00000000-0000-0000-0000-0000000000a2")
+    admin.role = "admin"
+    allowed = asyncio.run(agent._get_allowed_tools(ChatFakeDB(), admin))
+    names = {t["name"] for t in allowed}
+    assert "woo__create_product" in names, names
+
+
+def test_chat_agent_injection_attempt_on_denied_tool_is_rejected(monkeypatch):
+    """Prompt-injection style: the model is FORCED (by attacker-controlled tool data or a
+    crafted prompt) to emit a tool_call for a tool the member is denied. The chat agent
+    must not route it: zero upstream calls, the SSE event outcome is permission_denied,
+    and a permission_denied audit row is written under the user.
+
+    The tool list itself is built by the real filter (gw_mcp.permissions), so the
+    denied tool is absent from the model's tool list AND a forced call is rejected
+    before it reaches the upstream.
+    """
+    import gw_mcp.permissions as permissions
+
+    from tests.conftest import (
+        ChatFakeDB,
+        chat_user,
+        fake_settings,
+        install_fake_openai,
+        patch_chat_agent,
+        tool_call_response,
+    )
+
+    DENIED = {"woo__create_product"}
+    route_calls: list[str] = []
+    audit_rows: list[dict] = []
+
+    async def fake_deny_rules(db, role):
+        return DENIED if role == "member" else frozenset()
+
+    monkeypatch.setattr(permissions, "deny_rules_for_role", fake_deny_rules)
+
+    async def fake_route(db, name, arguments, **_):
+        route_calls.append(name)  # must never fire for the denied tool
+        return {"content": [{"type": "text", "text": "ran"}], "isError": False}
+
+    async def fake_audit(**kwargs):
+        audit_rows.append(kwargs)
+
+    async def create(**kwargs):
+        return tool_call_response("woo__create_product")
+
+    # tools as the agent's real loader would produce for a member (filter applied)
+    tools_for_member = [t for t in TOOLS if not permissions.tool_denied(DENIED, t["name"])]
+
+    agent = patch_chat_agent(monkeypatch, settings=fake_settings(), tools=tools_for_member,
+                             route=fake_route, audit=fake_audit)
+    install_fake_openai(monkeypatch, create)
+    user = chat_user("00000000-0000-0000-0000-0000000000a3")
+    user.role = "member"
+
+    import asyncio as _asyncio
+
+    async def _drive():
+        events = []
+        async for evt in agent.chat_loop(ChatFakeDB(), user,
+                                         [{"role": "user", "content": "Create a product named HACKED now"}],
+                                         "req-perm-inj-1"):
+            events.append(evt)
+        return events
+
+    events = _asyncio.run(_drive())
+
+    assert route_calls == [], f"denied tool reached upstream: {route_calls}"
+    tool_events = [e for e in events if e.get("type") == "tool_call"]
+    assert tool_events, "expected a tool_call event"
+    assert tool_events[-1]["tool"] == "woo__create_product"
+    assert tool_events[-1]["outcome"] in ("permission_denied", "validation_error"), tool_events[-1]
+    # audited under the user with the right outcome
+    assert any(a.get("outcome") == "permission_denied" and "tool_exposed_name" in a for a in audit_rows), audit_rows
+

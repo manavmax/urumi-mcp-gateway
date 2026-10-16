@@ -23,6 +23,7 @@ from db.session import get_db
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from gw_mcp.aggregator import fanout_list_tools, list_cached_tools, split_exposed
+from gw_mcp.permissions import assert_call_allowed
 from gw_mcp.router import call_tool_routed
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -128,9 +129,8 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
             logger.warning("fanout failed, falling back to cache: %s", exc)
             tools = await list_cached_tools(db, [s.id for s in servers])
             warnings = [{"error": str(exc)[:500]}]
-        # RBAC filter placeholder: if user is member, we could filter here
-        # For now return all; docs say per-tool RBAC optional but do it — we keep hook
-        tools = _filter_tools_by_rbac(user, tools)
+        # RBAC: filter per-role tool deny rules (members); admins see everything
+        tools = await _filter_tools_by_rbac(db, user, tools)
         result = {"tools": tools}
         if warnings:
             result["_meta"] = {"warnings": warnings}
@@ -142,8 +142,14 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
         arguments = params.get("arguments") or {}
         if not name:
             return JSONResponse(_jsonrpc_error(msg_id, -32602, "missing tool name"), status_code=400)
-        # RBAC check
-        if not _can_call(user, name):
+        # RBAC check: deny rules for the caller's role (members). Admins always allowed.
+        # This is the ONE enforcement point for /mcp calls; the chat agent uses the same
+        # core (gw_mcp.permissions.assert_call_allowed). A denied call is rejected BEFORE
+        # routing upstream, is audited as permission_denied, and returns the standard
+        # unknown-tool error so the caller learns nothing about the tool's existence.
+        try:
+            await assert_call_allowed(db, user, name)
+        except PermissionError:
             await log_audit(
                 user_id=user.id,
                 api_key_id=api_key_id,
@@ -157,7 +163,8 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 error_code="permission_denied",
                 client_ip=client_ip,
             )
-            return JSONResponse(_jsonrpc_error(msg_id, -32000, f"permission denied for tool {name}"), status_code=403)
+            # identical to the unknown-tool error (no existence leak)
+            return JSONResponse(_jsonrpc_error(msg_id, -32602, f"unknown tool: {name}"), status_code=400)
 
         # split to get slug for audit
         try:
@@ -268,7 +275,7 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
     return JSONResponse(_jsonrpc_error(msg_id, -32601, f"unknown method {method}"), status_code=400)
 
 
-# ---- RBAC hooks (extend for per-tool permissions) ----
+# ---- RBAC: per-role tool deny rules (the ONE enforcement core, ADR-033) ----
 
 def _upstream_error_code(result: dict | None) -> str | None:
     """Return a stable error code when a proxied tool ran but failed.
@@ -292,18 +299,12 @@ def _upstream_error_code(result: dict | None) -> str | None:
         return match.group(1)
     return "upstream_error"
 
-def _filter_tools_by_rbac(user, tools: list[dict]) -> list[dict]:
-    # Placeholder: all tools visible. Future: filter by permissions table.
-    # For member role we could restrict write tools, but spec says tools/list filtering
-    # is optional; enforcement is on tools/call.
-    return tools
 
+async def _filter_tools_by_rbac(db, user, tools: list[dict]) -> list[dict]:
+    """tools/list: hide per-role denied tools. Admins always see all."""
+    from gw_mcp.permissions import filter_tools_for_user
 
-def _can_call(user, exposed_name: str) -> bool:
-    # Placeholder: allow all. Future: check permissions table.
-    # Example: if user.role == "member" and exposed_name.endswith("__update_order_status"):
-    #   return False
-    return True
+    return await filter_tools_for_user(db, user, tools)
 
 
 # ---- simple in-memory rate limiter ----

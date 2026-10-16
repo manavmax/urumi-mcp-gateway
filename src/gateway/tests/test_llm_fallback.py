@@ -404,7 +404,7 @@ async def _run_chat(monkeypatch, behaviors, tools=None, max_models=None, chain=N
 
     monkeypatch.setattr(agent, "get_settings", lambda: Settings())
 
-    async def _fake_allowed(_db):
+    async def _fake_allowed(_db, _user=None):
         return tools or []
 
     monkeypatch.setattr(agent, "_get_allowed_tools", _fake_allowed)

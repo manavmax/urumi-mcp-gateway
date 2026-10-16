@@ -25,4 +25,8 @@ async def get_tools(request: Request, db: AsyncSession = Depends(get_db), user=D
     except Exception:
         tools = await list_cached_tools(db, [s.id for s in servers])
         warnings = []
+    # per-role deny rules: members lose denied tools, admins see everything
+    from gw_mcp.permissions import filter_tools_for_user
+
+    tools = await filter_tools_for_user(db, user, tools)
     return {"tools": tools, "warnings": warnings}

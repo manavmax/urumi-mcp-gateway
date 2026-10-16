@@ -177,7 +177,7 @@ class ChatFakeDB:
 
 
 def allowed_tools(tools: list[dict]):
-    async def _allowed(_db):
+    async def _allowed(_db, _user=None):
         return tools
 
     return _allowed
