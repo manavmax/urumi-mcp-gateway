@@ -51,6 +51,10 @@ export default function AlertBanner({ role }: { role: "admin" | "member" }) {
 
   useEffect(() => {
     load();
+    // poll at the health-loop cadence so the banner appears within one check
+    // interval of a server going Unreachable (no manual reload needed)
+    const id = window.setInterval(load, 5000);
+    return () => window.clearInterval(id);
   }, [load]);
 
   const adminRows = "admin" in (alerts ?? {}) ? (alerts as { admin: AdminAlert[] }).admin : [];
