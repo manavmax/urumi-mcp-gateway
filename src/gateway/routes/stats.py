@@ -5,7 +5,8 @@ calls; member = only their own audit rows (same scoping rule as /api/audit).
 Counts are exact SQL aggregates; only the duration percentiles come from a
 bounded sample (newest rows first, so the cap degrades deterministically).
 All queries are parameterized SQLAlchemy selects; no raw SQL, no argument
-values or credentials in the response.
+values or credentials in the response. Admins additionally get by_server
+(docs/11_OBSERVABILITY.md §2) - members never receive it.
 """
 
 from __future__ import annotations
@@ -34,6 +35,10 @@ RANGE_WINDOWS: dict[str, timedelta] = {
 # and the per-day series are exact SQL aggregates and never see the cap.
 DURATION_FETCH_CAP = 50000
 
+# by_server sparkline: daily points over the range, capped at 14 (the 7 or
+# 14-point sparkline per server, docs/11_OBSERVABILITY.md §2).
+SPARKLINE_MAX_POINTS = 14
+
 
 def _percentile(sorted_values: list[int], q: float) -> int:
     if not sorted_values:
@@ -45,6 +50,96 @@ def _percentile(sorted_values: list[int], q: float) -> int:
 def _day_key(value) -> str:
     """func.date() yields a date object on Postgres and a string on sqlite."""
     return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def _sparkline_from_days(
+    days: dict[str, dict],
+    total_days: int,
+    now: datetime,
+) -> list[dict]:
+    """Per-server daily series over the selected range, capped at the newest
+    SPARKLINE_MAX_POINTS days. Empty days are filled with zeros so the chart
+    has no gaps (same rule as the headline per-day series)."""
+    count = min(max(1, total_days), SPARKLINE_MAX_POINTS)
+    keys: list[str] = []
+    cursor = now.date()
+    first_day = (now - timedelta(days=total_days)).date()
+    while cursor >= first_day and len(keys) < count:
+        keys.append(cursor.isoformat())
+        cursor -= timedelta(days=1)
+    keys.reverse()
+    return [
+        {
+            "date": key,
+            "calls": days.get(key, {}).get("calls", 0),
+            "errors": days.get(key, {}).get("errors", 0),
+        }
+        for key in keys
+    ]
+
+
+async def _by_server(db: AsyncSession, start: datetime, now: datetime, window: timedelta) -> list[dict]:
+    """Admin per-server aggregates (docs/11_OBSERVABILITY.md §2).
+
+    calls/errors and the sparkline are exact SQL group-bys; p50/p95 come from the
+    same bounded newest-first duration sample as the headline percentiles.
+    Sorted by calls, descending.
+    """
+    scope = [AuditLog.ts >= start]
+
+    # exact per-server outcome counts (one group-by, no row fetch)
+    outcome_res = await db.execute(
+        select(AuditLog.server_slug, AuditLog.outcome, func.count())
+        .where(*scope)
+        .group_by(AuditLog.server_slug, AuditLog.outcome)
+    )
+    per_server: dict[str, dict] = {}
+    for slug, outcome, n in outcome_res.all():
+        row = per_server.setdefault(slug, {"calls": 0, "errors": 0, "days": {}, "durations": []})
+        row["calls"] += int(n)
+        if outcome != "success":
+            row["errors"] += int(n)
+
+    # exact per-day per-server counts for the sparkline (one group-by)
+    day_res = await db.execute(
+        select(AuditLog.server_slug, func.date(AuditLog.ts), AuditLog.outcome, func.count())
+        .where(*scope)
+        .group_by(AuditLog.server_slug, func.date(AuditLog.ts), AuditLog.outcome)
+    )
+    for slug, day_val, outcome, n in day_res.all():
+        row = per_server.setdefault(slug, {"calls": 0, "errors": 0, "days": {}, "durations": []})
+        bucket = row["days"].setdefault(_day_key(day_val), {"calls": 0, "errors": 0})
+        bucket["calls"] += int(n)
+        if outcome != "success":
+            bucket["errors"] += int(n)
+
+    # bounded duration sample per server (newest rows first, same cap semantics)
+    dur_res = await db.execute(
+        select(AuditLog.server_slug, AuditLog.ts, AuditLog.duration_ms)
+        .where(*scope)
+        .order_by(AuditLog.ts.desc())
+        .limit(DURATION_FETCH_CAP)
+    )
+    for slug, _ts, duration_ms in dur_res.all():
+        per_server.setdefault(slug, {"calls": 0, "errors": 0, "days": {}, "durations": []})["durations"].append(duration_ms)
+
+    rows: list[dict] = []
+    total_days = max(1, int((now - start).total_seconds() // 86400))
+    for slug, agg in per_server.items():
+        durations = sorted(agg["durations"])
+        rows.append(
+            {
+                "server": slug,
+                "calls": agg["calls"],
+                "errors": agg["errors"],
+                "error_rate": round(100.0 * agg["errors"] / agg["calls"], 1) if agg["calls"] else None,
+                "p50_ms": _percentile(durations, 0.50),
+                "p95_ms": _percentile(durations, 0.95),
+                "sparkline": _sparkline_from_days(agg["days"], total_days, now),
+            }
+        )
+    rows.sort(key=lambda r: (-r["calls"], r["server"]))
+    return rows
 
 
 @router.get("")
@@ -140,6 +235,8 @@ async def get_stats(
             "per_day": per_day_series,
         },
     }
+    if is_admin:
+        out["by_server"] = await _by_server(db, start, now, window)
     if not is_admin:
         keys_res = await db.execute(
             select(func.count())
