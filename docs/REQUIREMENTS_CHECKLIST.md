@@ -132,7 +132,7 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 |---|---|---|---|
 | **Multi-store provisioning** | NOT DONE | — | no per-store namespace provisioner in the codebase (`10_BONUS_MULTI_STORE.md` is a blueprint only) |
 | **VPS deployment (k3s)** | PARTIAL | `helm lint -f helm/values-prod.yaml` | `values-prod.yaml` valid + chart lints; no live VPS run observed in this session |
-| **Tool permissions (per-role, members read-only)** | PARTIAL | member `tools/call woo__create_product` probe | members CAN call write tools (`woo__create_product` -> created product). Role gating exists on admin CRUD (403) and audit scoping, but the per-tool read-only permission table is NOT implemented |
+| **Tool permissions (per-role, members read-only)** | DONE | `make test` (12 new tests in `tests/test_tool_permissions.py` + chat refusal in `test_prompt_injection.py`) + in-pod `live_verify_perms.py` | default allow-all (empty deny table changes nothing; DoD intact); example policy applied live via `PUT /api/permissions` (deny `woo__create_product` + `woo__update_order_status`): member `tools/list` hides them, member direct call rejected with `{"code":-32602,"message":"unknown tool: woo__create_product"}` before any upstream contact, `permission_denied` audit rows written under the member; admin `tools/list` = all 11 and admin can call a member-denied tool; chat as b-member "create a product" -> `permission_denied` (audited); clearing the policy returns all tools. One enforcement core (`gw_mcp/permissions.py`) for `/mcp`, `/api/tools` and the chat agent; admin Permissions panel on Servers page; `make demo-reset` clears rules. |
 | OAuth on gateway | NOT DONE | — | explicitly skipped per docs/00 §7 |
 | Many-tools handling (`search_tools` meta-tool) | NOT DONE | — | no `search_tools`/`execute_tool` in `src/gateway` |
 | Hosted MCP servers (image -> deploy) | NOT DONE | — | blueprint only |
@@ -159,8 +159,8 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 
 ## 6. Summary
 
-- **DONE:** 48 rows (DoD 1 storefront checkout is DONE via `scripts/verify-checkout.mjs`)
-- **PARTIAL:** 9 rows (VPS deployment, DoD 3 hand-place order, DoD 10 bare delete-pod Unreachable window, per-tool read-only permission, Security hardening open items, Scaling distributed rate limit, upgrades/rollback re-run, kill-pod audit item)
+- **DONE:** 49 rows (DoD 1 storefront checkout is DONE via `scripts/verify-checkout.mjs`; per-role tool permissions now DONE)
+- **PARTIAL:** 8 rows (VPS deployment, DoD 3 hand-place order, DoD 10 bare delete-pod Unreachable window, Security hardening open items, Scaling distributed rate limit, upgrades/rollback re-run, kill-pod audit item)
 - **NOT DONE:** 5 rows (multi-store, OAuth, `search_tools`, hosted MCP servers, metrics endpoint)
 
 ### Smallest fixes for PARTIAL / NOT DONE
@@ -169,7 +169,7 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 - **DoD 3 (hand-place order):** hand-place the order through the storefront checkout for the exact product the chat created (DoD 2's product), not a different one; then confirm it via `woo__list_orders`.
 - **DoD 10 (bare `kubectl delete pod` Unreachable window):** lower `health_interval_seconds` (e.g. 5s) or verify with a pod that takes >1 interval to become Ready, so the health loop observes the down window on a literal pod delete.
 - **VPS deployment:** run `helm upgrade --install urumi ./helm -f helm/values-prod.yaml` against a k3s node with a real domain and confirm store/dashboard/`/mcp` over the internet. The chart is ready; only the live run is missing.
-- **Per-tool read-only permission (members read-only):** add a `permissions` table keyed by `(role, server_slug, tool)` and filter in `gw_mcp/router.py` `tools/call` (return `permission_denied` for member write tools) + in `chat/agent.py` tool loading. Small, contained change.
+- **Per-tool read-only permission (members read-only):** DONE — see the §4 row: deny-rule table (`tool_permissions`), one enforcement core (`gw_mcp/permissions.py`) for `/mcp` + `/api/tools` + chat agent, `GET/PUT /api/permissions` (admin, CSRF, 422 on unknown names), admin Permissions panel on the Servers page, `permission_denied` audit outcome, `make demo-reset` clears rules back to default allow-all. Live-verified with the example policy (deny `woo__create_product` + `woo__update_order_status`).
 - **Security hardening open items:** (1) set pod-level `securityContext.runAsNonRoot: true` (+ `runAsUser`/`runAsGroup`) on every workload and make wordpress/mariadb run non-root (remove the documented local-VM delta); (2) set `automountServiceAccountToken: false` on workloads that never call the API (dashboard, demo-*, woo-mcp, mariadb, wordpress); (3) create a least-privilege Role/RoleBinding for the gateway (only what it needs) and stop using the default SA.
 - **Scaling (distributed rate limit):** the per-key limiter is in-memory (`_rate_buckets`) so it is not shared across replicas and there is no user-level limit; back it with Redis (or a shared store) when running >1 replica, or document single-replica as the supported topology.
 - **Upgrades/rollback:** run `helm upgrade --atomic` with an image tag bump then `helm rollback` against the local kind cluster and record the outcome.
