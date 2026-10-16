@@ -67,22 +67,36 @@ def _status_code_from_exc(exc: BaseException) -> int | None:
 
 
 def _causes(exc: BaseException) -> list[BaseException]:
-    """The exception and its __cause__/__context__ chain, root-first."""
+    """The exception and its __cause__/__context__ chain, root-first.
+
+    ExceptionGroups (which the MCP SDK raises when a transport sub-task fails,
+    e.g. ``ExceptionGroup`` wrapping ``CancelledError`` + ``WouldBlock``) are
+    flattened recursively so their contained exceptions are examined too.
+    """
     out: list[BaseException] = []
     seen = set()
-    cur = exc
-    while cur is not None and id(cur) not in seen:
-        seen.add(id(cur))
-        out.append(cur)
-        cur = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
+
+    def visit(e: BaseException):
+        if e is None or id(e) in seen:
+            return
+        seen.add(id(e))
+        out.append(e)
+        group = getattr(e, "exceptions", None)
+        if isinstance(group, (list, tuple)):
+            for sub in group:
+                visit(sub)
+        visit(getattr(e, "__cause__", None) or getattr(e, "__context__", None))
+
+    visit(exc)
     return out
 
 
 def classify(exc: BaseException) -> str:
     """Return a stable category string for an upstream failure. Never raises.
 
-    Handles httpx transport errors, MCP SDK wrappers and JSON/parse failures. The
-    returned value is the category token (http_error carries `:code`).
+    Handles httpx transport errors, MCP SDK wrappers (including ExceptionGroups),
+    JSON/parse failures and asyncio timeouts. The returned value is the category
+    token (http_error carries `:code`).
     """
     status = _status_code_from_exc(exc)
     if status in _AUTH_STATUSES:

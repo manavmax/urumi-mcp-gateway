@@ -91,6 +91,26 @@ def test_category_unknown_is_other():
     assert classify(RuntimeError("some unexpected thing")) == "other"
 
 
+def test_category_exception_group_unwraps_connection_refused():
+    """The MCP SDK wraps transport failures in an ExceptionGroup; classify must
+    flatten it and find the real cause instead of reporting 'other'."""
+    cause = ConnectionRefusedError(errno.ECONNREFUSED, "connection refused")
+    connect = _connect_error(cause)
+    group = ExceptionGroup("unhandled errors in a TaskGroup (1 sub-exception)", [connect])
+    assert classify(group) == "connection_refused"
+
+
+def test_category_exception_group_unwraps_dns_failure():
+    connect = _connect_error(socket.gaierror(-2, "Name or service not known"))
+    group = ExceptionGroup("unhandled errors in a TaskGroup (1 sub-exception)", [connect])
+    assert classify(group) == "dns_failure"
+
+
+def test_category_exception_group_timeout_inside():
+    group = ExceptionGroup("task group", [httpx.ConnectTimeout("timed out")])
+    assert classify(group) == "timeout"
+
+
 def test_category_label_strips_http_code_and_is_safe():
     assert categorize.category_label("http_error:502") == "upstream error"
     assert categorize.category_label("connection_refused") == "connection refused"
