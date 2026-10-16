@@ -2,9 +2,11 @@
    from GET /api/servers and GET /api/tools. Admin CRUD (add/edit/delete,
    enable/disable) is unchanged; the mockup's Admin/Member view switcher and
    SAMPLE DATA chip are mockup-only chrome and are not shipped (see the STAGE 1
-   report), the role comes from the signed-in session. */
+   report), the role comes from the signed-in session. Admins also get the
+   tool-permissions panel (GET/PUT /api/permissions): tools grouped by server,
+   Admin column locked on, Member toggle, one Save button. */
 import { useEffect, useMemo, useState } from "react";
-import { api, type Server, type Tool } from "../lib/api";
+import { api, type PermissionServer, type Server, type Tool } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useSearch } from "../lib/search";
 import { useMockupMotion } from "../lib/motion";
@@ -29,6 +31,64 @@ export default function Servers() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<null | { mode: "add" } | { mode: "edit"; server: Server }>(null);
+  const [permOpen, setPermOpen] = useState(false);
+  const [perm, setPerm] = useState<PermissionServer[]>([]);
+  const [permCount, setPermCount] = useState(0);
+  const [permDraft, setPermDraft] = useState<Record<string, boolean>>({});
+  const [permLoading, setPermLoading] = useState(false);
+  const [permSaving, setPermSaving] = useState(false);
+  const [permSaved, setPermSaved] = useState(false);
+  const [permErr, setPermErr] = useState("");
+
+  /* member tool access draft: true = allowed, false = restricted (denied) */
+  function draftFromPayload(servers: PermissionServer[]) {
+    const draft: Record<string, boolean> = {};
+    for (const s of servers) for (const t of s.tools) draft[t.name] = !t.member_denied;
+    return draft;
+  }
+
+  async function openPermissions() {
+    setPermErr("");
+    setPermSaved(false);
+    setPermOpen(true);
+    setPermLoading(true);
+    try {
+      const res = await api.listPermissions();
+      setPerm(res.servers);
+      setPermCount(res.restricted_count);
+      setPermDraft(draftFromPayload(res.servers));
+    } catch (e: unknown) {
+      setPermErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPermLoading(false);
+    }
+  }
+
+  async function savePermissions() {
+    setPermSaving(true);
+    setPermErr("");
+    try {
+      const rules: { server_slug: string; tool_name: string | null }[] = [];
+      for (const s of perm) {
+        const denied = s.tools.filter((t) => permDraft[t.name] === false);
+        if (s.tools.length > 0 && denied.length === s.tools.length) {
+          rules.push({ server_slug: s.slug, tool_name: null });
+        } else {
+          for (const t of denied) rules.push({ server_slug: s.slug, tool_name: t.name });
+        }
+      }
+      const res = await api.putPermissions(rules);
+      setPerm(res.servers);
+      setPermCount(res.restricted_count);
+      setPermDraft(draftFromPayload(res.servers));
+      setPermSaved(true);
+      setTimeout(() => setPermSaved(false), 2500);
+    } catch (e: unknown) {
+      setPermErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPermSaving(false);
+    }
+  }
 
   async function load() {
     setErr("");
@@ -130,6 +190,11 @@ export default function Servers() {
             <h1>Servers</h1>
           </div>
           <div className="row wrap">
+            {isAdmin && (
+              <button className="btn btn-secondary" type="button" onClick={openPermissions}>
+                <Icon name="lock" sm />Permissions
+              </button>
+            )}
             {isAdmin && (
               <button className="btn btn-primary" type="button" onClick={() => setModal({ mode: "add" })}>
                 <Icon name="plus" sm />Add server
@@ -245,6 +310,75 @@ export default function Servers() {
         </section>
       </main>
 
+      {permOpen && isAdmin && (
+        <div className="modal-back open" onClick={(e) => { if (e.target === e.currentTarget) setPermOpen(false); }}>
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Tool permissions" style={{ maxWidth: 720 }}>
+            <div className="card-head" style={{ margin: 0 }}>
+              <div className="row wrap" style={{ justifyContent: "space-between", width: "100%" }}>
+                <div className="card-title"><Icon name="lock" />Permissions</div>
+                <span className="chip chip-neutral"><Icon name="deny" />{permCount} restricted for members</span>
+              </div>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setPermOpen(false)}>Close</button>
+            </div>
+            {permErr && <div className="alert alert-error" role="alert">{permErr}</div>}
+            {permLoading && (
+              <span className="sk" style={{ width: "60%" }} />
+            )}
+            {!permLoading && perm.map((s) => (
+              <div key={s.slug} style={{ borderTop: "1px solid var(--hairline)", paddingTop: "var(--s3)" }}>
+                <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                  <div className="card-title" style={{ fontSize: "var(--t-sm)" }}><Icon name="server" />{s.slug}</div>
+                  <span className={`chip ${STATUS_CHIP(!s.enabled ? "Disabled" : s.status).cls}`}>
+                    <Icon name={STATUS_CHIP(!s.enabled ? "Disabled" : s.status).icon} />{!s.enabled ? "Disabled" : s.status}
+                  </span>
+                </div>
+                <div className="table-wrap">
+                  <table aria-label={`Member tool access for ${s.slug}`}>
+                    <thead>
+                      <tr>
+                        <th>Tool</th><th>Admin</th><th>Member</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {s.tools.map((t) => (
+                        <tr key={t.name}>
+                          <td data-label="Tool">
+                            <span className="mono">{t.name}</span>
+                            {t.description && <div className="small muted">{t.description.slice(0, 90)}</div>}
+                          </td>
+                          <td data-label="Admin">
+                            <span className="small muted"><Icon name="lock" sm />all tools</span>
+                          </td>
+                          <td data-label="Member">
+                            <label className="switch">
+                              <input
+                                type="checkbox"
+                                checked={permDraft[t.name] !== false}
+                                onChange={(e) => setPermDraft({ ...permDraft, [t.name]: e.target.checked })}
+                                aria-label={`Member may use ${t.name}`}
+                              />
+                              <span className="track"></span>
+                              <span className="lbl">{permDraft[t.name] === false ? "no" : "yes"}</span>
+                            </label>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+            <div className="card-head" style={{ margin: 0 }}>
+              <div className="row" style={{ justifyContent: "flex-end", gap: "var(--s3)", width: "100%" }}>
+                {permSaved && <span className="chip chip-ok"><Icon name="check-circle" />Policy saved</span>}
+                <button className="btn btn-primary" type="button" disabled={permSaving || permLoading} onClick={savePermissions}>
+                  {permSaving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {modal?.mode === "add" && isAdmin && (
         <div className="modal-back open" onClick={(e) => { if (e.target === e.currentTarget) setModal(null); }}>
           <div className="modal" role="dialog" aria-modal="true" aria-label="Add server">

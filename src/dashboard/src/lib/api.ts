@@ -66,6 +66,17 @@ export type Tool = {
   inputSchema?: unknown;
   server_slug?: string;
 };
+export type PermissionTool = {
+  name: string;
+  description?: string;
+  member_denied: boolean;
+};
+export type PermissionServer = {
+  slug: string;
+  enabled: boolean;
+  status: string;
+  tools: PermissionTool[];
+};
 export type AuditRow = {
   id: number;
   ts: string;
@@ -153,6 +164,17 @@ export const api = {
   revokeKey: (id: string) => request<{ revoked: boolean }>(`/api/keys/${id}`, { method: "DELETE", csrf: true }),
 
   listTools: () => request<{ tools: Tool[]; warnings: string[] }>("/api/tools"),
+
+  /* Per-role tool permissions (admin only; members get 403 server-side).
+     GET returns servers + tools with member-denied flags; PUT replaces the member
+     deny policy and is CSRF-protected by the wrapper. */
+  listPermissions: () => request<{ servers: PermissionServer[]; restricted_count: number }>("/api/permissions"),
+  putPermissions: (rules: { server_slug: string; tool_name: string | null }[]) =>
+    request<{ servers: PermissionServer[]; restricted_count: number }>("/api/permissions", {
+      method: "PUT",
+      body: JSON.stringify({ rules }),
+      csrf: true,
+    }),
 
   /* Overview aggregates (new endpoint, admin/member scoping enforced server-side). */
   stats: (range?: StatsRange) =>
