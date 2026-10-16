@@ -21,6 +21,13 @@ const RANGES: { key: StatsRange; label: string }[] = [
 ];
 const DEFAULT_RANGE: StatsRange = "week";
 
+const STATUS_CHIP = (status: string): { cls: string; icon: "check-circle" | "x-circle" | "pause" | "dot" } => {
+  if (status === "Connected") return { cls: "chip-ok", icon: "check-circle" };
+  if (status === "Unreachable") return { cls: "chip-danger", icon: "x-circle" };
+  if (status === "Disabled") return { cls: "chip-warn", icon: "pause" };
+  return { cls: "chip-neutral", icon: "dot" };
+};
+
 function fmtMs(ms: number): string {
   if (ms >= 1000) return `${(ms / 1000).toFixed(ms >= 10000 ? 1 : 2)} s`;
   return `${ms} ms`;
@@ -432,6 +439,75 @@ export default function Overview() {
           ))}
         </div>
       </section>
+
+      {/* Servers card (admin only, docs/11_OBSERVABILITY.md §2): per-server calls,
+          error rate, p95 and a daily sparkline from /api/stats by_server. Sorted by
+          calls (descending); real data only - servers with no rows in the range
+          still show their status badge with zeros. */}
+      {isAdmin && (
+        <section className="card" aria-label="Servers">
+          <div className="card-head">
+            <div>
+              <div className="card-title"><Icon name="server" />Servers</div>
+              <div className="card-sub">Last {windowDays} days · sorted by calls</div>
+            </div>
+            <Link className="link" to="/servers">Open server<Icon name="arrow-right" sm /></Link>
+          </div>
+          {loading && <span className="sk" style={{ width: "60%" }} />}
+          {!loading && servers.length === 0 && <div className="small muted">No servers registered yet.</div>}
+          {!loading && servers.length > 0 && (
+            <div className="table-wrap">
+              <table aria-label="Per-server calls">
+                <thead>
+                  <tr><th>Server</th><th>Status</th><th>Calls</th><th>Error rate</th><th>p95</th><th>Trend</th></tr>
+                </thead>
+                <tbody>
+                  {[...servers]
+                    .map((s) => {
+                      const stat = (stats?.by_server ?? []).find((b) => b.server === s.slug) ?? null;
+                      return {
+                        s,
+                        stat,
+                        calls: stat?.calls ?? 0,
+                      };
+                    })
+                    .sort((a, b) => b.calls - a.calls || a.s.slug.localeCompare(b.s.slug))
+                    .map(({ s, stat }) => {
+                      const st = STATUS_CHIP(!s.enabled ? "Disabled" : s.status);
+                      const spark = stat?.sparkline ?? [];
+                      const maxSpark = Math.max(...spark.map((p) => p.calls), 1);
+                      return (
+                        <tr key={s.id}>
+                          <td data-label="Server"><span className="mono">{s.slug}</span></td>
+                          <td data-label="Status">
+                            <span className={`chip ${st.cls}`}><Icon name={st.icon} />{!s.enabled ? "Disabled" : s.status}</span>
+                          </td>
+                          <td data-label="Calls">{stat?.calls ?? 0}</td>
+                          <td data-label="Error rate">{stat?.error_rate == null ? "—" : `${stat.error_rate}%`}</td>
+                          <td data-label="p95">{fmtMs(stat?.p95_ms ?? 0)}</td>
+                          <td data-label="Trend">
+                            <svg width="120" height="28" viewBox="0 0 120 28" preserveAspectRatio="none" role="img" aria-label={`Daily calls sparkline for ${s.slug}`}>
+                              <title>{s.slug} daily calls</title>
+                              <g fill="#C9D2E2">
+                                {spark.map((p, i) => {
+                                  const h = maxSpark ? (p.calls / maxSpark) * 24 : 1;
+                                  return (
+                                    <rect key={p.date} x={1 + i * (118 / Math.max(spark.length, 1))}
+                                      y={26 - h} width={Math.min(10, 118 / Math.max(spark.length, 1) - 2)} height={Math.max(h, 1)} rx="2" />
+                                  );
+                                })}
+                              </g>
+                            </svg>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* security posture (static copy, not a metric) */}
       <section className="card" style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>

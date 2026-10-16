@@ -102,6 +102,16 @@ export type AuditRow = {
    calls; a member only ever sees their own, enforced server-side. */
 export type StatsRange = "day" | "week" | "month" | "14d";
 export type StatsDayPoint = { date: string; calls: number; errors: number; p95_ms: number };
+export type ServerStatSpark = { date: string; calls: number; errors: number };
+export type ServerStat = {
+  server: string;
+  calls: number;
+  errors: number;
+  error_rate: number | null;
+  p50_ms: number;
+  p95_ms: number;
+  sparkline: ServerStatSpark[];
+};
 export type Stats = {
   range: string;
   window_days: number;
@@ -115,6 +125,8 @@ export type Stats = {
     p95_ms: number;
     per_day: StatsDayPoint[];
   };
+  /* admin only - members never receive by_server (docs/11_OBSERVABILITY.md §2) */
+  by_server?: ServerStat[];
   own_keys_active?: number;
   own_api_key_calls?: number;
   own_calls_total?: number;
