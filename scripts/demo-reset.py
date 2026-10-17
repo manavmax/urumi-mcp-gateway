@@ -39,7 +39,7 @@ import httpx
 from auth.keys import create_api_key, hash_key, revoke_api_key
 from auth.rbac import hash_password
 from config import get_settings
-from db.models import ApiKey, AuditLog, Server, ToolPermission, User
+from db.models import AdminEvent, ApiKey, AuditLog, Server, ToolPermission, User
 from db.session import get_session_factory
 from gw_mcp.health import probe_once
 from registry.crud import INTERNAL_DEFAULTS
@@ -84,6 +84,7 @@ async def gateway_state() -> dict:
     factory = get_session_factory()
     async with factory() as db:
         audit_rows = (await db.execute(select(func.count()).select_from(AuditLog))).scalar() or 0
+        admin_events = (await db.execute(select(func.count()).select_from(AdminEvent))).scalar() or 0
         perm_rules = (await db.execute(select(func.count()).select_from(ToolPermission))).scalar() or 0
         users = list((await db.execute(select(User).order_by(User.created_at))).scalars().all())
         keys = list((await db.execute(select(ApiKey))).scalars().all())
@@ -98,6 +99,7 @@ async def gateway_state() -> dict:
         keys_by_owner[k.user_id] = keys_by_owner.get(k.user_id, 0) + 1
     return {
         "audit_rows": audit_rows,
+        "admin_events": admin_events,
         "perm_rules": perm_rules,
         "admins": admins,
         "members": members,
@@ -164,10 +166,11 @@ async def dry_run() -> int:
     state = await gateway_state()
     notes_count, notes_err = await count_notes()
 
-    print("== Gateway (audit_logs / tool_permissions / users / api_keys / servers) ==")
+    print("== Gateway (audit_logs / admin_events / tool_permissions / users / api_keys / servers) ==")
     print(
         f"audit_logs: {state['audit_rows']} rows -> would be TRUNCATEd (ids restart at 1)"
     )
+    print(f"admin_events: {state['admin_events']} rows -> would be TRUNCATEd (admin action trail, ADR-034)")
     print(f"tool_permissions: {state['perm_rules']} deny rule(s) -> would be TRUNCATEd (default allow-all)")
     print(
         f"users: {len(state['admins']) + len(state['members'])} total | "
@@ -205,6 +208,7 @@ async def dry_run() -> int:
         {
             "mode": "dry-run",
             "audit_rows_planned": state["audit_rows"],
+            "admin_events_planned": state["admin_events"],
             "users_planned": [u.email for u in state["members"]],
             "member_keys_planned": state["member_key_count"],
             "admin_keys_kept": state["admin_key_count"],
@@ -246,6 +250,7 @@ async def reset(with_demo_users: bool) -> int:
     demo_created: list[dict] = []
     async with factory() as db:
         audit_rows = (await db.execute(select(func.count()).select_from(AuditLog))).scalar() or 0
+        admin_events_rows = (await db.execute(select(func.count()).select_from(AdminEvent))).scalar() or 0
         member_rows = (
             await db.execute(
                 select(User, func.count(ApiKey.id))
@@ -266,6 +271,13 @@ async def reset(with_demo_users: bool) -> int:
         await db.execute(text("TRUNCATE TABLE audit_logs RESTART IDENTITY"))
         remaining = (await db.execute(select(func.count()).select_from(AuditLog))).scalar() or 0
         print(f"audit_logs: {remaining} rows remain")
+
+        # 1a. admin_events (ADR-034): same sanctioned wipe as audit_logs - the
+        # demo starts with an empty admin action trail.
+        print(f"admin_events: truncating {admin_events_rows} rows")
+        await db.execute(text("TRUNCATE TABLE admin_events RESTART IDENTITY"))
+        remaining_events = (await db.execute(select(func.count()).select_from(AdminEvent))).scalar() or 0
+        print(f"admin_events: {remaining_events} rows remain")
 
         # 1b. tool_permissions: back to the default allow-all policy (ADR-033). The
         # demo applies the example member deny policy live; the reset clears it.
@@ -304,6 +316,7 @@ async def reset(with_demo_users: bool) -> int:
         {
             "mode": "reset",
             "audit_rows_deleted": audit_rows,
+            "admin_events_deleted": admin_events_rows,
             "perm_rules_deleted": perm_rows,
             "users_deleted": [user.email for user, _count in member_rows],
             "keys_deleted": member_key_count,

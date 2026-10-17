@@ -1,7 +1,7 @@
 """SQLAlchemy async models — docs/04 §3.
 
-Tables: users, api_keys, servers, tools, audit_logs, tool_permissions
-All PKs are UUIDs except audit_logs (BIGSERIAL).
+Tables: users, api_keys, servers, tools, audit_logs, tool_permissions, admin_events
+All PKs are UUIDs except audit_logs and admin_events (BIGSERIAL).
 """
 
 from __future__ import annotations
@@ -174,4 +174,54 @@ class ToolPermission(Base):
     __table_args__ = (
         CheckConstraint("role IN ('member')", name="ck_tool_permissions_role"),
         Index("ix_tool_permissions_role_server", "role", "server_slug"),
+    )
+
+
+class AdminEvent(Base):
+    """Append-only admin action trail (docs/DECISIONS.md ADR-034).
+
+    One row per admin action, written in the SAME transaction as the action it
+    records: a failed action cannot leave a success event behind, because the
+    rollback takes the event with it. There is deliberately NO update/delete API
+    for this table - the only writer is this recorder, and the only sanctioned
+    wipe is `make demo-reset` (TRUNCATE, same documented exception as audit_logs).
+
+    Secrecy contract (checked by tests/test_admin_events.py, which plants secret
+    strings and searches every stored/returned byte for them):
+      - credentials are recorded ONLY as credential_changed/credential_removed flags
+      - API keys appear ONLY as prefix + last4 (never the raw key, never the digest)
+      - no passwords, no request bodies, no headers, no URLs with tokens
+    `target_ref` is a non-secret reference (slug, email, user id, key prefix+last4)
+    and `details` holds small non-secret facts (field names, role, direction, owner id).
+    login.failed stores the attempted email and time only, and one source (attempted
+    email) can write at most LOGIN_FAILED_EVENT_LIMIT rows per window (audit/
+    admin_events.py) so a flood of bad logins cannot flood the trail.
+    """
+
+    __tablename__ = "admin_events"
+
+    id: Mapped[int] = mapped_column(
+        # BigInteger in Postgres (prod); on sqlite a plain BIGINT PK is NOT a rowid
+        # alias, so app-inserted test rows would fail with a NULL id. Integer on
+        # sqlite keeps the unit-test harness (embedded sqlite) working; the DDL on
+        # Postgres is unchanged.
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    # SET NULL so the trail survives a deleted actor (the action happened; who it
+    # was is shown as unknown afterwards, never erased).
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)  # e.g. server.create, key.revoke
+    target_type: Mapped[str] = mapped_column(Text, nullable=False)  # server|user|key|permission|login
+    target_ref: Mapped[str] = mapped_column(Text, nullable=False)  # non-secret: slug, email, id, prefix...last4
+    outcome: Mapped[str] = mapped_column(Text, nullable=False)  # success|failure
+    details: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (
+        CheckConstraint("outcome IN ('success','failure')", name="ck_admin_events_outcome"),
+        Index("ix_admin_events_ts", "ts"),
+        Index("ix_admin_events_action_ts", "action", "ts"),
+        Index("ix_admin_events_actor_ts", "actor_user_id", "ts"),
     )

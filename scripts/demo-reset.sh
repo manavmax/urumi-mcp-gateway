@@ -42,7 +42,7 @@ usage: scripts/demo-reset.sh [--with-demo-users] [--check-only]
 
   (no flags)     DRY RUN - prints what would be deleted, changes nothing
   CONFIRM=yes    performs the reset (Woo products/orders, audit_logs,
-                 tool_permissions back to allow-all, non-admin
+                 admin_events, tool_permissions back to allow-all, non-admin
                  users + their API keys, all notes), then verifies 3 Connected
                  upstreams and tools/list = 11 tools
   --with-demo-users   additionally create demo-a@urumi.local (admin) and

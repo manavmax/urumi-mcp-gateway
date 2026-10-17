@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from audit.admin_events import key_ref, login_failed_event_allowed, record_admin_event
+from audit.admin_events import key_ref, login_failed_event_allowed, record_admin_event, sanitize_login_email
 from auth.keys import create_api_key, revoke_api_key
 from auth.rbac import (
     get_current_user_via_session,
@@ -57,13 +57,15 @@ async def login(body: LoginBody, response: Response, db: AsyncSession = Depends(
         # pattern as /mcp and check-now), so bad-login floods cannot flood the
         # table. The write commits here because this event IS the completed action;
         # the 401 below rolls the request session back otherwise.
+        # target_ref is sanitized: only valid email format is stored, otherwise
+        # "invalid_format" (prevents XSS from HTML in the email field).
         if login_failed_event_allowed(email):
             record_admin_event(
                 db,
                 actor_user_id=None,
                 action="login.failed",
                 target_type="login",
-                target_ref=email,
+                target_ref=sanitize_login_email(email),
                 outcome="failure",
                 details={"reason": reason},
             )

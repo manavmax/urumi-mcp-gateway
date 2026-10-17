@@ -181,6 +181,7 @@ def create_app() -> FastAPI:
         )
 
     # routes
+    from routes.admin_events import router as admin_events_router
     from routes.alerts import router as alerts_router
     from routes.audit import router as audit_router
     from routes.chat import router as chat_router
@@ -199,6 +200,7 @@ def create_app() -> FastAPI:
     app.include_router(servers_router)
     app.include_router(users_router)
     app.include_router(audit_router)
+    app.include_router(admin_events_router)
     app.include_router(tools_router)
     app.include_router(stats_router)
     app.include_router(chat_router)
