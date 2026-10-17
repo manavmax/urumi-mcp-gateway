@@ -39,7 +39,6 @@ def build_system_prompt(tz: str | None = None) -> str:
     With it, "today" in the model's answers means the USER's today.
     """
     from datetime import datetime
-
     from zoneinfo import ZoneInfo
 
     try:
@@ -49,7 +48,6 @@ def build_system_prompt(tz: str | None = None) -> str:
     if zone is None:
         return SYSTEM_PROMPT
     now = datetime.now(zone)
-    tz_name = tz if zone.key == tz else zone.key
     stamp = now.strftime("%A, %d %B %Y, %I:%M %p")
     return f"{SYSTEM_PROMPT}Context: the user's local time is {stamp} ({tz}). \"Today\" means this local date."
 

@@ -8,8 +8,6 @@ table format (Order, Status, Total, Placed, Items).
 
 from __future__ import annotations
 
-import re
-
 import pytest
 from chat.agent import SYSTEM_PROMPT, build_system_prompt
 
@@ -50,7 +48,6 @@ def test_known_zones_produce_a_stamp(tz):
 @pytest.mark.asyncio
 async def test_route_accepts_tz_field(monkeypatch):
     """The route accepts tz in the body (200) and validates it before use."""
-    import contextlib
     from types import SimpleNamespace
 
     import httpx
