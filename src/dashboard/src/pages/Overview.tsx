@@ -383,7 +383,7 @@ export default function Overview() {
         <div className="card stat">
           <div className="card-title" style={{ fontSize: "var(--t-md)" }}>My account</div>
           <div className="row" style={{ gap: 12, marginTop: 6, minWidth: 0 }}>
-            <span className="avatar" style={{ width: 44, height: 44, background: "var(--lilac)", boxShadow: "none" }}>{initials(user?.email)}</span>
+            <span className="avatar" style={{ width: 44, height: 44, background: "var(--lilac)", color: "var(--on-tint)", boxShadow: "none" }}>{initials(user?.email)}</span>
             <div style={{ minWidth: 0 }}>
               <b style={{ fontSize: "var(--t-md)", display: "block" }}>{displayName(user?.email) || user?.email}</b>
               <span className="small muted account-email">{user?.email}</span>

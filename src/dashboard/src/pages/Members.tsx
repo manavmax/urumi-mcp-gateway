@@ -6,6 +6,7 @@
    chrome and are not shipped; the role comes from the signed-in session. */
 import { useEffect, useMemo, useState } from "react";
 import { api, type ApiKeyRow } from "../lib/api";
+import { copyText } from "../lib/clipboard";
 import { useAuth } from "../lib/auth";
 import { initials, useSearch } from "../lib/search";
 import { useMockupMotion } from "../lib/motion";
@@ -34,6 +35,7 @@ export default function Members() {
   const [newRole, setNewRole] = useState("member");
   const [lastKey, setLastKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyManual, setCopyManual] = useState(false);
 
   async function load() {
     setErr("");
@@ -258,13 +260,15 @@ export default function Members() {
                 <button className="btn btn-secondary" type="button"
                   onClick={async () => {
                     if (!lastKey) return;
-                    await navigator.clipboard.writeText(lastKey);
+                    const status = await copyText(lastKey);
                     setCopied(true);
-                    setTimeout(() => setCopied(false), 1400);
+                    setCopyManual(status === "manual");
+                    setTimeout(() => { setCopied(false); setCopyManual(false); }, 2600);
                   }}>
-                  <span className={copied ? "copy-pop" : ""} style={{ display: "inline-flex" }}><Icon name={copied ? "check" : "copy"} sm /></span>{copied ? "Copied" : "Copy"}
+                  <span className={copied ? "copy-pop" : ""} style={{ display: "inline-flex" }}><Icon name={copied ? "check" : "copy"} sm /></span>{copied ? (copyManual ? "Ctrl or Cmd + C" : "Copied") : "Copy"}
                 </button>
               </div>
+              {copyManual && <div className="small muted">Clipboard access is blocked here. Press Ctrl or Cmd + C to copy the selected key.</div>}
               <div className="small muted">This key will not be shown again. Store it in your secret manager, the gateway only keeps a SHA-256 digest.</div>
             </div>
           )}

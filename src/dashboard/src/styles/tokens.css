@@ -110,6 +110,16 @@
   /* Primary pill (light bg + dark text in dark mode, dark bg + white in light) */
   --primary-pill-bg: #14171C;
   --primary-pill-text: #FFFFFF;
+  /* Text and icons painted ON a primary/ink fill (root cause fix F1-2:
+     --white stays white in both themes, so filled pills/nav/avatars must
+     use --on-primary, never --white) */
+  --on-primary: #FFFFFF;
+  --icon-on-primary: #FFFFFF;
+  /* Table row hover wash (root cause fix F1-2: never an ink fill) */
+  --row-hover: #F4F3EF;
+  /* Icon/text on an accent tint (pastel chips, tiles, circles): tints are
+     mid-tone, so dark ink reads on them in BOTH themes */
+  --on-tint: #14171C;
   /* Page-edge background glow stops */
   --glow-periwinkle: rgba(185, 196, 221, 0.50);
   --glow-peach: rgba(239, 203, 190, 0.38);
@@ -174,8 +184,10 @@
   --lilac: #A398B5;
   --sky: #8EAAC8;
   --sand: #9EAD7E;
-  /* Dusk gradient: periwinkle→lilac→peach at lower brightness, light ink */
-  --grad-a: linear-gradient(135deg, #5A6B8A 0%, #8A7A9A 52%, #B08070 100%);
+  /* Dusk gradient: periwinkle→lilac→peach at lower brightness with light ink.
+     Stops darkened again in F1-2 so #ECEDEF text clears 4.5:1 on the
+     brightest stop (peach). */
+  --grad-a: linear-gradient(135deg, #3E4A63 0%, #5C5170 52%, #7A5648 100%);
   /* Status badges: dark tints, light text */
   --ok-bg: #1E3A2E;
   --ok-text: #8ED4A8;
@@ -230,6 +242,14 @@
   /* Primary pill: light bg + dark text in dark mode */
   --primary-pill-bg: #ECEDEF;
   --primary-pill-text: #14171C;
+  /* Text and icons painted ON a primary/ink fill (dark: ink IS light, so
+     on-primary stays dark for contrast against the light fill) */
+  --on-primary: #14171C;
+  --icon-on-primary: #14171C;
+  /* Table row hover wash (dark: tint, never ink) */
+  --row-hover: #22262F;
+  /* Icon/text on an accent tint (dark tints are mid-tone; dark ink reads) */
+  --on-tint: #14171C;
   /* Page-edge background glow stops (muted in dark mode) */
   --glow-periwinkle: rgba(90, 107, 138, 0.40);
   --glow-peach: rgba(138, 96, 86, 0.30);
@@ -330,6 +350,15 @@
   /* Primary pill: dark bg + white text in light mode */
   --primary-pill-bg: #14171C;
   --primary-pill-text: #FFFFFF;
+  /* Text and icons painted ON a primary/ink fill (light) */
+  --on-primary: #FFFFFF;
+  --icon-on-primary: #FFFFFF;
+  /* Table row hover wash (light) */
+  --row-hover: #F4F3EF;
+  /* Icon/text on an accent tint (light pastels; dark ink reads) */
+  --on-tint: #14171C;
+  /* Icon/text on an accent tint (light pastels; dark ink reads) */
+  --on-tint: #14171C;
   /* Page-edge background glow stops */
   --glow-periwinkle: rgba(185, 196, 221, 0.50);
   --glow-peach: rgba(239, 203, 190, 0.38);

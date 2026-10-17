@@ -19,6 +19,7 @@ import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName } from "../lib/search";
 import { useMockupMotion, useCountUp } from "../lib/motion";
+import { copyText } from "../lib/clipboard";
 import AlertBanner from "../components/AlertBanner";
 import { Icon } from "../components/icons";
 
@@ -69,6 +70,7 @@ export default function OverviewMember() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [copiedMcp, setCopiedMcp] = useState(false);
+  const [copiedMcpManual, setCopiedMcpManual] = useState(false);
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
 
   useEffect(() => {
@@ -181,9 +183,10 @@ export default function OverviewMember() {
   const windowDays = stats?.window_days ?? 14;
 
   function copyMcpUrl() {
-    navigator.clipboard.writeText(mcpUrl).then(() => {
+    copyText(mcpUrl).then((status) => {
       setCopiedMcp(true);
-      setTimeout(() => setCopiedMcp(false), 1400);
+      setCopiedMcpManual(status === "manual");
+      setTimeout(() => { setCopiedMcp(false); setCopiedMcpManual(false); }, 2600);
     });
   }
 
@@ -250,7 +253,7 @@ export default function OverviewMember() {
                   style={{
                     width: 28, height: 28, borderRadius: "50%",
                     background: step.done ? "var(--ink)" : "var(--surface-2)",
-                    color: step.done ? "var(--white)" : "var(--text-muted)",
+                    color: step.done ? "var(--on-primary)" : "var(--text-muted)",
                     display: "grid", placeItems: "center", flex: "none",
                     fontSize: 12, fontWeight: 700,
                   }}
@@ -287,10 +290,13 @@ export default function OverviewMember() {
                 onClick={copyMcpUrl}
                 style={{ flex: "none" }}
               >
-                <Icon name="copy" sm />{copiedMcp ? "Copied" : "Copy"}
+                <Icon name={copiedMcp ? "check" : "copy"} sm />{copiedMcp ? (copiedMcpManual ? "Ctrl or Cmd + C" : "Copied") : "Copy"}
               </button>
             )}
           </div>
+          {copiedMcpManual && (
+            <p className="small muted" style={{ margin: 0 }}>Clipboard access is blocked here. Press Ctrl or Cmd + C to copy the selected URL.</p>
+          )}
           <p className="small muted">
             Point your MCP client at this URL and authenticate with an API key header
             (<span className="mono">Authorization: Bearer &lt;key&gt;</span>).
