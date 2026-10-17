@@ -287,12 +287,14 @@ export const api = {
     return request<{ events: AdminEventRow[]; total: number; limit: number; offset: number }>(`/api/admin-events${q ? `?${q}` : ""}`);
   },
 
-  // Chat SSE: caller handles EventSource/fetch stream
-  chatCompletions: (messages: { role: string; content: string }[]) =>
+  // Chat SSE: caller handles the fetch stream. tz = the browser's IANA
+  // timezone (FIX PASS F1-8): the server validates it and puts the user's
+  // local date/time into the system prompt so "today" means the user's today.
+  chatCompletions: (messages: { role: string; content: string }[], tz?: string) =>
     fetch("/api/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
       credentials: "include",
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify(tz ? { messages, tz } : { messages }),
     }),
 };

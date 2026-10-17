@@ -18,6 +18,21 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 class ChatBody(BaseModel):
     messages: list[dict] = Field(default_factory=list)
+    tz: str | None = None
+
+
+def _valid_tz(name: str | None) -> str | None:
+    """Validate an IANA zone from the client; anything unknown falls back to None
+    (the prompt then simply carries no local-time stamp)."""
+    if not name or not isinstance(name, str) or len(name) > 64:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+
+        ZoneInfo(name)
+        return name
+    except Exception:
+        return None
 
 
 @router.post("/completions")
@@ -60,8 +75,10 @@ async def chat_completions(
 
     from chat.agent import chat_loop
 
+    tz = _valid_tz(body.tz)
+
     async def sse_gen():
-        async for evt in chat_loop(db, user, msgs, request_id):
+        async for evt in chat_loop(db, user, msgs, request_id, tz=tz):
             data = json.dumps(evt, default=str)
             yield f"data: {data}\n\n"
         yield "data: [DONE]\n\n"

@@ -323,3 +323,40 @@ not exist as an API endpoint yet; when it is added, it should call `record_admin
 following the same pattern.
 
 
+
+## 2026-10-18: FIX PASS F1 - chat threads, notification bell, safe markdown (ADR-035)
+
+**Chat threads (item 4).** One thread per conversation, not one history entry per
+message: the dashboard keeps an ACTIVE thread id; sending continues it, "New chat"
+or opening the chat page starts a new one, clicking a history row restores the whole
+conversation. Threads live in localStorage per user (last 20 threads, title = first
+user message, stored message count) - unchanged STAGE 1 storage decision. The client
+sends only prior user/assistant text (last 10 turns, 12k char cap); the SERVER now
+rejects any other role with 400, so a client cannot inject fake system text or tool
+results (enforced in routes/chat.py, tested in tests/test_chat_roles.py). LLM error
+turns are shown inline and never stored, so a thread is never titled with an error
+string.
+
+**Notification bell (item 6).** GET /api/notifications is computed on the fly from
+existing tables (servers, audit_logs, admin_events, api_keys) - no new table. Admins
+get fleet items (unreachable servers, failed/denied calls in 24h, revoked keys /
+disabled servers); members get ONLY their own failures/denials and their own keys
+expiring within 7 days. Max 20 items, newest first. No new table: the bell state is
+derived per request. The dot uses a per-user lastSeen timestamp in localStorage
+("Mark all read"); the popover closes on Esc/outside click and returns focus to the
+bell. Scoping + secrecy are pinned by tests/test_notifications.py.
+
+**Readable replies (item 8).** Assistant text renders through a hand-written SAFE
+markdown renderer (src/dashboard/src/lib/markdown.tsx): paragraphs, bold, italic,
+inline code, lists, tables and http/https-only links (rel noopener noreferrer,
+target _blank). No new dependency, no dangerouslySetInnerHTML, markdown images are
+dropped and unsafe schemes stay inert text (unit-tested in scripts/verify-markdown.mjs
+with react-dom/server). The chat system prompt pins the order-list format (summary
+line + Order/Status/Total/Placed/Items table, draft orders excluded) and the browser
+sends its IANA timezone, validated with zoneinfo (fallback UTC), so "today" means the
+user's today.
+
+**Why.** The owner reported one history entry per message, raw markdown (**Order
+#89**) in replies, a dead bell and wrong "today" in chat answers. Threads stay
+client-side per the STAGE 1 localStorage decision; the server-side role restriction
+keeps the prompt-injection boundary (only the gateway produces system/tool roles).

@@ -18,6 +18,7 @@ import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName } from "../lib/search";
 import { chatPayloadTurns, loadHistory, saveThread, type ChatThread } from "../lib/history";
+import { Markdown } from "../lib/markdown";
 import { useMockupMotion } from "../lib/motion";
 import { Icon } from "../components/icons";
 
@@ -128,8 +129,11 @@ export default function Chat() {
     // Prior context: user and assistant text only (tool chips never go back),
     // last 10 turns and a total size cap (see chatPayloadTurns).
     const payload = chatPayloadTurns(next.filter((m): m is Msg & { role: "user" | "assistant" } => m.role !== "tool").map((m) => ({ role: m.role, content: m.content })));
+    // the browser's IANA zone: the server validates it and stamps the system
+    // prompt with the user's local "today" (FIX PASS F1-8)
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
     try {
-      const res = await api.chatCompletions(payload);
+      const res = await api.chatCompletions(payload, tz);
       if (!res.ok) {
         const body = await res.text();
         throw new Error(body.slice(0, 500) || res.statusText);
@@ -285,7 +289,11 @@ export default function Chat() {
                   ) : (
                     <div className={`msg ${m.role}`}>
                       <div className={`avatar${m.role === "assistant" ? " ai" : ""}`}>{m.role === "assistant" ? "UR" : (email.slice(0, 2).toUpperCase() || "ME")}</div>
-                      {m.content ? <div className="bubble">{m.content}</div> : null}
+                      {m.content ? (
+                        m.role === "assistant"
+                          ? <div className="bubble"><Markdown text={m.content} /></div>
+                          : <div className="bubble">{m.content}</div>
+                      ) : null}
                     </div>
                   )}
                 </div>
