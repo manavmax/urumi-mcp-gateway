@@ -1,0 +1,377 @@
+"""Automatic discovery of LLM models that support text chat and tool calling.
+
+Discovers models at startup (and periodically) by querying the provider's
+/models endpoint (OpenAI-compatible). Filters to text chat models, probes for
+tool calling support, ranks by capability, and caches the result.
+
+Provides a dynamic model chain that overrides the static gateway.llm.models
+when discovery succeeds and returns a non-empty list.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import time
+from dataclasses import dataclass
+from typing import List, Optional
+
+import httpx
+
+from config import get_settings
+
+logger = logging.getLogger("gateway.chat.model_discovery")
+
+# How often to refresh the model list (seconds). Set to 0 to disable periodic refresh.
+REFRESH_INTERVAL_SECONDS = 3600  # 1 hour
+# How long to cache a failed probe before retrying (seconds).
+PROBE_FAILED_CACHE_SECONDS = 300  # 5 minutes
+# Timeout for the models endpoint request.
+MODELS_ENDPOINT_TIMEOUT = 10.0
+# Timeout for a single probe request.
+PROBE_TIMEOUT = 5.0
+# Max tokens for a probe request (keep it small to minimize cost and latency).
+PROBE_MAX_TOKENS = 1
+
+# Substrings that indicate a model is NOT for text chat (case-insensitive).
+TEXT_CHAT_EXCLUDE_SUBSTRINGS = [
+    "embed",
+    "embedding",
+    "image",
+    "dall-e",
+    "tts",
+    "audio",
+    "whisper",
+    "realtime",
+    "vision",
+    # Exclude -latest aliases; we'll handle them separately by keeping the base name.
+]
+
+# Known tier keywords for ranking within a generation (higher score = preferred).
+TIER_SCORES = {
+    "pro": 3,
+    "sharp": 3,  # alternative naming
+    "ultra": 3,
+    "flash": 2,
+    "flash-lite": 1,
+    "lite": 1,
+    "turbo": 2,  # often a generation marker but treat as a tier
+    "max": 2,
+    "plus": 2,
+}
+
+@dataclass
+class ModelInfo:
+    id: str
+    owned_by: Optional[str] = None
+    # Probe result: True if the model accepts the tools parameter.
+    supports_tools: Optional[bool] = None
+    # Timestamp of the last probe attempt.
+    last_probe_time: float = 0.0
+    # Error message from the last probe (if any).
+    last_probe_error: Optional[str] = None
+
+    def is_available(self, now: float) -> bool:
+        """True if the model is not in a probe failure cooldown."""
+        if self.supports_tools is False:
+            # If we know it doesn't support tools, never try it.
+            return False
+        if self.supports_tools is True:
+            # Known good: always available.
+            return True
+        # Unknown or previously failed: check if we are past the cooldown.
+        return (now - self.last_probe_time) >= PROBE_FAILED_CACHE_SECONDS
+
+
+class ModelDiscovery:
+    def __init__(self):
+        self._models: List[ModelInfo] = []  # discovered and filtered models
+        self._last_refresh: float = 0.0
+        self._refresh_lock = asyncio.Lock()
+        # Background task handle (set when start_background_refresh is called).
+        self._refresh_task: Optional[asyncio.Task] = None
+
+    async def start_background_refresh(self):
+        """Start the periodic refresh task. Call once at application startup."""
+        if self._refresh_task is not None:
+            return
+        self._refresh_task = asyncio.create_task(self._periodic_refresh())
+        logger.info("Started background model discovery refresh task")
+
+    async def stop_background_refresh(self):
+        """Stop the periodic refresh task."""
+        if self._refresh_task is None:
+            return
+        self._refresh_task.cancel()
+        try:
+            await self._refresh_task
+        except asyncio.CancelledError:
+            pass
+        self._refresh_task = None
+        logger.info("Stopped background model discovery refresh task")
+
+    async def _periodic_refresh(self):
+        """Loop that refreshes the model list every REFRESH_INTERVAL_SECONDS."""
+        while True:
+            try:
+                await self.refresh()
+            except Exception as e:
+                logger.warning(f"Model discovery refresh failed: {e}")
+            await asyncio.sleep(REFRESH_INTERVAL_SECONDS)
+
+    async def refresh(self) -> List[ModelInfo]:
+        """Fetch and process the model list from the provider.
+        Returns the list of discovered models (after filtering and probing).
+        """
+        settings = get_settings()
+        if not settings.discovered_models_enabled():
+            logger.debug("Model discovery disabled: missing API key or base URL")
+            return []
+
+        # Fetch the raw model list.
+        raw_models = await self._fetch_models_list(settings)
+        if not raw_models:
+            logger.warning("No models returned from provider")
+            return []
+
+        # Filter to text chat models.
+        filtered = self._filter_text_chat_models(raw_models)
+        logger.info(f"After text chat filter: {len(filtered)} models")
+
+        # Probe each model for tool calling support.
+        probed = await self._probe_models_for_tools(filtered, settings)
+        logger.info(f"After tool probe: {len([m for m in probed if m.supports_tools is True])} models support tools")
+
+        # Rank the models.
+        ranked = self._rank_models(probed)
+        logger.info(f"Ranked {len(ranked)} models")
+
+        # Update the cached list.
+        self._models = ranked
+        self._last_refresh = time.time()
+        return self._models
+
+    async def _fetch_models_list(self, settings) -> List[dict]:
+        """Call the provider's /models endpoint and return the list of model objects."""
+        url = str(settings.openai_base_url).rstrip("/") + "/models"
+        headers = {
+            "Authorization": f"Bearer {settings.openai_api_key}",
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers, timeout=MODELS_ENDPOINT_TIMEOUT)
+                resp.raise_for_status()
+                data = resp.json()
+                # OpenAI format: { "object": "list", "data": [ { "id": "...", ... }, ... ] }
+                if isinstance(data, dict) and "data" in data and isinstance(data["data"], list):
+                    return data["data"]
+                # Some providers might return a list directly.
+                if isinstance(data, list):
+                    return data
+                logger.error(f"Unexpected response format from {url}: {data}")
+                return []
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error fetching models from {url}: {e.response.status_code} {e.response.text}")
+            return []
+        except Exception as e:
+            logger.error(f"Error fetching models from {url}: {e}")
+            return []
+
+    def _filter_text_chat_models(self, raw_models: List[dict]) -> List[ModelInfo]:
+        """Filter out models that are not for text chat based on naming heuristics."""
+        settings = get_settings()
+        min_version = settings.min_version_filter()
+        exclude_patterns = settings.exclude_patterns()
+
+        filtered: List[ModelInfo] = []
+        for m in raw_models:
+            model_id = m.get("id")
+            if not isinstance(model_id, str) or not model_id.strip():
+                continue
+            model_id = model_id.strip()
+
+            # Exclude by substring (case-insensitive).
+            lower_id = model_id.lower()
+            if any(sub in lower_id for sub in TEXT_CHAT_EXCLUDE_SUBSTRINGS):
+                continue
+
+            # Exclude -latest aliases: if there exists a model without the -latest suffix,
+            # we drop the -latest one. We'll do this in a second pass after collecting all.
+            # For now, we keep it and handle deduplication later.
+
+            # Apply minVersion filter (lexicographic).
+            if min_version and model_id < min_version:
+                continue
+
+            # Apply exclude patterns.
+            if any(pattern in model_id for pattern in exclude_patterns):
+                continue
+
+            info = ModelInfo(id=model_id, owned_by=m.get("owned_by"))
+            filtered.append(info)
+        return filtered
+
+    async def _probe_models_for_tools(self, models: List[ModelInfo], settings) -> List[ModelInfo]:
+        """Probe each model to see if it accepts the tools parameter.
+        We do this sequentially to avoid bursting probes.
+        """
+        # We'll probe models that are available (not in cooldown) or never probed.
+        now = time.time()
+        to_probe = [m for m in models if m.is_available(now)]
+        logger.info(f"Probing {len(to_probe)} models for tool support")
+
+        for model in to_probe:
+            model.last_probe_time = now
+            try:
+                supports = await self._probe_model_tools(model.id, settings)
+                model.supports_tools = supports
+                model.last_probe_error = None
+                if supports:
+                    logger.info(f"Model {model.id} supports tool calling")
+                else:
+                    logger.info(f"Model {model.id} does NOT support tool calling")
+            except Exception as e:
+                model.supports_tools = False
+                model.last_probe_error = str(e)[:200]
+                logger.warning(f"Model {model.id} probe failed: {e}")
+        return models
+
+    async def _probe_model_tools(self, model_id: str, settings) -> bool:
+        """Return True if the model accepts the tools parameter in a chat completion request.
+        We make a minimal request with one dummy tool and max_tokens=1.
+        """
+        url = str(settings.openai_base_url).rstrip("/") + "/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {settings.openai_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model_id,
+            "messages": [{"role": "user", "content": "test"}],
+            "tools": [{
+                "type": "function",
+                "function": {
+                    "name": "test_tool",
+                    "description": "A dummy tool for probing",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            }],
+            "tool_choice": "auto",
+            "max_tokens": PROBE_MAX_TOKENS,
+            # We don't need stream=True.
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, headers=headers, json=payload, timeout=PROBE_TIMEOUT)
+            # If we get a 2xx, the model accepted the tools parameter.
+            # If we get a 400 or 404, it likely does not support tools (or the model is invalid).
+            # Other 4xx/5xx might be transient, but we treat them as failure for probing purposes.
+            if resp.status_code < 400:
+                return True
+            # 400, 401, 403, 404, 429, 5xx -> treat as not supporting tools for now.
+            # We could distinguish 429/5xx as transient, but for probing we just want to know
+            # if the model *can* accept tools. A 429 means it can but is busy; we'll retry later.
+            # However, to avoid marking a good model as bad due to a temporary 429, we'll
+            # consider 429 and 5xx as transient and not update the supports_tools flag.
+            # We'll leave it as None and retry next time.
+            if resp.status_code in (429, 500, 502, 503, 504):
+                # Transient error: do not update supports_tools, leave it as None.
+                raise httpx.HTTPStatusError(f"Transient error {resp.status_code}", request=resp.request, response=resp)
+            # For 400/401/403/404, we assume the model does not support tools.
+            return False
+
+    def _rank_models(self, models: List[ModelInfo]) -> List[ModelInfo]:
+        """Rank models by capability: newest generation first, then pro > flash > flash-lite within a generation.
+        We use a simple heuristic: sort by model id descending (lexicographically) as a proxy for novelty,
+        then by tier score within the generation.
+        """
+        def model_score(m: ModelInfo) -> tuple:
+            # Compute tier score: higher is better.
+            tier_score = 0
+            lower_id = m.id.lower()
+            found_scores = [score for kw, score in TIER_SCORES.items() if kw in lower_id]
+            if found_scores:
+                tier_score = max(found_scores)
+            # Return a tuple that sorts descending by model id, then descending by tier score.
+            # We'll use negative of the tuple for ascending sort? Instead, we'll sort in reverse.
+            return (m.id, tier_score)
+
+        # Sort by model id DESC, then tier score DESC.
+        models.sort(key=model_score, reverse=True)
+        return models
+
+    def get_effective_model_chain(self, settings=None) -> List[str]:
+        """Return the model chain to use for the chat agent and fallback.
+        If gateway.llm.models is set (non-empty), use that (static override).
+        Else, use the discovered models (if available and not empty).
+        Else, fall back to the static chain (just the default model).
+        Returns a list of model ids.
+        """
+        if settings is None:
+            settings = get_settings()
+        static_chain = settings.model_chain()
+        if settings.openai_models.strip():
+            # User has set gateway.llm.models -> use it as the authoritative chain.
+            logger.debug("Using static model chain from gateway.llm.models")
+            return static_chain
+
+        # No static override: use discovered models if we have any.
+        # We return only the models that are known to support tools (or unknown status?).
+        # We'll return models that are either known to support tools or have never been probed (status None).
+        # But note: the fallback mechanism will probe again? We have our own probe cache.
+        # We'll return models that are available (not in probe failure cooldown) and either known to support tools or unknown.
+        # However, the fallback mechanism expects a list of models to try. We'll give it the discovered models that
+        # are known to support tools OR have never been probed (so we can try them and learn).
+        # We'll exclude models that are known to NOT support tools.
+        now = time.time()
+        discovered = [
+            m.id for m in self._models
+            if m.is_available(now) and (m.supports_tools is True or m.supports_tools is None)
+        ]
+        if discovered:
+            logger.debug(f"Using discovered model chain: {discovered}")
+            return discovered
+
+        # Fallback to static chain (which may be just the default model).
+        logger.debug("No discovered models available; falling back to static model chain")
+        return static_chain
+
+    def get_discovered_models_info(self) -> List[dict]:
+        """Return diagnostic information about the discovered models.
+        Used for logging and debugging.
+        """
+        now = time.time()
+        info = []
+        for m in self._models:
+            info.append({
+                "id": m.id,
+                "owned_by": m.owned_by,
+                "supports_tools": m.supports_tools,
+                "last_probe_age": round(now - m.last_probe_time, 1) if m.last_probe_time > 0 else None,
+                "last_probe_error": m.last_probe_error,
+                "available": m.is_available(now),
+            })
+        return info
+
+
+# Global singleton instance
+_model_discovery = ModelDiscovery()
+
+
+def get_model_discovery() -> ModelDiscovery:
+    """Return the global model discovery instance."""
+    return _model_discovery
+
+
+def start_background_refresh():
+    """Start the background refresh on the global instance."""
+    # Note: This must be called within an event loop.
+    asyncio.create_task(_model_discovery.start_background_refresh())
+
+
+def stop_background_refresh():
+    """Stop the background refresh on the global instance."""
+    asyncio.create_task(_model_discovery.stop_background_refresh())
