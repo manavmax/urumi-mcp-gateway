@@ -27,14 +27,23 @@ async def chat_completions(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user_via_session),
 ):
-    # Validate messages shape
+    # Validate messages shape. FIX PASS F1-4: a client may send ONLY user and
+    # assistant roles - system and tool roles from the client are rejected so a
+    # caller cannot inject fake system text or forged tool results into the
+    # conversation (tool output is always produced server-side, inside the
+    # per-turn envelope in chat/agent.py).
     msgs = []
     for m in body.messages:
         if not isinstance(m, dict):
             continue
         role = m.get("role")
         content = m.get("content")
-        if role in ("user", "assistant", "system") and isinstance(content, str):
+        if role not in ("user", "assistant"):
+            return JSONResponse(
+                {"detail": f"role '{role}' is not allowed: only user and assistant messages are accepted"},
+                status_code=400,
+            )
+        if isinstance(content, str) and content.strip():
             msgs.append({"role": role, "content": content})
 
     if not msgs:
