@@ -18,7 +18,7 @@ import { api, type AuditRow, type Server, type Stats, type StatsRange, type Tool
 import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName } from "../lib/search";
-import { useMockupMotion } from "../lib/motion";
+import { useMockupMotion, useCountUp } from "../lib/motion";
 import AlertBanner from "../components/AlertBanner";
 import { Icon } from "../components/icons";
 
@@ -110,6 +110,10 @@ export default function OverviewMember() {
   const myCalls = stats?.audit.calls ?? 0;
   const mySuccessRate = stats?.audit.success_rate;
   const myP95 = stats?.audit.p95_ms ?? 0;
+
+  /* count-up on stat tiles: 700ms, exact real value at the end. */
+  const myCallsCount = useCountUp(stats?.audit.calls ?? 0);
+  const myRateCount = useCountUp(stats?.audit.success_rate ?? 0, 700, 1);
 
   // Getting-started step state. Steps 2 and 3 read ALL-TIME account counters so
   // onboarding never un-completes when the chart range changes; the windowed
@@ -246,7 +250,7 @@ export default function OverviewMember() {
                   style={{
                     width: 28, height: 28, borderRadius: "50%",
                     background: step.done ? "var(--ink)" : "var(--surface-2)",
-                    color: step.done ? "#fff" : "var(--text-muted)",
+                    color: step.done ? "var(--white)" : "var(--text-muted)",
                     display: "grid", placeItems: "center", flex: "none",
                     fontSize: 12, fontWeight: 700,
                   }}
@@ -309,7 +313,7 @@ export default function OverviewMember() {
         <div className="card stat hero">
           <div className="stat-label">My calls, {windowDays} days</div>
           <div className="stat-num">
-            {stats ? myCalls.toLocaleString("en-US") : <span className="sk num" style={{ width: 100 }} />}
+            {stats ? myCallsCount.toLocaleString("en-US") : <span className="sk num" style={{ width: 100 }} />}
           </div>
           <div className="small" style={{ color: "var(--text)" }}>
             {myCalls === 0 ? "no calls yet" : `${myCalls} call${myCalls !== 1 ? "s" : ""} in ${windowDays} days`}
@@ -319,11 +323,11 @@ export default function OverviewMember() {
         <div className="card stat">
           <div className="stat-label">Success rate, {windowDays} days</div>
           <div className="stat-num" style={{ fontSize: 30 }}>
-            {mySuccessRate == null ? "n/a" : `${mySuccessRate}%`}
+            {mySuccessRate == null ? "n/a" : `${myRateCount}%`}
           </div>
           <svg width="100%" height="34" viewBox="0 0 140 34" preserveAspectRatio="none" role="img" aria-label="Success rate sparkline">
             <title>Daily success rate</title>
-            <g fill="#C9D2E2">
+            <g fill="var(--chart-bar)">
               {perDay.map((d, i) => {
                 const ratio = d.calls ? (d.calls - d.errors) / d.calls : 0;
                 const h = 4 + ratio * 26;
@@ -350,7 +354,7 @@ export default function OverviewMember() {
                 className="draw"
                 points={perDay.map((d, i) => `${2 + (i * 136) / (perDay.length - 1)},${30 - Math.min(1, d.p95_ms / Math.max(...perDay.map((x) => x.p95_ms), 1)) * 26}`).join(" ")}
                 fill="none"
-                stroke="#14171C"
+                stroke="var(--chart-text)"
                 strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -361,7 +365,7 @@ export default function OverviewMember() {
                 cx={138}
                 cy={30 - Math.min(1, perDay[perDay.length - 1].p95_ms / Math.max(...perDay.map((x) => x.p95_ms), 1)) * 26}
                 r="2.6"
-                fill="#14171C"
+                fill="var(--chart-text)"
               />
             )}
           </svg>
@@ -381,26 +385,26 @@ export default function OverviewMember() {
             </div>
           </div>
           <svg viewBox="0 0 640 205" width="100%" role="img" aria-label="Bar chart of calls per day">
-            <g stroke="rgba(20,23,28,.06)" strokeWidth="1">
+            <g stroke="var(--chart-axis)" strokeWidth="1">
               <line x1="36" y1="168" x2="624" y2="168" />
               <line x1="36" y1="114.7" x2="624" y2="114.7" />
               <line x1="36" y1="61.3" x2="624" y2="61.3" />
               <line x1="36" y1="8" x2="624" y2="8" />
             </g>
-            <g fill="#5F6673" fontSize="10" fontFamily="ui-monospace, Menlo, monospace" textAnchor="end">
+            <g fill="var(--chart-axis-label)" fontSize="10" fontFamily="ui-monospace, Menlo, monospace" textAnchor="end">
               <text x="30" y="171">0</text>
               <text x="30" y="118">{Math.round(chartMetrics.niceMax / 3)}</text>
               <text x="30" y="65">{Math.round((chartMetrics.niceMax * 2) / 3)}</text>
               <text x="30" y="12">{chartMetrics.niceMax}</text>
             </g>
-            <g fill="#C9D2E2">
+            <g fill="var(--chart-bar)">
               {chartBars.map((b) => (
                 <rect key={b.day.date} x={b.x} y={b.y} width={b.w} height={Math.max(b.h, 0.5)} rx="5">
                   <title>{b.day.date}: {b.day.calls} calls</title>
                 </rect>
               ))}
             </g>
-            <g fill="#5F6673" fontSize="10" fontFamily="ui-monospace, Menlo, monospace" textAnchor="middle">
+            <g fill="var(--chart-axis-label)" fontSize="10" fontFamily="ui-monospace, Menlo, monospace" textAnchor="middle">
               {chartLabels.map((l, i) =>
                 i % Math.max(1, Math.ceil(chartMetrics.n / 7)) === 0 || i === chartLabels.length - 1 ? (
                   <text key={i} x={l.x} y="188">{l.text}</text>

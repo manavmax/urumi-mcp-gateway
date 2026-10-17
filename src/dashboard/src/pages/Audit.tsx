@@ -265,7 +265,7 @@ export default function Audit() {
                 <span className="sk" style={{ width: "82%" }} />
               </div>
             ) : shown.length === 0 ? (
-              <div className="small muted">No audit rows for the current filters.</div>
+              <div className="small muted empty-drift">No audit rows for the current filters.</div>
             ) : (
               <table aria-label="Audit log">
                 <thead>

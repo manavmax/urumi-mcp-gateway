@@ -290,22 +290,24 @@ export default function Servers() {
                 {!loading && rows.length === 0 && (
                   <tr>
                     <td colSpan={isAdmin ? 5 : 4}>
-                      <span className="small muted">{servers.length === 0 ? "No servers registered yet." : "No servers match the filter."}</span>
+                      <span className="small muted empty-drift" style={{ display: "inline-block" }}>{servers.length === 0 ? "No servers registered yet." : "No servers match the filter."}</span>
                     </td>
                   </tr>
                 )}
                 {rows.map((s) => {
                   const st = STATUS_CHIP(!s.enabled ? "Disabled" : s.status);
                   const list = tools[s.slug];
+                  const unreach = s.enabled && s.status === "Unreachable";
+                  const live = s.enabled && s.status === "Connected";
                   return (
                     <tr key={s.id}>
                       <td data-label="Server">
-                        <div className="slug">{s.slug}</div>
+                        <div className="slug">{s.slug}{live && <span className="live-dot" aria-label="live" />}</div>
                         <div className="url">{s.url}</div>
                         {isAdmin && healthLine(s) && <div className="url health-line" data-health-line>{healthLine(s)}</div>}
                       </td>
                       <td data-label="Status">
-                        <span className={`chip ${st.cls}`}><Icon name={st.icon} />{!s.enabled ? "Disabled" : s.status}</span>
+                        <span className={`chip ${st.cls}${unreach ? " shake-once" : ""}`}><Icon name={st.icon} />{!s.enabled ? "Disabled" : s.status}{live && <span className="dot-pulse" aria-hidden="true" />}</span>
                       </td>
                       <td data-label="Enabled">
                         {isAdmin ? (

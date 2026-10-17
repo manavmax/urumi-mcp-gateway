@@ -251,10 +251,10 @@ export default function Members() {
           </div>
 
           {lastKey && (
-            <div className="reveal">
+            <div className="reveal show">
               <div className="row"><Icon name="lock" style={{ color: "var(--primary-hover)" }} /><b>New key: copy now, shown once</b></div>
               <div className="row">
-                <div className="keybox"><code>{lastKey}</code></div>
+                <div className="keybox"><code className="type-in">{lastKey}</code></div>
                 <button className="btn btn-secondary" type="button"
                   onClick={async () => {
                     if (!lastKey) return;
@@ -262,7 +262,7 @@ export default function Members() {
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1400);
                   }}>
-                  <Icon name="copy" sm />{copied ? "Copied" : "Copy"}
+                  <span className={copied ? "copy-pop" : ""} style={{ display: "inline-flex" }}><Icon name={copied ? "check" : "copy"} sm /></span>{copied ? "Copied" : "Copy"}
                 </button>
               </div>
               <div className="small muted">This key will not be shown again. Store it in your secret manager, the gateway only keeps a SHA-256 digest.</div>
