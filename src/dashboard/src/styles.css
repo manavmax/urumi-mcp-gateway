@@ -135,6 +135,19 @@ body {
 .menu-pop a:hover, .menu-pop button:hover { background: var(--primary-tint); }
 .menu-pop button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
 
+/* notification bell popover (FIX PASS F1-6) */
+.notif-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 380px; max-width: calc(100vw - 32px); background: var(--surface); border-radius: var(--r-inner); box-shadow: var(--shadow-pop); padding: var(--s3); z-index: 9; display: grid; gap: 8px; animation: slide-down var(--dur-fast) var(--ease) both; }
+.notif-list { display: grid; gap: 2px; max-height: 420px; overflow: auto; }
+.notif-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: var(--r-sm); text-decoration: none; color: var(--text); }
+.notif-item:hover { background: var(--tint-soft); }
+.notif-item .chip { margin-top: 1px; flex: none; }
+.notif-main { display: grid; gap: 2px; min-width: 0; }
+.notif-main b { font-size: var(--t-md); font-weight: 650; line-height: 1.3; }
+.notif-main span { font-size: var(--t-sm); color: var(--text-muted); }
+.notif-empty { display: grid; gap: 4px; text-align: center; padding: 18px 8px; }
+.notif-empty b { font-size: var(--t-md); }
+.notif-empty span { font-size: var(--t-sm); color: var(--text-muted); }
+
 /* ---------- page header ---------- */
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 h1 { font-size: 28px; letter-spacing: -.02em; line-height: 1.1; font-weight: 700; }

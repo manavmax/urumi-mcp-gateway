@@ -164,6 +164,19 @@ export type AdminAlert = {
 };
 export type AlertsPayload = { admin: AdminAlert[] } | { member: { slugs: string[] } };
 
+/* Notification bell items (FIX PASS F1-6): computed server-side from existing
+   data; shape is id, kind, severity, title, short detail, at, href. Members
+   only ever receive their own items; no key material ever appears. */
+export type NotificationItem = {
+  id: string;
+  kind: string;
+  severity: "critical" | "warning" | "info";
+  title: string;
+  detail: string;
+  at: string;
+  href: string;
+};
+
 export const api = {
   me: () => request<Me>("/api/me"),
   login: (email: string, password: string) =>
@@ -197,6 +210,9 @@ export const api = {
 
   /* Next-best-action banner state (docs/11_OBSERVABILITY.md §3). */
   alerts: () => request<AlertsPayload>("/api/alerts"),
+
+  /* Notification bell items (FIX PASS F1-6). */
+  listNotifications: () => request<{ notifications: NotificationItem[] }>("/api/notifications"),
 
   listUsers: () => request<{ users: { id: string; email: string; role: string; is_active: boolean; created_at: string }[] }>("/api/users"),
   createUser: (data: { email: string; password: string; role: string }) =>

@@ -297,7 +297,10 @@ async def lifespan(app: FastAPI):
 | POST | `/api/users` | admin | invite |
 | POST | `/api/keys` | self | generate own key |
 | DELETE | `/api/keys/:id` | owner/admin | revoke |
+| DELETE | `/api/keys/:id` | owner/admin | revoke |
 | POST | `/api/chat/completions` | session | LLM tool loop |
+| GET | `/api/alerts` | session | next-best-action banner state (docs/11 §3) |
+| GET | `/api/notifications` | session | notification bell items; admin fleet items, member only own failures/denials + own key expiry (FIX PASS F1-6) |
 
 ---
 
