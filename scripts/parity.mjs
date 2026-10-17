@@ -435,7 +435,7 @@ async function checkContrast(page, theme) {
       out.push({ name: p.name, fg, bg, sel: p.textSel });
     }
     return out;
-  }, pairs);
+  }, CONTRAST_PAIRS);
 }
 
 /* Screenshot every page in both themes and both roles. */
