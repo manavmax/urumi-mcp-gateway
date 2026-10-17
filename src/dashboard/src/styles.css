@@ -326,8 +326,7 @@ details.tools[open] { border-radius: var(--r-inner); padding: 0; }
 .empty-state h2 { position: relative; font-size: 26px; letter-spacing: -.02em; font-weight: 700; }
 .empty-state .sub { position: relative; color: var(--text-muted); }
 .suggestion-grid { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 660px; }
-.starter { border-radius: var(--r-inner); background: var(--surface); box-shadow: var(--shadow-card); padding: 16px; display: grid; gap: 8px; justify-items: start; cursor: pointer; text-align: left; transition: transform var(--dur-fast) var(--ease); }
-.starter:hover { transform: translateY(-2px); }
+.starter { border-radius: var(--r-inner); background: var(--surface); box-shadow: var(--shadow-card); padding: 16px; display: grid; gap: 8px; justify-items: start; cursor: pointer; text-align: left; }
 .starter:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
 .starter .tile { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: none; }
 .starter b { font-size: var(--t-md); }
@@ -410,7 +409,12 @@ details.out summary .ic { width: 12px; height: 12px; stroke-width: 2.4; }
 @keyframes drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-18px,12px); } }
 @keyframes drift-c { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(10px,10px) scale(1.03); } }
 @keyframes float-arch { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-.card, .note-banner, .page-head { animation: fade-rise var(--dur-mid) var(--ease) both; }
+/* FIX PASS F1-3 root cause: fill-mode "both" kept the entrance animation's
+   final keyframe (transform: none) applied forever, and animation values beat
+   normal :hover declarations in the cascade, so every hover transform on cards
+   was silently dead. "backwards" keeps the identical entrance (rise from 10px)
+   but releases the transform once the animation ends, so hover motion works. */
+.card, .note-banner, .page-head { animation: fade-rise var(--dur-mid) var(--ease) backwards; }
 .pop { animation: pop var(--dur-mid) var(--ease) both; animation-delay: 600ms; }
 /* delta pill pops after the stat count-up finishes (700ms count + beat) */
 .delta-pop { animation: pop 300ms var(--ease-spring) both; animation-delay: 700ms; }
@@ -423,6 +427,40 @@ details.tools[open] .tool-list, details.out[open] pre { animation: expand var(--
 .card.stat { transition: transform var(--dur-mid) var(--ease); }
 .card.stat:hover { transform: translateY(-2px); }
 .btn:active { transform: translateY(1px); }
+
+/* ---------- hover motion (FIX PASS F1-3, token-driven) ----------
+   Tiles lift about 3px with a deeper shadow, hero tile drifts its gradient,
+   list rows slide and tint, buttons press. Transform and box-shadow only, so
+   the motion allow-list holds; prefers-reduced-motion neutralises every rule
+   (see the media query at the end of this file). */
+.row1 > .card, .row2 > .card, .row3 > .card, .grid-4 > .card,
+.activity-row > .card, .ct-row > .card, .card.stat, .starter, .float-chip {
+  transition: transform var(--dur-mid) var(--ease), box-shadow var(--dur-mid) var(--ease);
+}
+.row1 > .card:hover, .row2 > .card:hover, .row3 > .card:hover, .grid-4 > .card:hover,
+.activity-row > .card:hover, .ct-row > .card:hover, .card.stat:hover,
+.starter:hover, .float-chip:hover {
+  transform: translateY(var(--lift, -3px));
+  box-shadow: var(--shadow-lift);
+}
+/* hero tile: soft gradient drift, an overlay copy of the gradient shifted and
+   faded in with transform + opacity only */
+.stat.hero { overflow: hidden; }
+.stat.hero::after {
+  content: ""; position: absolute; inset: 0; background: var(--grad-A);
+  opacity: 0; transform: translate(6%, -4%) scale(1.08); pointer-events: none;
+  transition: opacity var(--dur-slow) var(--ease), transform var(--dur-slow) var(--ease);
+}
+.stat.hero:hover::after { opacity: .5; transform: translate(-4%, 3%) scale(1.05); }
+/* list rows: slide a little on hover (tint already from the hover rule) */
+.feed-row { transition: transform var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease); }
+.feed-row:hover { transform: translateX(2px); }
+.hist-item { transition: transform var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease); }
+.hist-item:hover { transform: translateX(2px); }
+/* buttons: press scales down (mockup pressed state) */
+.btn:active, .send:active, .search-go:active, .icon-btn:active, .starter:active {
+  transform: scale(var(--press-scale, 0.97));
+}
 .reveal.show { animation: slide-down var(--dur-mid) var(--ease) both; }
 /* API key reveal: key types in, copy button check pops */
 .type-in { display: inline-block; overflow: hidden; white-space: nowrap; animation: type-in 600ms var(--ease) both; }
@@ -519,5 +557,14 @@ tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--ink); }
 /* reduced motion: kill everything, show final values immediately */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0 !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
+  /* FIX PASS F1-3: hover and press must not move anything either */
+  .row1 > .card:hover, .row2 > .card:hover, .row3 > .card:hover, .grid-4 > .card:hover,
+  .activity-row > .card:hover, .ct-row > .card:hover, .card.stat:hover,
+  .starter:hover, .float-chip:hover, .feed-row:hover, .hist-item:hover,
+  .btn:active, .send:active, .search-go:active, .icon-btn:active, .starter:active { transform: none !important; }
+  .stat.hero:hover::after { transform: none !important; }
 }
 body.rm *, body.rm *::before, body.rm *::after { animation-duration: .01ms !important; animation-delay: 0 !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
+body.rm .row1 > .card:hover, body.rm .row2 > .card:hover, body.rm .row3 > .card:hover, body.rm .grid-4 > .card:hover,
+body.rm .card.stat:hover, body.rm .starter:hover, body.rm .float-chip:hover,
+body.rm .feed-row:hover, body.rm .hist-item:hover, body.rm .btn:active { transform: none !important; }
