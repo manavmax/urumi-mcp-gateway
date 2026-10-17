@@ -8,15 +8,49 @@ import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "./icons";
 import { useAuth } from "../lib/auth";
 import { initials, useSearch } from "../lib/search";
+import { useSharedTheme } from "../lib/theme";
+import type { Theme } from "../lib/theme";
+
+const SunIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/>
+    <line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+);
+const MoonIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+);
+const MonitorIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+    <line x1="8" y1="21" x2="16" y2="21"/>
+    <line x1="12" y1="17" x2="12" y2="21"/>
+  </svg>
+);
+
+const THEME_OPTIONS: { value: Theme; label: string; Icon: React.FC }[] = [
+  { value: "light", label: "Light", Icon: SunIcon },
+  { value: "dark", label: "Dark", Icon: MoonIcon },
+  { value: "system", label: "System", Icon: MonitorIcon },
+];
 
 export function Topbar() {
   const { user, logout } = useAuth();
   const { query, setQuery } = useSearch();
+  const { theme, setTheme } = useSharedTheme();
   const nav = useNavigate();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const roleLabel = user?.role === "admin" ? "Administrator" : user?.role === "member" ? "Member" : "";
 
-  /* Cmd/Ctrl+K focuses the page search, as the kbd hint promises. */
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -63,6 +97,21 @@ export function Topbar() {
               <b style={{ fontSize: "var(--t-md)" }}>{user?.email}</b>
               <div className="small muted">{roleLabel}</div>
             </div>
+          </div>
+          <div className="theme-row">
+            {THEME_OPTIONS.map(({ value, label, Icon: ThemeIcon }) => (
+              <button
+                key={value}
+                type="button"
+                className={`theme-btn${theme === value ? " on" : ""}`}
+                onClick={() => setTheme(value)}
+                aria-pressed={theme === value}
+                title={label}
+              >
+                <ThemeIcon />
+                <span>{label}</span>
+              </button>
+            ))}
           </div>
           <Link to="/members"><Icon name="users" sm />Members &amp; keys</Link>
           <Link to="/audit"><Icon name="shield" sm />Audit trail</Link>

@@ -10,6 +10,7 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./lib/auth";
 import { SearchProvider } from "./lib/search";
+import { ThemeProvider } from "./lib/theme";
 import { Sidebar, BottomNav } from "./components/Nav";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
@@ -36,23 +37,25 @@ function Shell() {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
   return (
-    <SearchProvider>
-      <div className={`shell-page ${familyOf(pathname)}`}>
-        <div className="bg-glow" aria-hidden="true" />
-        <Sidebar email={user?.email} role={user?.role} onLogout={logout} />
-        <div className="main">
-          <Routes>
-            <Route path="/" element={<Navigate to="/overview" replace />} />
-            <Route path="/overview" element={user?.role === "admin" ? <Overview /> : <OverviewMember />} />
-            <Route path="/servers" element={<Servers />} />
-            <Route path="/members" element={<Members />} />
-            <Route path="/audit" element={<Audit />} />
-            <Route path="/chat" element={<Chat />} />
-          </Routes>
+    <ThemeProvider>
+      <SearchProvider>
+        <div className={`shell-page ${familyOf(pathname)}`}>
+          <div className="bg-glow" aria-hidden="true" />
+          <Sidebar email={user?.email} role={user?.role} onLogout={logout} />
+          <div className="main">
+            <Routes>
+              <Route path="/" element={<Navigate to="/overview" replace />} />
+              <Route path="/overview" element={user?.role === "admin" ? <Overview /> : <OverviewMember />} />
+              <Route path="/servers" element={<Servers />} />
+              <Route path="/members" element={<Members />} />
+              <Route path="/audit" element={<Audit />} />
+              <Route path="/chat" element={<Chat />} />
+            </Routes>
+          </div>
+          <BottomNav />
         </div>
-        <BottomNav />
-      </div>
-    </SearchProvider>
+      </SearchProvider>
+    </ThemeProvider>
   );
 }
 

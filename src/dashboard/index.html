@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Urumi Gateway</title>
+    <script>
+    // Apply theme before first paint to prevent flash.
+    // Must run synchronously before body is parsed.
+    (function() {
+      var theme = 'system';
+      try { theme = localStorage.getItem('theme') || 'system'; } catch(e) {}
+      function prefersDark() { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+      var resolved = theme === 'system' ? prefersDark() : theme;
+      document.documentElement.setAttribute('data-theme', resolved);
+    })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

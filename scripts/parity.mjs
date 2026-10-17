@@ -6,6 +6,15 @@
 //   node scripts/parity.mjs --page login    # one page
 //   node scripts/parity.mjs --role member   # one role
 //   node scripts/parity.mjs --pixel         # login pixel diff only
+//   node scripts/parity.mjs --theme dark    # dark theme only (default: both)
+//
+// DARK MODE + MOTION PASS: the harness runs every page in BOTH themes (light
+// + dark) and both roles. Light-mode geometry is the PASS/FAIL gate (layout
+// parity with the approved design must remain PASS in light mode); dark mode
+// gets geometry parity info (reported, not a gate), a WCAG contrast gate on
+// the main text-on-surface pairs (>= 4.5:1, ratios reported), and a
+// screenshot of every page in both themes and both roles under
+// artifacts/parity/.
 //
 // Geometry tolerances (the STAGE 1 contract): 8px on width/height, 12px on
 // x/y. Computed styles must match exactly (0.6px for numeric values). Elements
@@ -42,6 +51,17 @@ const DASHBOARD_URL = process.env.DASHBOARD_URL || "http://dashboard.127.0.0.1.n
 const VIEWPORT = { width: 1440, height: 900 };
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
 const PIXEL_THRESHOLD = 0.03; // 3%
+const CONTRAST_MIN = 4.5;
+
+/* CLI flags: --page, --role, --pixel, --theme light|dark (default both). */
+const argv = process.argv.slice(2);
+const themeFlag = (() => {
+  const i = argv.indexOf("--theme");
+  if (i === -1) return null;
+  const v = argv[i + 1];
+  return v === "light" || v === "dark" ? v : null;
+})();
+const THEMES = themeFlag ? [themeFlag] : ["light", "dark"];
 
 const TOL = { x: 12, y: 12, w: 8, h: 8, style: 0.6 };
 
@@ -358,7 +378,71 @@ async function pixelDiff(browser, mockupPath, liveUrl, viewport, label) {
   return { label, ok: ratio < PIXEL_THRESHOLD, ratio, note: `${changed} px changed (${(ratio * 100).toFixed(2)}%), threshold ${(PIXEL_THRESHOLD * 100).toFixed(0)}%` };
 }
 
+/* ---------- contrast: WCAG text-on-surface pairs in dark mode ---------- */
+function luminance(r, g, b) {
+  const f = (c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+function parseRgb(s) {
+  const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(String(s || ""));
+  if (!m) return null;
+  return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])];
+}
+function contrastRatio(fg, bg) {
+  const a = parseRgb(fg), b = parseRgb(bg);
+  if (!a || !b) return null;
+  const l1 = luminance(...a), l2 = luminance(...b);
+  const hi = Math.max(l1, l2), lo = Math.min(l1, l2);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/* Main text-on-surface pairs: each entry resolves a text element + the
+   surface behind it. Screenshots + ratios are reported; < 4.5:1 FAILs. */
+const CONTRAST_PAIRS = [
+  { name: "body text on card", textSel: ".card .card-title, .content .page-head h1", bgSel: ".card, .content" },
+  { name: "muted on card", textSel: ".card .card-sub, .card .muted, .content .muted", bgSel: ".card, .content" },
+  { name: "primary pill text", textSel: ".btn-primary", bgSel: ".btn-primary" },
+  { name: "chip text", textSel: ".chip", bgSel: ".chip" },
+  { name: "input text", textSel: ".field input, .search input, .composer input", bgSel: ".field input, .search input, .composer input" },
+  { name: "table cell text", textSel: "td", bgSel: ".card, .content" },
+  { name: "chat bubble text", textSel: ".msg .bubble, .thread-card", bgSel: ".msg .bubble, .thread-card, .card" },
+];
+
+async function checkContrast(page, theme) {
+  return page.evaluate((pairs) => {
+    function bgOf(el) {
+      let n = el;
+      while (n && n !== document.documentElement) {
+        const bg = getComputedStyle(n).backgroundColor;
+        const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/.exec(bg || "");
+        if (m) {
+          const a = m[4] == null || m[4] === "" ? 1 : parseFloat(m[4]);
+          if (a > 0.9) return bg;
+        }
+        n = n.parentElement;
+      }
+      return getComputedStyle(document.body).backgroundColor;
+    }
+    const out = [];
+    for (const p of pairs) {
+      const el = document.querySelector(p.textSel);
+      if (!el) { out.push({ name: p.name, ok: true, detail: "absent in page", ratio: null }); continue; }
+      const fg = getComputedStyle(el).color;
+      const bg = bgOf(el);
+      out.push({ name: p.name, fg, bg, sel: p.textSel });
+    }
+    return out;
+  }, pairs);
+}
+
+/* Screenshot every page in both themes and both roles. */
 /* ---------- member Overview structure checks (FIX 1) ----------
+   The motion proof lives in scripts/verify-motion.mjs (stat sampled at 100ms
+   and 1s ends on the API value; reduced motion shows final at 0ms; no
+   console errors).
    The member Overview is a DISTINCT page with no approved mockup, so mockup
    geometry is not meaningful for it. Instead we assert structure + safety of
    the live page at desktop and mobile: every required card is present with
@@ -378,7 +462,7 @@ const MEMBER_STRUCTURE = {
   forbidden: ["fleet status", "fleet health", "get /api/users", "active accounts", "registered members", "team-wide", "team totals", "all servers"],
 };
 
-async function runStructureChecks(browser, liveUrl, role, member, admin) {
+async function runStructureChecks(browser, liveUrl, role, member, admin, theme = "light") {
   let cookie = null;
   if (role === "member" && member) {
     const m = await loginAs(DASHBOARD_URL, member.email, member.password);
@@ -392,7 +476,13 @@ async function runStructureChecks(browser, liveUrl, role, member, admin) {
     if (cookie) await ctx.addCookies(cookie);
     const page = await ctx.newPage();
     await page.goto(liveUrl, { waitUntil: "networkidle" });
+    await page.evaluate((t) => {
+      try { localStorage.setItem("theme", t); } catch { /* ignore */ }
+      document.documentElement.setAttribute("data-theme", t);
+    }, theme);
     await page.waitForTimeout(500);
+    mkdirSync(ARTIFACTS, { recursive: true });
+    await page.screenshot({ path: join(ARTIFACTS, `page-overview-${role}-${theme}-${vp.width}.png`), animations: "disabled" });
     const m = await page.evaluate(({ required, forbidden }) => {
       const out = { present: [], forbidden: [], scrollWidth: 0, innerWidth: 0, overflowers: [] };
       for (const r of required) {
@@ -451,59 +541,97 @@ async function run() {
       const roles = cfg.roles.filter((r) => !onlyRole || r === onlyRole);
 
       for (const role of roles) {
-        currentRole = role;
-        const liveUrl = `${DASHBOARD_URL}${cfg.path}?expanded=1`;
+        for (const theme of THEMES) {
+          currentRole = role;
+          const liveUrl = `${DASHBOARD_URL}${cfg.path}?expanded=1`;
+          const tag = `${cfg.page}/${role}/${theme}`;
 
-        /* member Overview is a distinct page: structure/safety checks, no mockup */
-        if (cfg.structure && cfg.structure.includes(role)) {
-          const results = await runStructureChecks(browser, liveUrl, role, member, admin);
-          const hard = results.filter((r) => !r.ok);
-          const status = hard.length === 0 ? "PASS" : "FAIL";
-          console.log(`\n[${status}] ${cfg.page} (${role}) — ${results.filter((r) => r.ok).length}/${results.length} structure checks (distinct member page, no mockup)`);
-          for (const r of results) console.log(`   ${r.ok ? "PASS" : "FAIL"} ${r.sel}: ${r.detail}`);
-          if (hard.length) failures.push(`${cfg.page}/${role}: ${hard.length} structure check(s) FAIL`);
-          report.push({ page: cfg.page, role, status, results });
-          continue;
+          /* member Overview is a distinct page: structure/safety checks, no mockup.
+             Light mode is the gate; dark mode structure is reported alongside. */
+          if (cfg.structure && cfg.structure.includes(role)) {
+            const results = await runStructureChecks(browser, liveUrl, role, member, admin, theme);
+            const hard = results.filter((r) => !r.ok);
+            const gate = theme === "light";
+            const status = hard.length === 0 ? "PASS" : gate ? "FAIL" : "INFO";
+            console.log(`\n[${status}] ${cfg.page} (${role}, ${theme}) — ${results.filter((r) => r.ok).length}/${results.length} structure checks (distinct member page, no mockup)`);
+            for (const r of results) console.log(`   ${r.ok ? "PASS" : "FAIL"} ${r.sel}: ${r.detail}`);
+            if (gate && hard.length) failures.push(`${tag}: ${hard.length} structure check(s) FAIL`);
+            report.push({ page: `${cfg.page}[${theme}]`, role, status, results });
+            continue;
+          }
+
+          const specs = dedupeSpecs(cfg.selectors);
+          const mockupQuery = cfg.mockup.startsWith("login") ? "" : role === "member" ? "?view=member&expanded=1" : "?expanded=1";
+          const mockupUrl = `file://${join(MOCKUPS, cfg.mockup)}${mockupQuery}`;
+
+          const mctx = await browser.newContext({ viewport: VIEWPORT });
+          const mpage = await mctx.newPage();
+          await mpage.goto(mockupUrl, { waitUntil: "load" });
+          if (cfg.page === "login") {
+            console.log("   (login: applied the STAGE 1 acceptance deviation to the mockup: stacked logo block, named drift classes)");
+            await alignLoginMockup(mpage);
+          }
+          await mpage.waitForTimeout(250);
+          const mockRows = await measure(mpage, specs);
+          await mctx.close();
+
+          const lctx = await browser.newContext({ viewport: VIEWPORT });
+          if (role === "admin" && admin) await lctx.addCookies(cookiePair(admin.cookie, DASHBOARD_URL));
+          if (role === "member" && member) {
+            const m = await loginAs(DASHBOARD_URL, member.email, member.password);
+            await lctx.addCookies(cookiePair(m.cookie, DASHBOARD_URL));
+          }
+          const lpage = await lctx.newPage();
+          await lpage.goto(liveUrl, { waitUntil: "networkidle" });
+          /* force the theme under test (default System would follow the
+             headless browser's media, not the theme we want to measure) */
+          await lpage.evaluate((t) => {
+            try { localStorage.setItem("theme", t); } catch { /* ignore */ }
+            document.documentElement.setAttribute("data-theme", t);
+          }, theme);
+          await lpage.waitForTimeout(400);
+          const liveRows = await measure(lpage, specs);
+
+          /* screenshot every page in both themes and both roles */
+          mkdirSync(ARTIFACTS, { recursive: true });
+          const shotName = `page-${cfg.page}-${role}-${theme}.png`;
+          await lpage.screenshot({ path: join(ARTIFACTS, shotName), animations: "disabled" });
+          console.log(`   screenshot: artifacts/parity/${shotName}`);
+
+          /* contrast gate on the main text-on-surface pairs (dark only) */
+          if (theme === "dark") {
+            const pairs = await checkContrast(lpage, theme);
+            for (const p of pairs) {
+              if (p.ratio === null && !p.fg) {
+                report.push({ page: `contrast-dark[${cfg.page}/${role}]`, role, status: "PASS", note: `${p.name}: absent in page` });
+                console.log(`   PASS contrast ${p.name}: absent in page`);
+                continue;
+              }
+              const ratio = contrastRatio(p.fg, p.bg);
+              const ok = ratio != null && ratio >= CONTRAST_MIN;
+              const note = `${p.name}: ${ratio == null ? "unmeasurable" : ratio.toFixed(2) + ":1"} (fg ${p.fg} on ${p.bg})`;
+              console.log(`   [${ok ? "PASS" : "FAIL"}] contrast ${note}`);
+              report.push({ page: `contrast-dark[${cfg.page}/${role}]`, role, status: ok ? "PASS" : "FAIL", note });
+              if (!ok) failures.push(`${tag} contrast: ${note}`);
+            }
+          }
+          await lctx.close();
+
+          const results = comparePage(specs, mockRows, liveRows);
+          const hard = results.filter((r) => !r.ok && !r.dataDependent);
+          const soft = results.filter((r) => !r.ok && r.dataDependent);
+          /* light mode geometry is the PASS/FAIL gate; dark mode is INFO
+             (same layout, different palette) so palette diffs never fail parity */
+          const gate = theme === "light";
+          const status = hard.length === 0 ? "PASS" : gate ? "FAIL" : "INFO";
+          console.log(`\n[${status}] ${cfg.page} (${role}, ${theme}) — ${results.length - hard.length - soft.length}/${results.length} measured elements match`);
+          for (const r of results) {
+            if (!r.ok && !r.dataDependent) console.log(`   FAIL ${r.sel}: ${r.detail}`);
+            else if (!r.ok && r.dataDependent) console.log(`   data ${r.sel}: ${r.detail}`);
+          }
+          if (gate && hard.length) failures.push(`${tag}: ${hard.length} element(s) FAIL`);
+          report.push({ page: `${cfg.page}[${theme}]`, role, status, results });
         }
-
-        const specs = dedupeSpecs(cfg.selectors);
-        const mockupQuery = cfg.mockup.startsWith("login") ? "" : role === "member" ? "?view=member&expanded=1" : "?expanded=1";
-        const mockupUrl = `file://${join(MOCKUPS, cfg.mockup)}${mockupQuery}`;
-
-        const mctx = await browser.newContext({ viewport: VIEWPORT });
-        const mpage = await mctx.newPage();
-        await mpage.goto(mockupUrl, { waitUntil: "load" });
-        if (cfg.page === "login") {
-          console.log("   (login: applied the STAGE 1 acceptance deviation to the mockup: stacked logo block, named drift classes)");
-          await alignLoginMockup(mpage);
-        }
-        await mpage.waitForTimeout(250);
-        const mockRows = await measure(mpage, specs);
-        await mctx.close();
-
-        const lctx = await browser.newContext({ viewport: VIEWPORT });
-        if (role === "admin" && admin) await lctx.addCookies(cookiePair(admin.cookie, DASHBOARD_URL));
-        if (role === "member" && member) {
-          const m = await loginAs(DASHBOARD_URL, member.email, member.password);
-          await lctx.addCookies(cookiePair(m.cookie, DASHBOARD_URL));
-        }
-        const lpage = await lctx.newPage();
-        await lpage.goto(liveUrl, { waitUntil: "networkidle" });
-        await lpage.waitForTimeout(400);
-        const liveRows = await measure(lpage, specs);
-        await lctx.close();
-
-        const results = comparePage(specs, mockRows, liveRows);
-        const hard = results.filter((r) => !r.ok && !r.dataDependent);
-        const soft = results.filter((r) => !r.ok && r.dataDependent);
-        const status = hard.length === 0 ? "PASS" : "FAIL";
-        console.log(`\n[${status}] ${cfg.page} (${role}) — ${results.length - hard.length - soft.length}/${results.length} measured elements match`);
-        for (const r of results) {
-          if (!r.ok && !r.dataDependent) console.log(`   FAIL ${r.sel}: ${r.detail}`);
-          else if (!r.ok && r.dataDependent) console.log(`   data ${r.sel}: ${r.detail}`);
-        }
-        if (hard.length) failures.push(`${cfg.page}/${role}: ${hard.length} element(s) FAIL`);
-        report.push({ page: cfg.page, role, status, results });
       }
     }
 

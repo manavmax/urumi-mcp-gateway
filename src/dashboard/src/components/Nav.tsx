@@ -11,6 +11,7 @@ import * as React from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
 import { Icon } from "./icons";
 import { initials } from "../lib/search";
+import { useSharedTheme, type Theme } from "../lib/theme";
 import type { IconName } from "./icons";
 
 type NavItem = { to: string; label: string; icon: IconName };
@@ -29,6 +30,7 @@ export function Sidebar({ email, role, onLogout }: { email?: string; role?: stri
   const [params] = useSearchParams();
   const forced = params.get("expanded") === "1" ? " force" : "";
   const roleLabel = role === "admin" ? "Administrator" : role === "member" ? "Member" : role || "";
+  const { theme, setTheme } = useSharedTheme();
   return (
     <aside className={`sidebar-pill${forced}`} id="rail" aria-label="Primary">
       <NavLink className="brand" to="/overview" aria-label="Urumi home">
@@ -58,7 +60,15 @@ export function Sidebar({ email, role, onLogout }: { email?: string; role?: stri
             <small>{roleLabel}</small>
           </span>
         </div>
-        <button className="signout" type="button" onClick={onLogout} style={railStyle(7)}>
+        <div className="rail-label theme-seg" style={railStyle(7)} role="group" aria-label="Theme">
+          {(["light", "dark", "system"] as Theme[]).map((t) => (
+            <button key={t} type="button" className={`theme-dot${theme === t ? " on" : ""}`}
+              onClick={() => setTheme(t)} aria-pressed={theme === t} title={t} aria-label={`Theme ${t}`}>
+              {t === "light" ? "L" : t === "dark" ? "D" : "S"}
+            </button>
+          ))}
+        </div>
+        <button className="signout" type="button" onClick={onLogout} style={railStyle(8)}>
           <span className="rail-ic"><Icon name="logout" size={18} /></span>
           <span className="rail-label">Sign out</span>
         </button>
