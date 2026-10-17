@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 
-from auth.rbac import get_current_user_via_session
+from auth.rbac import get_current_user_via_session, verify_csrf
 from config import get_settings
 from db.session import get_db
 from fastapi import APIRouter, Depends, Request
@@ -27,6 +27,10 @@ async def chat_completions(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user_via_session),
 ):
+    # CSRF like every other mutating session endpoint (F2 pass): a chat turn can
+    # run WRITE tools, so a cross-site POST must not ride the session cookie.
+    # The dashboard already sends X-CSRF-Token on this call.
+    verify_csrf(request)
     # Validate messages shape
     msgs = []
     for m in body.messages:
