@@ -61,10 +61,10 @@ export function Sidebar({ email, role, onLogout }: { email?: string; role?: stri
           </span>
         </div>
         <div className="rail-label theme-seg" style={railStyle(7)} role="group" aria-label="Theme">
-          {(["light", "dark", "system"] as Theme[]).map((t) => (
+          {(["light", "dark"] as Theme[]).map((t) => (
             <button key={t} type="button" className={`theme-dot${theme === t ? " on" : ""}`}
               onClick={() => setTheme(t)} aria-pressed={theme === t} title={t} aria-label={`Theme ${t}`}>
-              {t === "light" ? "L" : t === "dark" ? "D" : "S"}
+              {t === "light" ? "L" : "D"}
             </button>
           ))}
         </div>

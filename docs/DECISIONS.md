@@ -322,4 +322,20 @@ limiter would fix it at the cost of infrastructure complexity. `user.role_change
 not exist as an API endpoint yet; when it is added, it should call `record_admin_event`
 following the same pattern.
 
+## 2026-10-18: F1 dashboard theme is Light and Dark only (System removed)
+
+**What changed.** The dashboard offers exactly two themes: Light and Dark, in the
+user menu dropdown and the sidebar rail control. The System option is removed
+from `theme.ts`, the pre-paint script in `index.html`, and both controls. The
+default when nothing is stored is Light; a stored `system` or any unknown value
+is treated as Light. The favicon keeps following the theme (tile from `--ink`,
+glyph from `--primary-pill-text`, rebuilt on switch).
+
+**Why.** Owner report on the live build: three theme states tripled the contrast
+surface and System made the rendered mode unpredictable in tests and screenshots.
+Two explicit modes keep the contrast gate (scripts/contrast.mjs) deterministic.
+
+**Known trade-off.** Users who previously chose System now get Light until they
+pick Dark; honouring the OS preference is intentionally dropped for determinism.
+
 

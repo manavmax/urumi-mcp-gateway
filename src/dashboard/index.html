@@ -6,14 +6,15 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Urumi Gateway</title>
     <script>
-    // Apply theme before first paint to prevent flash.
-    // Must run synchronously before body is parsed.
+    // Apply theme before first paint to prevent flash. Two modes only:
+    // Light (default) and Dark. A stored "system" or unknown value is Light.
     (function() {
-      var theme = 'system';
-      try { theme = localStorage.getItem('theme') || 'system'; } catch(e) {}
-      function prefersDark() { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
-      var resolved = theme === 'system' ? prefersDark() : theme;
-      document.documentElement.setAttribute('data-theme', resolved);
+      var theme = 'light';
+      try {
+        var v = localStorage.getItem('theme');
+        theme = (v === 'dark' || v === 'light') ? v : 'light';
+      } catch(e) {}
+      document.documentElement.setAttribute('data-theme', theme);
     })();
     </script>
   </head>

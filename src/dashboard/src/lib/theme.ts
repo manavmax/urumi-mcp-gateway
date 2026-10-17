@@ -1,29 +1,21 @@
 import { useState, useEffect, useCallback, createContext, useContext, createElement, type ReactNode } from "react";
 
-export type Theme = "light" | "dark" | "system";
+// F1 item 1: two modes only. Light and Dark. Default Light when nothing is
+// stored; a stored "system" or any unknown value is treated as Light.
+export type Theme = "light" | "dark";
 
 const ThemeCtx = createContext<{ theme: Theme; setTheme: (t: Theme) => void } | null>(null);
-
-function getSystemTheme(): "light" | "dark" {
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function resolveTheme(t: Theme): "light" | "dark" {
-  if (t === "system") return getSystemTheme();
-  return t;
-}
 
 function readSaved(): Theme {
   try {
     const v = localStorage.getItem("theme");
-    if (v === "light" || v === "dark" || v === "system") return v;
+    if (v === "light" || v === "dark") return v;
   } catch { /* ignore */ }
-  return "system";
+  return "light";
 }
 
 function applyResolved(t: Theme) {
-  document.documentElement.setAttribute("data-theme", resolveTheme(t));
+  document.documentElement.setAttribute("data-theme", t);
   updateFavicon();
 }
 
@@ -57,9 +49,9 @@ function updateFavicon() {
 
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "system";
+    if (typeof window === "undefined") return "light";
     const saved = readSaved();
-    document.documentElement.setAttribute("data-theme", resolveTheme(saved));
+    document.documentElement.setAttribute("data-theme", saved);
     return saved;
   });
 
@@ -68,35 +60,19 @@ export function useTheme() {
     try { localStorage.setItem("theme", theme); } catch { /* ignore */ }
   }, [theme]);
 
-  useEffect(() => {
-    if (theme !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => applyResolved("system");
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, [theme]);
-
   const setTheme = useCallback((t: Theme) => setThemeState(t), []);
   return { theme, setTheme };
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "system";
+    if (typeof window === "undefined") return "light";
     return readSaved();
   });
 
   useEffect(() => {
     applyResolved(theme);
     try { localStorage.setItem("theme", theme); } catch { /* ignore */ }
-  }, [theme]);
-
-  useEffect(() => {
-    if (theme !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => applyResolved("system");
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
   }, [theme]);
 
   const setTheme = useCallback((t: Theme) => setThemeState(t), []);
