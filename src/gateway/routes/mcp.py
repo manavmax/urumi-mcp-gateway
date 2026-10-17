@@ -185,6 +185,7 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
             # that as "success" would hide tool-level failures (e.g. WOO_AUTH_FAILED,
             # schema rejections) from the audit trail, so classify it here.
             upstream_error_code = _upstream_error_code(result)
+            tool_validation = _is_tool_validation_error(result)
             await log_audit(
                 user_id=user.id,
                 api_key_id=api_key_id,
@@ -194,8 +195,12 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 tool_upstream_name=upstream,
                 request_id=request_id,
                 duration_ms=duration_ms,
-                outcome="success" if upstream_error_code is None else "upstream_error",
-                error_code=upstream_error_code,
+                outcome=(
+                    "validation_error"
+                    if tool_validation
+                    else ("success" if upstream_error_code is None else "upstream_error")
+                ),
+                error_code="validation_error" if tool_validation else upstream_error_code,
                 client_ip=client_ip,
             )
             # MCP spec: tools/call success is result.content + isError
@@ -298,6 +303,28 @@ def _upstream_error_code(result: dict | None) -> str | None:
     if match:
         return match.group(1)
     return "upstream_error"
+
+
+def _is_tool_validation_error(result: dict | None) -> bool:
+    """True when an upstream tool failed on ARGUMENT validation (F2 pass).
+
+    FastMCP maps tool-argument pydantic failures to isError results whose text
+    reads "Error executing tool X: 1 validation error for XArguments ...". The
+    caller (the model) caused that failure with bad arguments and receives a
+    clear isError tool result either way — but auditing it as upstream_error
+    blamed healthy upstreams for caller mistakes and inflated their error rate
+    (the notes server showed 3.6% 'upstream errors' this way). The pydantic
+    signature ("<n> validation error(s) for") is specific enough that ordinary
+    tool payloads cannot match it.
+    """
+
+    if not isinstance(result, dict) or not result.get("isError"):
+        return False
+    for block in result.get("content") or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            if re.search(r"\d+ validation errors? for", block.get("text") or ""):
+                return True
+    return False
 
 
 async def _filter_tools_by_rbac(db, user, tools: list[dict]) -> list[dict]:

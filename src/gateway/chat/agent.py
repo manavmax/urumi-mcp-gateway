@@ -519,6 +519,20 @@ async def chat_loop(
                 # We need to parse slug__tool already validated
                 result_data = await call_tool_routed(db, name, args)
                 dur = int((_time.monotonic() - t0) * 1000)
+                # An isError tool result is a tool-level failure, not a success
+                # (F2 pass): argument-validation failures audit as
+                # validation_error, other tool failures as upstream_error, so
+                # the chat path matches the /mcp audit semantics.
+                tool_error_code = None
+                if isinstance(result_data, dict) and result_data.get("isError"):
+                    from routes.mcp import _is_tool_validation_error, _upstream_error_code
+
+                    if _is_tool_validation_error(result_data):
+                        outcome = "validation_error"
+                        tool_error_code = "validation_error"
+                    else:
+                        outcome = "upstream_error"
+                        tool_error_code = _upstream_error_code(result_data)
                 # audit
                 try:
                     from gw_mcp.aggregator import split_exposed
@@ -549,7 +563,8 @@ async def chat_loop(
                     tool_upstream_name=name.split("__", 1)[-1] if "__" in name else name,
                     request_id=_rid,
                     duration_ms=dur,
-                    outcome="success",
+                    outcome=outcome,
+                    error_code=tool_error_code,
                 )
                 await db.commit()
                 result = result_data
@@ -557,6 +572,12 @@ async def chat_loop(
                 result = {"error": "permission denied"}
                 outcome = "permission_denied"
                 logger.info("chat tool %s denied: %s", name, exc)
+            except ValueError as exc:
+                # Bad caller input (bad arguments, unknown slug, disabled server,
+                # upstream protocol rejection) — a clear tool error the model can
+                # correct, never an "upstream error" (F2 pass).
+                result = {"error": str(exc)[:800]}
+                outcome = "validation_error"
             except TimeoutError:
                 result = {"error": "upstream timed out"}
                 outcome = "timeout"

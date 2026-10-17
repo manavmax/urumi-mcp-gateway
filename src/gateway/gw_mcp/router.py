@@ -12,13 +12,14 @@ from config import get_settings
 from db.models import Server
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.shared.exceptions import McpError
 from registry.crypto import decrypt
 from registry.validator import resolve_and_validate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gw_mcp.aggregator import split_exposed
 from gw_mcp.breaker import breaker
-from gw_mcp.categorize import classify
+from gw_mcp.categorize import CATEGORY_TIMEOUT, classify
 from gw_mcp.health_state import record_failure, record_success
 
 logger = logging.getLogger("gateway.router")
@@ -244,6 +245,16 @@ async def call_tool_routed(
     Raises on failure with appropriate HTTP-like exceptions (caller maps to JSON-RPC).
     """
     slug, upstream = split_exposed(exposed_name)
+    # Request-shape guard (F2 pass): the MCP SDK crashes with an opaque
+    # TaskGroup ExceptionGroup when arguments is not an object (e.g. the model
+    # sent "arguments": "hello"), and the crash surfaced to users as a 502
+    # "upstream error" while the audit blamed the upstream. This is a caller
+    # mistake, not an upstream failure: reject it here as a validation error
+    # before any network I/O, so the breaker and health never record it.
+    if arguments is None:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        raise ValueError(f"Invalid arguments for tool '{exposed_name}': expected a JSON object")
     # lookup server by slug
     from sqlalchemy import select
 
@@ -266,17 +277,30 @@ async def call_tool_routed(
         # keep status connected on success + record health timings
         record_success(server, latency_ms=int((time.monotonic() - started) * 1000))
         return result
-    except TimeoutError as exc:
-        breaker.record_failure(server.id)
-        record_failure(server, "timeout", latency_ms=int((time.monotonic() - started) * 1000))
-        raise TimeoutError(f"Upstream {slug} timed out") from exc
     except ValueError:
         raise
+    except McpError as exc:
+        # The upstream ANSWERED with a JSON-RPC protocol error (e.g. -32602
+        # invalid params): the transport is alive, so this is a request the
+        # upstream rejected, not an upstream outage. Surface it as a validation
+        # error (400 -32602) the model can act on, and never trip the breaker:
+        # a responsive upstream is the opposite of a dead one.
+        msg = getattr(exc.error, "message", None) or str(exc)
+        raise ValueError(f"upstream rejected the request: {msg[:200]}") from exc
     except Exception as exc:
+        category = classify(exc)
+        if category == CATEGORY_TIMEOUT:
+            # httpx read timeouts surface through the SDK's TaskGroup
+            # ExceptionGroups, so they never arrived here as TimeoutError and
+            # were mis-audited as upstream_error with a 502 (F2 pass). Re-raise
+            # as TimeoutError so the caller maps them to 504 / outcome=timeout.
+            breaker.record_failure(server.id)
+            record_failure(server, CATEGORY_TIMEOUT, latency_ms=int((time.monotonic() - started) * 1000))
+            raise TimeoutError(f"Upstream {slug} timed out") from exc
         # RuntimeError from the MCP/anyio transport counts as an upstream failure too:
         # without this, a proxy that fails with RuntimeError would hammer a dead
         # upstream forever without ever tripping the breaker (found by tests).
         breaker.record_failure(server.id)
-        record_failure(server, classify(exc), latency_ms=int((time.monotonic() - started) * 1000))
+        record_failure(server, category, latency_ms=int((time.monotonic() - started) * 1000))
         logger.warning("proxy_call failed for %s/%s category=%s", slug, upstream, classify(exc))
         raise RuntimeError(f"Upstream {slug} error: {exc}") from exc
