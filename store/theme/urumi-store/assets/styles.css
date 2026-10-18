@@ -10,6 +10,13 @@
 /* Base                                                                */
 /* ------------------------------------------------------------------ */
 
+html,
+body {
+	/* clip (not hidden) so the sticky pill nav keeps working: the closed Woo
+	   mini-cart drawer sits translated off-canvas and must never widen the page */
+	overflow-x: clip;
+}
+
 body {
 	background: var(--wp--preset--color--page);
 	color: var(--wp--preset--color--ink);
