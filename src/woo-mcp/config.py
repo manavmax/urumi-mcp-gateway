@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     woo_per_page_default: int = 10
     woo_per_page_max: int = 100
 
+    # Image upload caps (F3): 5 MB byte cap, 4096 px per-side cap; enforced by
+    # image_validate before any bytes reach WordPress.
+    image_max_bytes: int = 5 * 1024 * 1024
+
     # Service metadata (surfaced by /healthz and the MCP serverInfo)
     service_name: str = "woo-mcp"
     service_version: str = "1.0.0"

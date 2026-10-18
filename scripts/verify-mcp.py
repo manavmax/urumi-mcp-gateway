@@ -1,4 +1,4 @@
-"""Verify woo-mcp (runs inside its pod): MCP handshake, the 6 tools, error mapping.
+"""Verify woo-mcp (runs inside its pod): MCP handshake, the 8 tools, error mapping.
 
 Every assertion names the code it expects. In particular the negative cases assert the
 SPECIFIC Woo error code, not just `isError:true` — a stricter version of these checks is
@@ -124,12 +124,15 @@ with httpx.Client(timeout=30) as c:
         "list_orders",
         "get_order",
         "update_order_status",
+        "add_product_image",
+        "list_product_images",
     }
-    check("6 tools", set(tools) == expected, f"{sorted(tools)}")
+    check("8 tools", set(tools) == expected, f"{sorted(tools)}")
     check(
-        "readOnly annotations",
+        "write/read annotations",
         tools.get("list_products", {}).get("annotations", {}).get("readOnlyHint") is True
-        and tools.get("create_product", {}).get("annotations", {}).get("readOnlyHint") is False,
+        and tools.get("create_product", {}).get("annotations", {}).get("readOnlyHint") is False
+        and tools.get("add_product_image", {}).get("annotations", {}).get("readOnlyHint") is False,
     )
 
     # --- positive control: an authenticated read must actually return data -----------

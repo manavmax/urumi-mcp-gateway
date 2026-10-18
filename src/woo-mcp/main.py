@@ -43,7 +43,8 @@ mcp = FastMCP(
     settings.service_name,
     instructions=(
         "WooCommerce products and orders. Use woo tools to list/get/create "
-        "products, list/get orders and update an order's status."
+        "products, list/get orders, update an order's status, and list/add "
+        "product images."
     ),
     json_response=True,
     stateless_http=True,
