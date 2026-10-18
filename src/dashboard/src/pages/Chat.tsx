@@ -6,10 +6,16 @@
 
    FIX 1: Supports prefill state from OverviewMember "Try in chat" cards:
    navigate("/chat", { state: { prefill: text } }) pre-fills the composer without
-   sending, and clears the state so a refresh doesn't replay it. */
+   sending, and clears the state so a refresh doesn't replay it.
+
+   F3 image attachments: attach button + drag/drop on the composer, in-memory
+   preview thumbnail with a remove button, client-side type/size checks with
+   clear error text. Upload happens at send time (POST /api/chat/uploads) and
+   only the returned upload id is referenced in the message — history in
+   localStorage stores only an "[image]" placeholder, never the bytes. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, type ChatContentPart } from "../lib/api";
 import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName } from "../lib/search";
@@ -20,6 +26,11 @@ import { Icon } from "../components/icons";
 type Msg = { role: "user" | "assistant" | "tool"; content: string; tool?: string; outcome?: string; truncated?: boolean };
 
 const MAX_TOOL_OUTPUT = 2000;
+
+/* F3 image attachments: client-side pre-check mirrors the server rules
+   (magic bytes are re-checked server-side; these checks are instant UX). */
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
 const STARTERS = [
   { tile: "var(--sky)", icon: "cart" as const, title: "Orders today", text: "What orders came in today?" },
@@ -65,6 +76,11 @@ export default function Chat() {
   const [servingModel, setServingModel] = useState<string | null>(null);
   const [history, setHistory] = useState<ChatSession[]>([]);
   const [histFilter, setHistFilter] = useState("");
+  // F3: pending attachment held in memory only — the preview is a blob: object
+  // URL, never persisted; history stores only an "[image]" placeholder.
+  const [pendingImage, setPendingImage] = useState<{ file: File; url: string; name: string } | null>(null);
+  const [imgErr, setImgErr] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -72,6 +88,31 @@ export default function Chat() {
   useEffect(() => {
     setHistory(loadHistory(email));
   }, [email]);
+
+  useEffect(() => () => { if (pendingImage) URL.revokeObjectURL(pendingImage.url); }, [pendingImage]);
+
+  function attachImage(file: File | undefined | null) {
+    if (!file || busy) return;
+    if (!IMAGE_TYPES.includes(file.type)) {
+      setImgErr("Only PNG, JPEG or WEBP images are supported.");
+      return;
+    }
+    if (file.size > IMAGE_MAX_BYTES) {
+      setImgErr("Image is too large — the limit is 5 MB.");
+      return;
+    }
+    setImgErr("");
+    if (pendingImage) URL.revokeObjectURL(pendingImage.url);
+    setPendingImage({ file, url: URL.createObjectURL(file), name: file.name });
+  }
+
+  function clearPendingImage() {
+    setPendingImage((p) => {
+      if (p) URL.revokeObjectURL(p.url);
+      return null;
+    });
+    setImgErr("");
+  }
 
   /* FIX 1 prefill: OverviewMember "Try in chat" navigates here with
      { state: { prefill } } so the composer is primed without sending. Read once
@@ -101,19 +142,43 @@ export default function Chat() {
   function newChat() {
     setMessages([]);
     setErr("");
+    setImgErr("");
     setServingModel(null);
   }
 
   async function send(text: string) {
     const prompt = text.trim();
-    if (!prompt || busy) return;
+    if (busy) return;
+    if (!prompt && !pendingImage) return;
     setErr("");
-    const next: Msg[] = [...messages, { role: "user", content: prompt }];
+
+    // F3: upload first; only the server-issued upload id goes into the message.
+    let parts: ChatContentPart[] | null = null;
+    if (pendingImage) {
+      try {
+        const up = await api.uploadChatImage(pendingImage.file);
+        parts = [
+          ...(prompt ? [{ type: "text" as const, text: prompt }] : []),
+          { type: "image_upload", upload_id: up.upload_id },
+        ];
+      } catch (e: unknown) {
+        setImgErr(e instanceof Error ? e.message : String(e));
+        return;
+      } finally {
+        clearPendingImage();
+      }
+    }
+    // Thread display + localStorage keep a placeholder, never bytes.
+    const displayContent = parts ? (prompt ? `${prompt}\n[image]` : "[image]") : prompt;
+    const next: Msg[] = [...messages, { role: "user", content: displayContent }];
     setMessages(next);
     setInput("");
     setBusy(true);
     try {
-      const res = await api.chatCompletions(next.filter((m) => m.role !== "tool").map((m) => ({ role: m.role, content: m.content })));
+      const res = await api.chatCompletions([
+        ...next.slice(0, -1).filter((m) => m.role !== "tool").map((m) => ({ role: m.role, content: m.content })),
+        { role: "user", content: parts ?? prompt },
+      ]);
       if (!res.ok) {
         const body = await res.text();
         throw new Error(body.slice(0, 500) || res.statusText);
@@ -137,9 +202,9 @@ export default function Chat() {
           const { done, value } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
-          const parts = buf.split("\n\n");
-          buf = parts.pop() || "";
-          for (const part of parts) {
+          const parts2 = buf.split("\n\n");
+          buf = parts2.pop() || "";
+          for (const part of parts2) {
             const line = part.trim();
             if (!line.startsWith("data:")) continue;
             const payload = line.slice(5).trim();
@@ -169,7 +234,7 @@ export default function Chat() {
         }
         if (assistant) {
           setHistory(saveSession(email, [
-            { role: "user", content: prompt },
+            { role: "user", content: displayContent },
             { role: "assistant", content: assistant },
           ]));
         }
@@ -182,7 +247,7 @@ export default function Chat() {
         });
         setMessages((prev) => [...prev, ...toolCalls, { role: "assistant", content: String(content) }]);
         setHistory(saveSession(email, [
-          { role: "user", content: prompt },
+          { role: "user", content: displayContent },
           { role: "assistant", content: String(content) },
         ]));
       }
@@ -212,6 +277,7 @@ export default function Chat() {
       </header>
 
       {err && <div className="alert alert-error" role="alert">{err}</div>}
+      {imgErr && <div className="alert alert-error" role="alert">{imgErr}</div>}
 
       <div className="chat-layout">
         <section className="thread">
@@ -269,10 +335,33 @@ export default function Chat() {
             </div>
           )}
 
-          <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
+          {imgErr && !err && <div className="alert alert-error" role="alert">{imgErr}</div>}
+
+          {/* F3: in-memory preview thumbnail — remove button clears it; nothing is persisted */}
+          {pendingImage && (
+            <div className="chip chip-neutral" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 10px", alignSelf: "flex-start" }}>
+              <img src={pendingImage.url} alt="" width={28} height={28} style={{ borderRadius: 6, objectFit: "cover" }} />
+              <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pendingImage.name}</span>
+              <button type="button" className="chip chip-neutral" aria-label="Remove attached image" style={{ border: "none", cursor: "pointer", padding: 4 }}
+                onClick={clearPendingImage} disabled={busy}>
+                <Icon name="x" sm />
+              </button>
+            </div>
+          )}
+
+          <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); attachImage(e.dataTransfer?.files?.[0]); }}>
+            <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }}
+              onChange={(e) => { attachImage(e.target.files?.[0]); e.currentTarget.value = ""; }} />
+            <button className="send" type="button" aria-label="Attach image" title="Attach an image (PNG, JPEG or WEBP, up to 5 MB)"
+              style={{ background: "var(--surface)" }} disabled={busy}
+              onClick={() => fileInputRef.current?.click()}>
+              <Icon name="image" />
+            </button>
             <input placeholder="Ask the store assistant" aria-label="Chat message" value={input}
               onChange={(e) => setInput(e.target.value)} disabled={busy} />
-            <button className="send" type="submit" aria-label="Send" disabled={busy}><Icon name="send" /></button>
+            <button className="send" type="submit" aria-label="Send" disabled={busy || (!input.trim() && !pendingImage)}><Icon name="send" /></button>
           </form>
         </section>
 
