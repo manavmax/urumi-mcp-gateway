@@ -26,18 +26,31 @@ function urumi_store_data_dir() {
 /**
  * Read the catalog JSON (products.json). Returns the decoded array or empty.
  */
+function urumi_store_catalog() {
+	static $catalog = null;
+	if ( null !== $catalog ) {
+		return $catalog;
+	}
+	$path = urumi_store_data_dir() . '/products.json';
+	if ( ! file_exists( $path ) ) {
+		$catalog = array();
+		return $catalog;
+	}
+	$json = wp_json_file_decode( $path, array( 'associative' => true ) );
+	$catalog = ( is_array( $json ) ) ? $json : array();
+	return $catalog;
+}
+
+/**
+ * Read the catalog products. Returns the decoded product array or empty.
+ */
 function urumi_store_products() {
 	static $products = null;
 	if ( null !== $products ) {
 		return $products;
 	}
-	$path = urumi_store_data_dir() . '/products.json';
-	if ( ! file_exists( $path ) ) {
-		$products = array();
-		return $products;
-	}
-	$json = wp_json_file_decode( $path, array( 'associative' => true ) );
-	$products = ( is_array( $json ) && isset( $json['products'] ) && is_array( $json['products'] ) ) ? $json['products'] : array();
+	$catalog = urumi_store_catalog();
+	$products = ( isset( $catalog['products'] ) && is_array( $catalog['products'] ) ) ? $catalog['products'] : array();
 	return $products;
 }
 
@@ -249,7 +262,7 @@ register_block_type( 'urumi-store/hero', array(
  * label and product count (from products.json). Links to each category archive.
  */
 function urumi_store_categories_render() {
-	$json = urumi_store_products();
+	$json = urumi_store_catalog();
 	$cats = array();
 	foreach ( $json['categories'] ?? array() as $c ) {
 		$cats[ $c['slug'] ] = array(
@@ -357,13 +370,21 @@ function urumi_store_tile( $product ) {
  * New in: the 8 most recent new (featured) products in the grid.
  */
 function urumi_store_new_in_render() {
+	// "New" products carry the WooCommerce featured flag (the seeder mirrors the
+	// products.json "new" flag to it), which lives in the product_visibility
+	// taxonomy - NOT in a _featured meta key (that legacy meta is no longer set).
 	$args = array(
 		'post_type'      => 'product',
 		'post_status'    => 'publish',
 		'posts_per_page' => 8,
 		'no_found_rows'  => true,
-		'meta_key'       => '_featured',
-		'meta_value'     => 'yes',
+		'tax_query'      => array(
+			array(
+				'taxonomy' => 'product_visibility',
+				'field'    => 'name',
+				'terms'    => 'featured',
+			),
+		),
 		'orderby'        => 'date',
 		'order'          => 'DESC',
 	);
