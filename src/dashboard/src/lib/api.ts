@@ -14,7 +14,10 @@ async function request<T>(path: string, opts: ApiOpts = {}): Promise<T> {
   const headers: Record<string, string> = {
     ...(opts.headers as Record<string, string> | undefined),
   };
-  if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  // FormData must keep the browser-generated multipart boundary header.
+  if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
   if (opts.csrf !== false && csrfToken && opts.method && opts.method !== "GET") {
     headers["X-CSRF-Token"] = csrfToken;
   }
@@ -290,11 +293,31 @@ export const api = {
   // Chat SSE: caller handles the fetch stream. tz = the browser's IANA
   // timezone (FIX PASS F1-8): the server validates it and puts the user's
   // local date/time into the system prompt so "today" means the user's today.
-  chatCompletions: (messages: { role: string; content: string }[], tz?: string) =>
+  // F3: a message's content may be a part list when the turn carries an upload
+  // reference — the gateway resolves + expands it server-side; the browser never
+  // persists image bytes (history stores only an "[image]" placeholder).
+  chatCompletions: (messages: { role: string; content: string | ChatContentPart[] }[], tz?: string) =>
     fetch("/api/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
       credentials: "include",
       body: JSON.stringify(tz ? { messages, tz } : { messages }),
     }),
+
+  // F3: multipart upload (csrf-protected, rate limited 10/min server-side).
+  // Returns the server's owner-bound upload id, valid for 15 minutes.
+  uploadChatImage: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<ChatUploadResult>("/api/chat/uploads", {
+      method: "POST",
+      body: fd,
+      csrf: true,
+    });
+  },
 };
+
+export type ChatUploadResult = { upload_id: string; mime: string; size: number; expires_at: string };
+export type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_upload"; upload_id: string };

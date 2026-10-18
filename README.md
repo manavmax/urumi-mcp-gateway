@@ -1,6 +1,6 @@
 # Urumi AI — MCP Gateway on Kubernetes (Brain Docs)
 
-> **Status:** Days 0-7 complete and verified live on Kind — store + MariaDB + Ingress + setup Job + Woo MCP server (Layer 2: 6 tools) **and Layer 3** (gateway + dashboard + 3-server `/mcp` aggregation, `verify-gateway` 23/23 PASS + `make test` 29 unit tests). Days 8-9 (chat exit demo) are code-complete but un-demonstrated: the LLM key is empty by design until an operator supplies one (ADR-022). Take-home due **26 Oct 2026, 11:59 PM IST**.
+> **Status:** Days 0-7 complete and verified live on Kind — store + MariaDB + Ingress + setup Job + Woo MCP server (Layer 2: 8 tools) **and Layer 3** (gateway + dashboard + 3-server `/mcp` aggregation, `verify-gateway` 23/23 PASS + `make test` 29 unit tests). Days 8-9 (chat exit demo) are code-complete but un-demonstrated: the LLM key is empty by design until an operator supplies one (ADR-022). Take-home due **26 Oct 2026, 11:59 PM IST**.
 
 ## What This Is
 
@@ -77,6 +77,8 @@ The chat assistant's LLM endpoint is values, not code — `gateway.llm` in `helm
 | `gateway.llm.existingSecret` | `""` | optional prod override: name of a pre-created Secret holding key `OPENAI_API_KEY`; when set the chart renders no `gateway-llm` Secret |
 
 No API key is committed anywhere. The chart renders a `gateway-llm` Secret whose `OPENAI_API_KEY` is **empty until an operator supplies a real one** — deliberately not `randAlphaNum`, because a generated string is a guaranteed-invalid key and the honest failure is "chat is not configured" (ADR-022).
+
+**Data that leaves the cluster (updated by F3):** chat text goes to the configured LLM provider, and attached chat images now go to the SAME provider (they are expanded into vision parts of the LLM call server-side — the model never sees base64 text). Uploads are validated (magic bytes only: png/jpeg/webp, 5 MB cap, 4096 px per side, Pillow re-encode strips EXIF/GPS), stored in `chat_uploads` for 15 minutes, and never sent to Woo as raw bytes — woo-mcp forwards them to WordPress in-cluster. See THREAT_MODEL.md "Chat Image Uploads".
 
 Apply a key. The recommended way asks for it with echo off, so it stays out of the shell history, any process list and any file:
 
@@ -180,7 +182,7 @@ terminal (never written to a file or log). A dry run only ever issues `kubectl g
 `config` / `exec`; that invariant is pinned by `src/gateway/tests/test_demo_reset_safety.py`.
 
 After a confirmed run the script prints a deleted/kept summary and verifies the demo
-contract live: 3 upstreams `Connected` and `tools/list` returning 11 tools (woo 6, time 2,
+contract live: 3 upstreams `Connected` and `tools/list` returning 13 tools (woo 8, time 2,
 notes 3).
 
 ## Submission (when ready)

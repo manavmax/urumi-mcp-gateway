@@ -104,3 +104,75 @@ async def test_chat_rejects_empty_messages(harness, monkeypatch):
     async with _client(app) as (client, headers):
         r = await client.post("/api/chat/completions", headers=headers, json={"messages": []})
         assert r.status_code == 400, r.text
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_upload_parts_in_assistant_message(harness):
+    """F3 upload references are valid ONLY inside a USER message (never assistant)."""
+    app = harness
+    async with _client(app) as (client, headers):
+        r = await client.post(
+            "/api/chat/completions",
+            headers=headers,
+            json={"messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": [
+                    {"type": "text", "text": "claiming an image"},
+                    {"type": "image_upload", "upload_id": "00000000-0000-0000-0000-000000000000"},
+                ]},
+            ]},
+        )
+        assert r.status_code == 400, r.text
+        assert "only user messages may carry image parts" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_client_supplied_image_url(harness):
+    """A client cannot smuggle raw image bytes: only text + upload refs exist."""
+    app = harness
+    async with _client(app) as (client, headers):
+        r = await client.post(
+            "/api/chat/completions",
+            headers=headers,
+            json={"messages": [
+                {"role": "user", "content": [
+                    {"type": "text", "text": "look"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}},
+                ]},
+            ]},
+        )
+        assert r.status_code == 400, r.text
+        assert "unsupported message part" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_oversize_text(harness):
+    """Server-side text cap: one message may not exceed MAX_TEXT_CHARS."""
+    import routes.chat as chat_route
+
+    app = harness
+    async with _client(app) as (client, headers):
+        r = await client.post(
+            "/api/chat/completions",
+            headers=headers,
+            json={"messages": [{"role": "user", "content": "x" * (chat_route.MAX_TEXT_CHARS + 1)}]},
+        )
+        assert r.status_code == 400, r.text
+        assert "exceeds" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_too_many_parts(harness):
+    """Server-side part-count cap: a part list may not exceed MAX_PARTS_PER_MESSAGE."""
+    import routes.chat as chat_route
+
+    app = harness
+    async with _client(app) as (client, headers):
+        parts = [{"type": "text", "text": f"p{i}"} for i in range(chat_route.MAX_PARTS_PER_MESSAGE + 1)]
+        r = await client.post(
+            "/api/chat/completions",
+            headers=headers,
+            json={"messages": [{"role": "user", "content": parts}]},
+        )
+        assert r.status_code == 400, r.text
+        assert "too many message parts" in r.json()["detail"]

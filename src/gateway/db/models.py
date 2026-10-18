@@ -1,7 +1,7 @@
 """SQLAlchemy async models — docs/04 §3.
 
-Tables: users, api_keys, servers, tools, audit_logs, tool_permissions, admin_events
-All PKs are UUIDs except audit_logs and admin_events (BIGSERIAL).
+Tables: users, api_keys, servers, tools, audit_logs, tool_permissions, admin_events,
+chat_uploads. All PKs are UUIDs except audit_logs and admin_events (BIGSERIAL).
 """
 
 from __future__ import annotations
@@ -224,4 +224,32 @@ class AdminEvent(Base):
         Index("ix_admin_events_ts", "ts"),
         Index("ix_admin_events_action_ts", "action", "ts"),
         Index("ix_admin_events_actor_ts", "actor_user_id", "ts"),
+    )
+
+
+class ChatUpload(Base):
+    """Ephemeral chat image upload (F3, ADR-035).
+
+    Bytes live for at most `chat_upload_ttl_seconds` (15 minutes), are bound to
+    the uploading user (every read is owner-checked; a user can only use their
+    own upload ids), and the row is deleted after a successful attach. Expired
+    rows are purged by a background loop and on every new upload. The model never
+    receives these bytes as text: the gateway expands the row into a vision part
+    of the LLM call only, and audit rows never carry image bytes.
+    """
+
+    __tablename__ = "chat_uploads"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    mime: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_chat_uploads_expires_at", "expires_at"),
+        Index("ix_chat_uploads_user_id", "user_id"),
     )

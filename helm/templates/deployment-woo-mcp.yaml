@@ -48,6 +48,9 @@ spec:
               valueFrom: { secretKeyRef: { name: woo-secrets, key: WOO_CONSUMER_KEY } }
             - name: WOO_CONSUMER_SECRET
               valueFrom: { secretKeyRef: { name: woo-secrets, key: WOO_CONSUMER_SECRET } }
+            # F3: image upload byte cap (default 5 MB) for the add_product_image tool.
+            - name: IMAGE_MAX_BYTES
+              value: {{ .Values.wooMcp.imageMaxBytes | default 5242880 | quote }}
           resources:
             {{- toYaml .Values.wooMcp.resources | nindent 12 }}
           livenessProbe:

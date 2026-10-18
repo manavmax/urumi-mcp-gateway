@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     # rate limit
     rate_limit_per_minute: int = 60
 
+    # F3 chat image uploads: 5 MB byte cap (env-tunable), 15 minute upload TTL.
+    image_upload_max_bytes: int = 5 * 1024 * 1024
+    chat_upload_ttl_seconds: int = 15 * 60
+
     # CORS (dashboard dev)
     cors_allow_origins: str = ""
 
@@ -142,6 +146,7 @@ def get_settings() -> Settings:
         "HEALTH_TIMEOUT_SECONDS": "health_timeout_seconds",
         "SESSION_SECRET": "session_secret",
         "GATEWAY_ADMIN_PASSWORD": "admin_password",
+        "IMAGE_UPLOAD_MAX_BYTES": "image_upload_max_bytes",
     }
     for env_key, field in mapping.items():
         if env_key in os.environ and field not in os.environ:

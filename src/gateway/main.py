@@ -128,6 +128,7 @@ async def lifespan(app: FastAPI):
     # background tasks
     audit_task = None
     health_task = None
+    upload_purge_task = None
     try:
         from audit.queue import audit_worker
         from gw_mcp.health import health_loop
@@ -136,13 +137,33 @@ async def lifespan(app: FastAPI):
         health_task = asyncio.create_task(health_loop())
         app.state.audit_task = audit_task
         app.state.health_task = health_task
+        # F3: chat uploads live 15 minutes — sweep expired rows every minute.
+        from datetime import UTC, datetime
+
+        async def upload_purge_loop():
+            from db.models import ChatUpload
+            from db.session import get_session_factory
+            from sqlalchemy import delete
+
+            while True:
+                await asyncio.sleep(60)
+                try:
+                    factory = get_session_factory()
+                    async with factory() as db:
+                        await db.execute(delete(ChatUpload).where(ChatUpload.expires_at <= datetime.now(UTC)))
+                        await db.commit()
+                except Exception as exc:
+                    logger.warning("chat upload purge failed: %s", exc)
+
+        upload_purge_task = asyncio.create_task(upload_purge_loop())
+        app.state.upload_purge_task = upload_purge_task
     except Exception as exc:
         logger.warning("failed to start background tasks: %s", exc)
 
     yield
 
     # shutdown
-    for t in [audit_task, health_task]:
+    for t in [audit_task, health_task, upload_purge_task]:
         if t:
             t.cancel()
             # awaiting a cancelled task re-raises CancelledError, which is expected
@@ -185,6 +206,7 @@ def create_app() -> FastAPI:
     from routes.alerts import router as alerts_router
     from routes.audit import router as audit_router
     from routes.chat import router as chat_router
+    from routes.chat_uploads import router as chat_uploads_router
     from routes.health import router as health_router
     from routes.mcp import router as mcp_router
     from routes.notifications import router as notifications_router
@@ -206,6 +228,7 @@ def create_app() -> FastAPI:
     app.include_router(tools_router)
     app.include_router(stats_router)
     app.include_router(chat_router)
+    app.include_router(chat_uploads_router)
 
     @app.get("/")
     async def root():

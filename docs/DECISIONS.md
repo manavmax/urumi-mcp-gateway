@@ -340,7 +340,7 @@ pick Dark; honouring the OS preference is intentionally dropped for determinism.
 
 
 
-## 2026-10-18: FIX PASS F1 - chat threads, notification bell, safe markdown (ADR-035)
+## 2026-10-18: FIX PASS F1 - chat threads, notification bell, safe markdown (ADR-036)
 
 **Chat threads (item 4).** One thread per conversation, not one history entry per
 message: the dashboard keeps an ACTIVE thread id; sending continues it, "New chat"
@@ -376,3 +376,64 @@ user's today.
 #89**) in replies, a dead bell and wrong "today" in chat answers. Threads stay
 client-side per the STAGE 1 localStorage decision; the server-side role restriction
 keeps the prompt-injection boundary (only the gateway produces system/tool roles).
+
+## 2026-10-18: F3 image upload reuses the Woo consumer key via a mu-plugin sideload route (ADR-035)
+
+**What changed.** Product images reach WooCommerce through a mu-plugin REST route,
+`POST /wp-json/urumi/v1/media`, that accepts `{filename, image_base64}` and calls
+`media_handle_sideload`. It is installed by the wp-setup Job next to the existing
+internal-REST mu-plugin. Authentication is the EXISTING WooCommerce consumer
+key/secret pair (`woo-secrets`): WooCommerce's REST auth only processes its `wc/*`
+namespaces (verified live — a request with valid Basic ck/cs to a custom namespace
+arrives with no authenticated user), so the route validates the Basic pair itself
+with the exact scheme WooCommerce stores keys under (`wc_api_hash(ck)` lookup,
+`hash_equals` on the secret), rejects read-only keys for POST, binds the request to
+the key's WP user with `wp_set_current_user()`, and then enforces an `upload_files`
+capability check. No delete endpoint exists on the route (no delete tools, ever).
+
+**Spike results (live, 2026-10-18).**
+- (a) `POST /wp-json/wp/v2/media` with an Application Password: WORKS over plain
+  HTTP on this cluster (201) — but only as a side effect of the internal-rest
+  mu-plugin marking every `/wp-json/` request as HTTPS. Rejected: it introduces a
+  SECOND store credential (creation, storage, rotation, and a different trust
+  story than woo-secrets), while product attachment still needs the Woo key.
+- (b) mu-plugin sideload route: verified live with the existing `woo-secrets`
+  key — base64 PNG in, attachment id + URL out; SVG rejected 415 by magic-byte
+  check; attach via `wc/v3 products/{id} images[{id}]`; URL serves 200
+  `image/png`. Uses one existing credential, zero network changes.
+- (c) `images[].src` with a short-lived gateway URL: rejected — WordPress would
+  have to fetch the URL from the gateway and the deny-by-default NetworkPolicy
+  gives WordPress egress only to MariaDB (helm networkpolicy.yaml), so it needs a
+  NetworkPolicy opening (and a public-from-cluster path).
+
+**Why.** One existing credential, one network path that already exists
+(woo-mcp -> wordpress:80), and the smallest new attack surface: a single
+capability-checked route that accepts bytes and stores a file. The server
+generates the stored filename (the caller's is never used), accepts only
+PNG/JPEG/WEBP by real magic bytes (`getimagesize` on the bytes), caps size at
+5 MB, and delegates the rest to WordPress' own media handling (allowed-mime and
+`wp_check_filetype_and_ext` re-checks; SVG cannot pass either layer). The heavy
+validation (magic bytes, 5 MB cap, 4096 px cap, Pillow re-encode to strip
+EXIF/GPS and polyglot payloads) happens in the callers (woo-mcp tool and gateway
+upload endpoint) before any bytes are sent.
+
+**Postscript (re-deploy finding, 2026-10-18).** The first live deploy of the
+mu-plugin exposed a WordPress interaction the spike had not hit: because the
+internal-rest mu-plugin marks `/wp-json/` as HTTPS, WordPress considers
+application passwords AVAILABLE on REST requests, so its own
+`determine_current_user` gate (priority 20) tries to authenticate a Basic
+`ck_...` header as a WP username and rejects the whole request with 401
+`invalid_username` BEFORE any permission callback runs — but only on the
+non-`wc/*` namespaces WooCommerce's own REST auth ignores. The route now
+authenticates the Basic pair itself on `determine_current_user` at priority 10,
+ONLY for `/wp-json/urumi/*` paths (a valid ck/cs sets the current user, so
+WordPress' application-password check is skipped; a read-only key never sets a
+user). The permission callback then enforces the `upload_files` capability on
+top. Same credential, same scheme, deterministic order — verified live
+(HTTP 200, attachment created, audit row success with no bytes).
+
+**Known trade-offs.** The mu-plugin accepts base64 JSON, which inflates payload
+size ~4/3x versus multipart (acceptable at a 5 MB cap over a ClusterIP path). It
+trusts WordPress' mime whitelist as the final gate, so a future WP change that
+allows SVG by default would silently widen the route; the gateway/woo-mcp side
+independently rejects SVG. The key lookup adds one indexed DB query per upload.
