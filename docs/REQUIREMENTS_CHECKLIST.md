@@ -20,7 +20,7 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 
 | US | Status | Command / test | Result observed this session |
 |---|---|---|---|
-| See servers + status + tools | DONE | `node scripts/parity.mjs` (servers admin) + `kubectl exec gateway -- python3 -c "$(cat scripts/verify-gateway.py)"` | parity servers admin 21/21 match; gateway tools/list returns 11 tools (woo 6 / time 2 / notes 3); status chips Connected/Unreachable/Disabled render from live data |
+| See servers + status + tools | DONE | `node scripts/parity.mjs` (servers admin) + `kubectl exec gateway -- python3 -c "$(cat scripts/verify-gateway.py)"` | parity servers admin 21/21 match; gateway tools/list returns 13 tools (woo 8 / time 2 / notes 3; F3 added add_product_image + list_product_images); status chips Connected/Unreachable/Disabled render from live data |
 | Woo MCP pre-registered | DONE | `curl -s dashboard.127.0.0.1.nip.io` + gateway tools/list | woo__* tools present with no manual registration; woo-mcp pod Running, Ingress only store+dashboard |
 | Add/edit/disable/remove server | DONE | `/api/servers` CRUD probe (req-on-behalf probe, steps 6–8) | disable `time` -> tools/list drops `time__*`; re-enable -> tools return; admin CRUD 200, member CRUD 403 (verify-gateway) |
 | Invite members + issue/revoke keys | DONE | `/api/users` POST + `/api/keys` POST/DELETE probe (req-on-behalf) | admin creates member (201), issues key on behalf of member (201, plaintext shown once, owned by member), revokes it (200) |
@@ -57,7 +57,7 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 
 | # | DoD step | Status | Command / test | Result observed this session |
 |---|---|---|---|---|
-| 5 | Inspector/Claude Code with User B key -> tools/list returns all enabled servers' tools | DONE | `/mcp tools/list` with member key (req-on-behalf probe) | 11 tools (woo 6 / time 2 / notes 3) returned to a member key |
+| 5 | Inspector/Claude Code with User B key -> tools/list returns all enabled servers' tools | DONE | `/mcp tools/list` with member key (req-on-behalf probe) | 13 tools (woo 8 / time 2 / notes 3; F3) returned to a member key |
 | 6 | Ask same orders question -> succeeds | DONE | `/mcp tools/call woo__list_orders` with member key | 200 + result (orders incl. #87) |
 | 7 | One prompt needing 2 servers (cross-server aggregation) | DONE | `POST /api/chat/completions` "What time is it + list products" | SSE `tool_call` events for BOTH `time__get_current_time` and `woo__list_products` in one prompt; answer used both |
 
@@ -101,11 +101,11 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 | Req | Status | Command / test | Result observed this session |
 |---|---|---|---|
 | Add/edit/disable/remove upstreams (Streamable HTTP + static cred) | DONE | verify-gateway.py + req-on-behalf probe | admin CRUD 200; disable removes tools; credential masked |
-| One MCP endpoint aggregating tools, routing calls | DONE | verify-gateway.py | `POST/GET /mcp`; 11 tools from 3 servers; `slug__tool` prefix routing |
+| One MCP endpoint aggregating tools, routing calls | DONE | verify-gateway.py | `POST/GET /mcp`; 13 tools from 3 servers (F3: +2 image tools); `slug__tool` prefix routing |
 | Same tool name on 2 servers -> handle + document | DONE | verify-gateway.py (prefix checks) | every tool prefixed `slug__`; no unprefixed tools; unknown slug -> `-32602` validation_error |
 | Slow/dead upstream must not break others | DONE | killpod probe | with woo down, `time__` call 200 and tools/list still returned 11; per-server timeout + gather(return_exceptions) |
 | Upstream creds stay server-side | DONE | `GET /api/servers` + `servers.py:46` | `credential: null` in API response; Fernet-encrypted at rest |
-| At least 3 upstreams | DONE | verify-gateway.py | woo-mcp (6) + demo-time (2) + demo-notes (3) = 11 tools |
+| At least 3 upstreams | DONE | verify-gateway.py | woo-mcp (8) + demo-time (2) + demo-notes (3) = 13 tools (F3: woo 6 → 8) |
 
 ### 6.4 Team & Access
 
@@ -137,7 +137,7 @@ Legend: **DONE** = verified live now · **PARTIAL** = works but with a documente
 | Many-tools handling (`search_tools` meta-tool) | NOT DONE | — | no `search_tools`/`execute_tool` in `src/gateway` |
 | Hosted MCP servers (image -> deploy) | NOT DONE | — | blueprint only |
 | **Security hardening (SSRF + RBAC + NP)** | PARTIAL | verify-gateway.py SSRF probes + pod network tests + `kubectl get deploy,sts -o json` + `kubectl get role,rolebinding -n urumi` | SSRF validator and default-deny NetworkPolicy verified live (127.0.0.1 -> 400, dashboard pod cannot reach any upstream). **Open items (not verified):** non-root containers (only some containers set `runAsNonRoot`; no pod-level `securityContext`; wordpress + mariadb run as root — the documented local-VM delta); ServiceAccount token mounting (`automountServiceAccountToken` is `None` on every workload — the default SA token is mounted); least-privilege RBAC (only a `urumi-wp-setup` Role exists; every workload uses the default SA with no least-privilege bindings). List these as open. |
-| **Scaling (multi-replica, stateless)** | PARTIAL | `kubectl scale deploy/urumi-gateway --replicas=2` then tools/list x6 | 6/6 tools/list OK (11 tools) across 2 replicas with no session affinity — stateless aggregation works; scaled back to 1. **Gap:** the rate limiter is per-key but in-memory (`_rate_buckets`), so it is NOT shared across replicas and there is no user-level limit (no Redis); a per-user or per-key *distributed* limit is not implemented. |
+| **Scaling (multi-replica, stateless)** | PARTIAL | `kubectl scale deploy/urumi-gateway --replicas=2` then tools/list x6 | 6/6 tools/list OK (13 tools) across 2 replicas with no session affinity — stateless aggregation works; scaled back to 1. **Gap:** the rate limiter is per-key but in-memory (`_rate_buckets`), so it is NOT shared across replicas and there is no user-level limit (no Redis); a per-user or per-key *distributed* limit is not implemented. |
 | Observability (metrics) | PARTIAL | `grep metrics src/gateway` | no `/metrics` endpoint (documented as optional in docs/00 §7). **Upstream observability (stand-out item 8, docs/11) DONE + verified live:** health columns via Alembic 004 (`last_checked_at/last_ok_at/last_latency_ms/last_error_category`, categories only - never raw exceptions/URLs/headers/tokens), admin row second line + Check now (require_admin, CSRF, 1/5s rate limit), members see status only (secret-string tests), `by_server` stats admin-only with 7/14-point sparklines (member absence tested), banner (`/api/alerts`) admin + calm member notice with per-session dismissal (Playwright 9/9), 5s health loop + 2s timeout as Helm values with passive detection. Live proof: plain `kubectl delete pod` on woo-mcp three times - row flipped Unreachable (connection_refused/timeout) with the banner within one 5s check interval, time/notes calls ok throughout, recovery to Connected ~6-10s after the new pod Ready (window ≈ 12s); observed timings in docs/11 §4, artifacts in `artifacts/observability/`. |
 | Upgrades/rollback | PARTIAL | `make deploy` (rollout restart) | image rebuild + `kubectl rollout restart` verified; `helm upgrade --atomic`/`rollback` documented but not re-run this session |
 

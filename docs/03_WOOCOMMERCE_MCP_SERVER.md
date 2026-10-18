@@ -2,7 +2,7 @@
 
 ## 1. Responsibility
 
-Single purpose: be the **only component that talks to WooCommerce**. Every product/order mutation flows through its 5 tools. It is **ClusterIP-only**; gateway is its sole caller.
+Single purpose: be the **only component that talks to WooCommerce**. Every product/order mutation flows through its tools (8 after F3: products, orders, images). It is **ClusterIP-only**; gateway is its sole caller.
 
 ```
 Browser/Gateway --X--> Woo MCP --X--> Woo REST API --X--> WordPress/MariaDB
@@ -11,7 +11,7 @@ Browser/Gateway --X--> Woo MCP --X--> Woo REST API --X--> WordPress/MariaDB
 
 ---
 
-## 2. Tool Contract (5 required + 1 bonus)
+## 2. Tool Contract (8 tools after F3)
 
 | Tool | Input Schema | Output | Woo REST Call |
 |---|---|---|---|
@@ -21,8 +21,12 @@ Browser/Gateway --X--> Woo MCP --X--> Woo REST API --X--> WordPress/MariaDB
 | `list_orders` | `{after?: ISO8601, before?: ISO8601, status?: string, per_page?: int, page?: int}` | array of orders with `id, status, total, line_items, date_created` | `GET /wp-json/wc/v3/orders?after&before&status&per_page` |
 | `get_order` | `{id: int}` | single order | `GET /wp-json/wc/v3/orders/{id}` |
 | `update_order_status` | `{id: int, status: enum[pending,processing,on-hold,completed,cancelled,refunded,failed]}` | updated order | `PUT /wp-json/wc/v3/orders/{id} {status}` |
+| `list_product_images` *(F3)* | `{id: int}` | `{product_id, images:[{id,src,alt}], count}` | `GET /wp-json/wc/v3/products/{id}` (images) |
+| `add_product_image` *(F3, write)* | `{product_id: int, filename?: string (advisory), image_base64: string}` | `{attached:true, image_id, url, mime}` | `POST /wp-json/urumi/v1/media` (mu-plugin sideload, ADR-035) + `PUT /wp-json/wc/v3/products/{id} {images:[{id}]}` |
 
-**Annotations:** `list_*` + `get_*` => `readOnlyHint: true`; `create/update` => `readOnlyHint: false`.
+**Annotations:** `list_*` + `get_*` => `readOnlyHint: true`; `create/update/add` => `readOnlyHint: false`. There are deliberately NO delete tools.
+
+**F3 image validation (shared helper, mirrored in the gateway):** only PNG/JPEG/WEBP by magic bytes (claimed type/extension never trusted; no SVG, no GIF), 5 MB cap (`IMAGE_MAX_BYTES`), 4096 px per side, decompression-bomb guard, Pillow re-encode strips EXIF/GPS and polyglot payloads; the stored filename is always server-generated.
 
 ---
 
@@ -38,6 +42,8 @@ Browser/Gateway --X--> Woo MCP --X--> Woo REST API --X--> WordPress/MariaDB
 **Auth:** `Authorization: Basic base64(ck:cs)` from env `WOO_URL`, `WOO_CONSUMER_KEY`, `WOO_CONSUMER_SECRET` (K8s Secret `woo-secrets`).
 
 **Note (verified while implementing):** WooCommerce only performs Basic auth when `is_ssl()` is true — see the `urumi-internal-rest` MU plugin installed by the Day 1-2 setup Job, which marks `/wp-json/` requests as SSL for in-cluster callers. Without it every `wc/v3` call answers `401 woocommerce_rest_cannot_view` and the tools would all report `WOO_AUTH_FAILED`.
+
+**Note (F3 image route):** WooCommerce's REST auth only processes its `wc/*` namespaces, so the image route authenticates the same `woo-secrets` Basic pair itself on `determine_current_user` (priority 10, before WordPress' application-password gate) for `/wp-json/urumi/*` paths only — see `docs/DECISIONS.md` ADR-035 postscript.
 
 **Example (Python `httpx`):**
 ```python
@@ -68,7 +74,7 @@ src/woo-mcp/
   Dockerfile           # python:3.12-slim, pip install mcp httpx
   main.py              # create_streamable_http_app(mcp)
   woo_client.py        # WooRestClient class
-  tools.py             # 6 tool handlers + pydantic validators
+  tools.py             # 8 tool handlers + pydantic validators + F3 image validation
   config.py            # settings from env
   health.py            # /healthz, /readyz
 ```

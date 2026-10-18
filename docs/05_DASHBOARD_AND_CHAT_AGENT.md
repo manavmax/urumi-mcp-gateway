@@ -71,6 +71,14 @@ Browser (Chat.tsx) --POST /api/chat/completions (SSE)--> Gateway Chat Handler
 - LLM key stays server-side.
 - Tool output can be truncated/sanitized before LLM sees it.
 
+**F3 image uploads (ADR-035):** a chat message may reference an uploaded image
+(`POST /api/chat/uploads` stores the re-encoded bytes in `chat_uploads` for 15
+minutes, owner-bound). The gateway expands the reference into a vision part of
+the LLM call server-side — the model NEVER receives base64 text, and the bytes
+exist only inside that LLM request and the `chat_uploads` row (deleted after a
+successful attach). Data egress: like chat text, attached images are sent to the
+configured LLM provider — that is the one place store data leaves the cluster.
+
 ### 2.2 LLM Provider
 
 - **Default:** `openai` `gpt-4o-mini` (cheap, good tool calling). Env `OPENAI_API_KEY` from Secret.

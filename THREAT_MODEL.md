@@ -28,6 +28,42 @@ Admin-supplied URL validated at write (`validate_url`: no userinfo, https, block
 ## Additional
 Secrets encrypted at rest (k3s `--secrets-encryption` / aescbc), `securityContext` non-root readOnly, minimal SA RBAC, `httpx` timeouts, no secrets in logs, TLS on prod (cert-manager). Audit partitioned, append-only, admin-read.
 
+## Chat Image Uploads (F3, ADR-035)
+
+A chat message may carry a reference to an uploaded image; the gateway re-encodes
+and stores the bytes in `chat_uploads` for at most 15 minutes (owner-bound,
+row deleted after a successful attach, expired rows purged every minute).
+
+**Malicious image files.** Uploads are decided by MAGIC BYTES only (png/jpeg/webp;
+claimed content type and extension are never trusted — SVG, GIF and polyglot
+HTML/PDF/ZIP are rejected before any decode), capped at 5 MB (`IMAGE_UPLOAD_MAX_BYTES`)
+and 4096 px per side with a hard pixel-count bomb guard checked BEFORE decode
+(Pillow's DecompressionBomb guard backs the decode). Every accepted file is
+RE-ENCODED with Pillow: a fresh encode cannot carry EXIF/GPS metadata or payload
+bytes appended after the image data. The stored filename is generated server-side
+(the caller's name is never used), and WordPress' own mime re-check is the final
+gate. Audit rows and tool output never contain image bytes.
+
+**Prompt-injection inside images (treat extracted text as untrusted data).** An
+image may contain rendered text ("ignore previous instructions", fake tool
+output, a fake tool envelope). The image is handed to the model as an `image_url`
+part of the USER message — the same trust boundary as user-typed text — and every
+countermeasure for text still applies: tool output keeps its per-turn envelope and
+role separation, tool descriptions are rendered as text, and the model's tool
+choices are re-checked against the user's filtered tool list before ANY routing
+(ADR-033). The model can reference an image only through the chat-side attach
+helper, which resolves uploads server-side, is owner-bound, expires after 15
+minutes, routes through `woo__add_product_image` with the normal permission check,
+and deletes the row after one successful use. Vision support is checked against
+the active model chain first: a text-only chain gets a clear message instead of a
+provider error.
+
+**Data egress (updated by F3):** chat text has always gone to the configured LLM
+provider; attached images now go to the SAME provider (one egress path,
+`gateway.llm`, public 443 only). Uploads are never sent to Woo as raw bytes —
+woo-mcp forwards them to WordPress in-cluster. History in the browser stores only
+an "[image]" placeholder, never bytes.
+
 ## Admin Action Trail (ADR-034)
 The `admin_events` table answers "who did what, when, did it work" for admin dashboard actions.
 
