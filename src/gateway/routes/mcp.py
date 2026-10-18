@@ -321,9 +321,10 @@ def _is_tool_validation_error(result: dict | None) -> bool:
     if not isinstance(result, dict) or not result.get("isError"):
         return False
     for block in result.get("content") or []:
-        if isinstance(block, dict) and block.get("type") == "text":
-            if re.search(r"\d+ validation errors? for", block.get("text") or ""):
-                return True
+        if isinstance(block, dict) and block.get("type") == "text" and re.search(
+            r"\d+ validation errors? for", block.get("text") or ""
+        ):
+            return True
     return False
 
 

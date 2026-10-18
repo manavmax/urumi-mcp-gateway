@@ -25,8 +25,10 @@ HTTP-level tests run the REAL app over sqlite, matching the repo's conventions.
 
 from __future__ import annotations
 
+import gw_mcp.router as router
 import httpx
 import pytest
+import routes.mcp as mcp_route
 from auth.keys import create_api_key
 from auth.rbac import hash_password
 from db.models import Base, Server, User
@@ -38,9 +40,6 @@ from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
-import gw_mcp.router as router
-import routes.mcp as mcp_route
 
 from tests.conftest import FakeDB, make_server
 
