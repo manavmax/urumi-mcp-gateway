@@ -2,11 +2,13 @@
 // F1 item 2 contrast gate: every page, admin AND member, BOTH themes.
 // Part 1 of 3: imports, config, page table.
 import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as browserAuth from "./lib/browser-auth.mjs";
 const require = createRequire(import.meta.url);
 const { chromium } = require("../src/dashboard/node_modules/playwright-core");
+const { PNG } = require("../src/dashboard/node_modules/pngjs");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_URL = process.env.DASHBOARD_URL || "http://dashboard.127.0.0.1.nip.io";
 const VIEWPORT = { width: 1440, height: 900 };
@@ -23,6 +25,14 @@ const PAGES = [
 ];
 const THEMES = ["light", "dark"];
 const HOVER_SELS = "tbody tr, .btn, .card, a, .chip, .seg button, .rail-item, .hist-item, .starter, .theme-btn, .theme-dot";
+
+/* A real 1x1 PNG so the attach preview thumbnail renders actual bytes. */
+function tinyPngBuffer() {
+  const png = new PNG({ width: 1, height: 1 });
+  png.data[0] = 76; png.data[1] = 92; png.data[2] = 111; png.data[3] = 255;
+  return PNG.sync.write(png);
+}
+const TINY_PNG = tinyPngBuffer();
 
 // Part 2 of 3: in-page evaluator source (stringified into evaluate calls).
 const EVALUATOR = `
@@ -137,6 +147,103 @@ return __evaluateVisible();
 `;
 
 // Part 3 of 3: runner over pages, roles, themes, states.
+// D2.2: chat page WITH an image attached — preview thumbnail, remove button,
+// drag-over state and the client-side rejection message, in both themes and
+// both roles, at rest, hover and focus-visible. Zero failures required.
+async function evaluateChatAttach(browser, role, theme, failures, counts, auth) {
+  const ctx = await browser.newContext({ viewport: VIEWPORT, reducedMotion: "reduce" });
+  try {
+    if (role === "admin") await ctx.addCookies(browserAuth.cookiePair(auth.admin.cookie, DASHBOARD_URL));
+    if (role === "member") {
+      const m = await browserAuth.loginAs(DASHBOARD_URL, auth.member.email, auth.member.password);
+      await ctx.addCookies(browserAuth.cookiePair(m.cookie, DASHBOARD_URL));
+    }
+    const page = await ctx.newPage();
+    await page.goto(`${DASHBOARD_URL}/chat`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(500);
+    await page.evaluate((t) => {
+      try { localStorage.setItem("theme", t); } catch (e) { /* ignore */ }
+      document.documentElement.setAttribute("data-theme", t);
+    }, theme);
+    await page.waitForTimeout(300);
+
+    const seen = new Set();
+    const push = (state, f) => {
+      const k = `${state}|${f.selector}|${f.ratio}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      failures.push(`chat-attach/${role}/${theme}/${state} ${f.selector} ${f.ratio} ${f.fg} on ${f.bg}`);
+    };
+    const evalState = async (state) => {
+      const r = await page.evaluate(new Function(EVALUATOR));
+      counts[`chat-attach/${role}/${theme}/${state}`] = (counts[`chat-attach/${role}/${theme}/${state}`] || 0) + r.checked;
+      for (const f of r.failures) push(state, f);
+    };
+
+    // 1) Rest with the preview thumbnail + remove button visible.
+    await page.setInputFiles(".composer input[type=file]", { name: "proof.png", mimeType: "image/png", buffer: TINY_PNG });
+    await page.waitForSelector('.thread img[src^="blob:"]', { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    await evalState("attach-rest");
+
+    // D2.3: save the attached-image state for both themes (user inspects them).
+    mkdirSync(join(__dirname, "..", "artifacts", "contrast"), { recursive: true });
+    await page.screenshot({ path: join(__dirname, "..", "artifacts", "contrast", `chat-attach-${role}-${theme}.png`), animations: "disabled" });
+
+    // 2) Hover the preview thumbnail, the remove button and the composer.
+    const chip = await page.$(".thread .chip img[src^='blob:']");
+    if (chip) {
+      const removeBtn = await page.$('button[aria-label="Remove attached image"]');
+      if (removeBtn) {
+        const box = await removeBtn.boundingBox();
+        if (box) {
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await page.waitForTimeout(200);
+          await evalState("attach-hover-remove");
+        }
+      }
+      const img = await page.$('.thread .chip img[src^="blob:"]');
+      if (img) {
+        const box = await img.boundingBox();
+        if (box) {
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await page.waitForTimeout(200);
+          await evalState("attach-hover-thumb");
+        }
+      }
+      // Restore the pointer to a neutral spot so later focus state is clean.
+      await page.mouse.move(720, 60);
+    }
+
+    // 3) Focus-visible on the remove button (keyboard focus, not mouse).
+    const focusBtn = await page.$('button[aria-label="Remove attached image"]');
+    if (focusBtn) {
+      await focusBtn.focus();
+      await page.waitForTimeout(150);
+      await evalState("attach-focus-remove");
+      await page.keyboard.press("Tab");
+    }
+
+    // 4) Drag-over state: dragover over the composer must surface the ring.
+    await page.dispatchEvent(".composer", "dragover", { dataTransfer: { files: [] } });
+    await page.waitForTimeout(200);
+    await evalState("attach-dragover");
+
+    // 5) Client-side rejection: an oversized PNG and a GIF must both show the
+    //    inline alert-error and never create a preview.
+    await page.dispatchEvent(".composer", "dragleave");
+    await page.setInputFiles(".composer input[type=file]", { name: "big.png", mimeType: "image/png", buffer: Buffer.concat([TINY_PNG, Buffer.alloc(5 * 1024 * 1024 + 1, 0)]) });
+    await page.waitForTimeout(200);
+    await evalState("attach-reject-oversize");
+    await page.setInputFiles(".composer input[type=file]", { name: "anim.gif", mimeType: "image/gif", buffer: Buffer.from("GIF89a") });
+    await page.waitForTimeout(200);
+    await evalState("attach-reject-gif");
+    await ctx.close();
+  } finally {
+    await ctx.close().catch(() => {});
+  }
+}
+
 async function run() {
   const browser = await chromium.launch({ headless: true });
   const failures = [];
@@ -219,6 +326,14 @@ async function run() {
           for (const f of r.failures) failures.push(`${cfg.page}/${role}/reswitch-${theme} ${f.selector} ${f.ratio} ${f.fg} on ${f.bg}`);
         }
         await ctx.close();
+      }
+    }
+
+    // D2.2: the chat attach UI in both themes and both roles.
+    if (!onlyPage || onlyPage === "chat") {
+      for (const theme of THEMES) {
+        await evaluateChatAttach(browser, "admin", theme, failures, counts, { admin, member });
+        await evaluateChatAttach(browser, "member", theme, failures, counts, { admin, member });
       }
     }
   } finally {

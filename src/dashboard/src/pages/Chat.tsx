@@ -86,6 +86,7 @@ export default function Chat() {
   // URL, never persisted; history stores only an "[image]" placeholder.
   const [pendingImage, setPendingImage] = useState<{ file: File; url: string; name: string } | null>(null);
   const [imgErr, setImgErr] = useState("");
+  const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
@@ -108,6 +109,7 @@ export default function Chat() {
       return;
     }
     setImgErr("");
+    setDragOver(false);
     if (pendingImage) URL.revokeObjectURL(pendingImage.url);
     setPendingImage({ file, url: URL.createObjectURL(file), name: file.name });
   }
@@ -390,9 +392,11 @@ export default function Chat() {
             </div>
           )}
 
-          <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); attachImage(e.dataTransfer?.files?.[0]); }}>
+          <form className={`composer${dragOver ? " drag-over" : ""}`} onSubmit={(e) => { e.preventDefault(); send(input); }}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); attachImage(e.dataTransfer?.files?.[0]); }}>
             <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }}
               onChange={(e) => { attachImage(e.target.files?.[0]); e.currentTarget.value = ""; }} />
             <button className="send" type="button" aria-label="Attach image" title="Attach an image (PNG, JPEG or WEBP, up to 5 MB)"

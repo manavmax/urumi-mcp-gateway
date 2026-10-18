@@ -288,6 +288,8 @@ tbody tr:hover .url, tbody tr:hover .sub { color: var(--muted); }
 .banner-actions { display: inline-flex; gap: var(--s2); margin-left: auto; }
 .banner-close { flex: none; background: none; border: none; cursor: pointer; color: var(--text-faint); padding: 2px; border-radius: 6px; }
 .banner-close:hover { color: var(--text); }
+/* inline form/page error banner (chat attach rejection, page errors) */
+.alert-error { display: flex; align-items: center; gap: 8px; background: var(--bad-bg); color: var(--bad-text); border: 1px solid var(--bad-bg); border-radius: var(--r-inner); padding: 10px 14px; font-size: var(--t-sm); font-weight: 600; }
 @media (max-width: 640px) {
   .banner-actions { margin-left: 0; width: 100%; }
   .banner { flex-wrap: wrap; }
@@ -386,6 +388,7 @@ details.out summary .ic { width: 12px; height: 12px; stroke-width: 2.4; }
 .typing { color: var(--text-muted); font-size: var(--t-sm); display: flex; align-items: center; gap: 8px; }
 .composer { border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--shadow-card), inset 0 0 0 1px var(--hairline); padding: 6px 6px 6px 18px; display: flex; align-items: center; gap: 8px; }
 .composer:focus-within { box-shadow: var(--shadow-card), 0 0 0 3px var(--ring), inset 0 0 0 1px var(--hairline); }
+.composer.drag-over { box-shadow: var(--shadow-card), inset 0 0 0 2px var(--ink), inset 0 0 0 1px var(--hairline); background: var(--tint-soft); }
 .composer input { border: none; outline: none; background: transparent; font: inherit; color: var(--text); flex: 1; min-width: 0; padding: 8px 0; }
 .composer input::placeholder { color: var(--text-muted); }
 .send { width: 40px; height: 40px; border-radius: 50%; background: var(--ink); color: var(--on-primary); border: none; display: grid; place-items: center; cursor: pointer; flex: none; box-shadow: var(--inset-white); }
