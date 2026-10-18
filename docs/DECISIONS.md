@@ -437,3 +437,26 @@ size ~4/3x versus multipart (acceptable at a 5 MB cap over a ClusterIP path). It
 trusts WordPress' mime whitelist as the final gate, so a future WP change that
 allows SVG by default would silently widen the route; the gateway/woo-mcp side
 independently rejects SVG. The key lookup adds one indexed DB query per upload.
+
+## 2026-10-18: I1 integration — parity light-mode deviations classified (B4)
+
+Three light-mode parity differences found during the I1 integration pass, each
+classified and handled:
+
+1. **audit `.note-banner` background — REAL REGRESSION (fixed).** Mockup
+   `rgb(231,234,240)` (#E7EAF0 = `--primary-tint`), live was `rgb(244,243,239)`
+   (#F4F3EF = `--surface-2`). The note banner is an F1-2 side effect: `styles.css`
+   aliases that shadow a real theme token clobbered it. Restored to the approved
+   colour via the `--primary-tint` token (no literal added anywhere).
+2. **servers `.btn.btn-secondary` padding — SAMPLING DIFFERENCE (fixed selector).**
+   Mockup's first `.btn.btn-secondary` is a row action button (`btn-sm`,
+   6px 12px); live's first is the header "Permissions" button (9px 16px). The
+   parity selector now pins `.btn.btn-secondary.btn-sm` so both sides sample the
+   same row action button; the header button is intentionally the larger base
+   size and matches the mockup's base `.btn` (9px 16px).
+3. **servers `.switch .track` colour — SAMPLING DIFFERENCE (fixed selector).**
+   Mockup's first switch is an enabled server (checked track = ink
+   `rgb(20,23,28)`); the live first switch belongs to a disabled server
+   (unchecked track = `rgba(20,23,28,.1)`). The parity selector now pins
+   `.switch input:checked + .track` so both sides deterministically sample the
+   enabled state. The track token values themselves are unchanged and correct.

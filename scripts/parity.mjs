@@ -128,7 +128,10 @@ const FLEET_SELECTORS = [
   S(".chip-danger", ["background-color", "color"], { dataDependent: true }),
   S(".chip-neutral", ["background-color", "color"], { dataDependent: true }),
   S(".btn.btn-primary", ["padding", "border-radius", "background-color", "color", "font-weight"], { roles: ["admin"] }),
-  S(".btn.btn-secondary", ["padding", "border-radius", "background-color", "color"], { roles: ["admin"], dataDependent: true }),
+  /* Sampling fix: the first plain `.btn.btn-secondary` is the header "Permissions"
+     button (9px 16px) in live but the mockup's first is a row Edit button (btn-sm,
+     6px 12px). Pin to the row action button so both sides sample the SAME element. */
+  S(".btn.btn-secondary.btn-sm", ["padding", "border-radius", "background-color", "color"], { roles: ["admin"], dataDependent: true }),
 ];
 
 const CHAT_SELECTORS = [
@@ -158,7 +161,11 @@ const PAGES = [
   {
     page: "servers", mockup: "servers.html", path: "/servers", selectors: [
       ...FLEET_SELECTORS,
-      S(".switch .track", ["w", "h", "border-radius", "background-color"], { roles: ["admin"] }),
+      /* Sampling fix: the FIRST switch in the mockup is an enabled server (checked
+         track = ink rgb(20,23,28)); the live first switch may be a DISABLED server
+         (unchecked track = hairline rgba(20,23,28,.1)). Pin to a checked track so
+         both sides sample the enabled state deterministically. */
+      S(".switch input:checked + .track", ["w", "h", "border-radius", "background-color"], { roles: ["admin"] }),
       S("details.tools > summary", ["padding", "border-radius", "font-size"], { dataDependent: true }),
       S(".slug", ["font-size", "font-weight"]),
       S(".url", ["font-size", "max-width"]),
