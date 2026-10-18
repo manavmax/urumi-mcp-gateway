@@ -1,21 +1,22 @@
 {
-  "purpose": "Seed set of the demo store: the products the wp-setup Helm job creates and that `make demo-reset` must KEEP. Any product NOT matched here is treated as test data and is deleted through the Woo REST API. This file is the audit trail for that rule - edit it deliberately, together with helm/templates/jobs/wp-setup.yaml (the 'Seed products' section) so the two never drift.",
-  "source": "helm/templates/jobs/wp-setup.yaml lines 268-323 (Urumi Classic Tee / Urumi Hoodie)",
+  "purpose": "Seed set of the demo store: the 12 products store/products.json defines and that the wp-setup Helm job creates. Any product NOT matched here is treated as test data and is deleted through the Woo REST API. Orphan media (attachments that are not the image of a kept product) and every order are also deleted. This file is the audit trail for that rule - edit it deliberately, together with store/products.json and helm/templates/jobs/wp-setup.yaml (the 'Seed products by SKU' section) so the three never drift.",
+  "source": "store/products.json (single source of truth) via helm/templates/jobs/wp-setup.yaml 'Seed products by SKU'",
   "products": [
-    {
-      "name": "Urumi Classic Tee",
-      "sku": "URUMI-TEE-001",
-      "regular_price": "29.99",
-      "type": "simple"
-    },
-    {
-      "name": "Urumi Hoodie",
-      "sku": "URUMI-HOODIE-001",
-      "regular_price": "59.99",
-      "type": "simple"
-    }
+    { "name": "Urumi Classic Tee", "sku": "URUMI-TEE-001", "regular_price": "29.99", "type": "simple" },
+    { "name": "Urumi Hoodie", "sku": "URUMI-HOODIE-001", "regular_price": "59.99", "type": "simple" },
+    { "name": "Urumi Shoes", "sku": "102938", "regular_price": "149.99", "type": "simple" },
+    { "name": "Urumi Cap", "sku": "URUMI-CAP-001", "regular_price": "24.00", "type": "simple" },
+    { "name": "Ceramic Mug", "sku": "URUMI-MUG-001", "regular_price": "18.00", "type": "simple" },
+    { "name": "Scented Candle", "sku": "URUMI-CANDLE-001", "regular_price": "22.00", "type": "simple" },
+    { "name": "Wool Throw", "sku": "URUMI-THROW-001", "regular_price": "64.00", "type": "simple" },
+    { "name": "Canvas Tote", "sku": "URUMI-TOTE-001", "regular_price": "28.00", "type": "simple" },
+    { "name": "Everyday Backpack", "sku": "URUMI-BACKPACK-001", "regular_price": "89.00", "type": "simple" },
+    { "name": "Steel Water Bottle", "sku": "URUMI-BOTTLE-001", "regular_price": "32.00", "type": "simple" },
+    { "name": "Hardcover Notebook", "sku": "URUMI-NOTEBOOK-001", "regular_price": "14.00", "type": "simple" },
+    { "name": "Pen Set", "sku": "URUMI-PEN-001", "regular_price": "12.00", "type": "simple" }
   ],
   "products_rule": "KEEP a product iff its SKU matches one of the SKUs above (case-insensitive). A product with NO SKU is kept only when its name matches a seed name exactly; every other product (any SKU, any status, including drafts) is deleted.",
+  "media_rule": "DELETE every attachment that is NOT the featured image of a kept product (orphan media from test uploads). Attachments that ARE a kept product's image stay.",
   "orders_rule": "wp-setup seeds NO orders, so every order in the store was created during testing: all of them are deleted (every status, force=true).",
   "never_touched": [
     "WordPress/WooCommerce settings (woocommerce_* options, incl. COD), pages, tax, shipping",

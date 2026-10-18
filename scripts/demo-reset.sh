@@ -106,8 +106,10 @@ fi
 
 GW_POD="$(kubectl get pods -n "$NS" -l app=gateway -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 WOO_POD="$(kubectl get pods -n "$NS" -l app=woo-mcp -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+WP_POD="$(kubectl get pods -n "$NS" -l app=wordpress -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 [ -n "$GW_POD" ] || die "no gateway pod found in namespace $NS" 1
 [ -n "$WOO_POD" ] || die "no woo-mcp pod found in namespace $NS" 1
+[ -n "$WP_POD" ] || die "no wordpress pod found in namespace $NS" 1
 
 SEEDS_JSON="$(cat "$SCRIPT_DIR/demo-seeds.json")"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/demo-reset.XXXXXX")"
@@ -120,6 +122,19 @@ trap 'rm -rf "$WORK"' EXIT
 run_woo() {
     kubectl exec -n "$NS" "$WOO_POD" -c woo-mcp -- \
         python3 -c "$(cat "$SCRIPT_DIR/demo-reset-woo.py")" "$@" --seeds-json "$SEEDS_JSON"
+}
+
+run_media() {
+    # Orphan media lives in the WordPress pod (DB + upload filesystem); the Woo
+    # consumer key cannot authenticate wp/v2/media, so this worker runs there.
+    local mode="$1"
+    if [ "$mode" = "--dry-run" ]; then
+        kubectl exec -i -n "$NS" "$WP_POD" -c wordpress -- env MEDIA_DRY_RUN=1 php \
+            <<< "$(cat "$SCRIPT_DIR/demo-reset-media.php")"
+    else
+        kubectl exec -i -n "$NS" "$WP_POD" -c wordpress -- env MEDIA_DRY_RUN=0 php \
+            <<< "$(cat "$SCRIPT_DIR/demo-reset-media.php")"
+    fi
 }
 
 run_gateway() {
@@ -161,12 +176,20 @@ echo ""
 # ---- phase 1: always read-only ----
 emit "$WORK/woo-plan.json" "WooCommerce: products + orders (woo-mcp pod)" run_woo --dry-run
 echo ""
+echo "== Media: orphan attachments (wordpress pod, dry run) =="
+MEDIA_PLAN="$(run_media --dry-run)"
+echo "$MEDIA_PLAN"
+echo ""
 emit "$WORK/gw-plan.json" "Gateway: audit_logs, users, api_keys, servers, notes" run_gateway --dry-run
 
 # ---- phase 2: perform (confirmed runs only) ----
 if [ "$CONFIRM" = "yes" ]; then
     echo ""
     emit "$WORK/woo.json" "WooCommerce reset (confirmed)" run_woo
+    echo ""
+    echo "== Media: orphan attachments (confirmed) =="
+    MEDIA_RESULT="$(run_media)"
+    echo "$MEDIA_RESULT"
     echo ""
     GW_ARGS=(--reset)
     if [ "$WITH_DEMO_USERS" = "1" ]; then
@@ -188,16 +211,21 @@ fi
 # ---- phase 3: summary (both modes) ----
 echo ""
 if [ "$CONFIRM" = "yes" ]; then
+    echo ""
     echo "== demo-reset summary =="
+    MEDIA_COUNTS="$(printf '%s\n' "${MEDIA_RESULT:-}" | grep 'media summary:' || true)"
 else
     echo "== demo-reset summary (DRY RUN - nothing was deleted) =="
+    MEDIA_COUNTS="$(printf '%s\n' "${MEDIA_PLAN:-}" | grep 'media summary:' || true)"
 fi
-python3 - "$WORK" <<'PY' || echo "(summary unavailable: python3 not found on this host)"
+python3 - "$WORK" "${MEDIA_COUNTS:-}" <<'PY' || echo "(summary unavailable: python3 not found on this host)"
 import json
 import pathlib
+import re
 import sys
 
 work = pathlib.Path(sys.argv[1])
+media_counts = sys.argv[2] if len(sys.argv) > 2 else ""
 
 
 def load(name):
@@ -244,6 +272,13 @@ if gw:
 if isinstance(gw.get("notes_count"), int):
     verb = "would clear" if dry else "cleared"
     print(f"  Notes: {verb} all {gw['notes_count']} note(s) (demo-notes restart)")
+
+m = re.search(r"kept=(\d+) deleted=(\d+)", media_counts)
+if m:
+    print(
+        f"  Media: {'would delete' if dry else 'deleted'} {m.group(2)} orphan "
+        f"attachment(s), kept {m.group(1)} seed image(s)"
+    )
 
 print("kept:")
 if gw and gw.get("mode") == "reset":

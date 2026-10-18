@@ -10,8 +10,12 @@ Rules
 - Deletes go through wc/v3 with force=true. wp_posts / wp_wc_* rows are never touched
   with hand-written SQL: WooCommerce owns them, and a raw DELETE leaves orphaned
   product-meta and stale lookup tables behind (docs/03).
-- Only products that are NOT in the seed manifest (scripts/demo-seeds.json) are
-  deleted; every order is deleted, because wp-setup seeds none.
+- Only products that are NOT in the seed manifest (scripts/demo-seeds.json, now the
+  12 SKUs of store/products.json) are deleted; every order is deleted (incl. the
+  checkout drafts the block checkout creates), because wp-setup seeds none.
+- Orphan media is deleted by scripts/demo-reset-media.php running in the wordpress
+  pod (the Woo consumer key cannot authenticate wp/v2/media; the F3 upload route has
+  no delete endpoint by design) - see demo-reset.sh run_media.
 - Settings (COD, tax, shipping, pages) are never written.
 
 Credentials are read from the pod environment and never printed - not in output,
