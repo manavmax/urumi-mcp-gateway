@@ -426,62 +426,227 @@ spec:
               wp rewrite structure '/%postname%/' --hard --allow-root --path=$WP_PATH || true
               wp rewrite flush --hard --allow-root --path=$WP_PATH || true
 
-              # --- Seed products (wc CLI preferred, post fallback) ---
-              COUNT=$(wp post list --post_type=product --format=count --allow-root --path=$WP_PATH 2>/dev/null || echo 0)
-              echo "Product count before seed: $COUNT"
-              if [ "$COUNT" -eq 0 ]; then
-                echo "Seeding products via wc CLI..."
-                set +e
-                # Try wc product create (Woo 7+/8+)
-                wp wc product create --name="Urumi Classic Tee" --type=simple --regular_price="29.99" --sku="URUMI-TEE-001" --description="Classic tee for demo." --short_description="Classic tee" --user="$ADMIN_USER" --allow-root --path=$WP_PATH 2>&1 | tee /tmp/wc1.log
-                WC1=$?
-                wp wc product create --name="Urumi Hoodie" --type=simple --regular_price="59.99" --sku="URUMI-HOODIE-001" --description="Warm hoodie." --short_description="Warm hoodie" --user="$ADMIN_USER" --allow-root --path=$WP_PATH 2>&1 | tee /tmp/wc2.log
-                WC2=$?
-                set -e
+              # --- Seed products BY SKU from store/products.json (idempotent) ---
+              # products.json is the single source of truth (copied to wp-content/store
+              # by the store-assets initContainer). The PHP helper creates missing
+              # products, attaches the image and sets the category; on a re-run existing
+              # products are never duplicated and admin edits are never overwritten
+              # unless STORE_SEED_FORCE=1. Orders and customers are never touched.
+              echo "Seeding products by SKU from store/products.json..."
+              cat > /tmp/seed_products.php <<'PHP_EOF'
+              <?php
+              if ( ! function_exists( 'WC' ) || ! WC()->product_factory ) {
+                  fwrite( STDERR, "WooCommerce not loaded\n" );
+                  exit( 1 );
+              }
+              require_once ABSPATH . 'wp-admin/includes/file.php';
+              require_once ABSPATH . 'wp-admin/includes/image.php';
+              require_once ABSPATH . 'wp-admin/includes/media.php';
 
-                # Verify; fallback to post+meta if wc failed or products still missing
-                COUNT2=$(wp post list --post_type=product --format=count --allow-root --path=$WP_PATH 2>/dev/null || echo 0)
-                echo "Product count after wc: $COUNT2 (wc1=$WC1 wc2=$WC2)"
-                if [ "$COUNT2" -eq 0 ]; then
-                  echo "Fallback: seeding via wp post create..."
-                  wp post create --post_type=product --post_title="Urumi Classic Tee" --post_status=publish --post_content="Classic tee for demo." --allow-root --path=$WP_PATH
-                  PID=$(wp post list --post_type=product --post_title="Urumi Classic Tee" --format=ids --allow-root --path=$WP_PATH | awk '{print $1}')
-                  if [ -n "$PID" ]; then
-                    wp post meta update $PID _regular_price "29.99" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID _price "29.99" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID _sku "URUMI-TEE-001" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID _visibility "visible" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID _stock_status "instock" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID _manage_stock "no" --allow-root --path=$WP_PATH || true
-                    echo "Seeded Urumi Classic Tee PID=$PID"
-                  fi
-                  wp post create --post_type=product --post_title="Urumi Hoodie" --post_status=publish --post_content="Warm hoodie." --allow-root --path=$WP_PATH
-                  PID2=$(wp post list --post_type=product --post_title="Urumi Hoodie" --format=ids --allow-root --path=$WP_PATH | tail -n1 | awk '{print $1}')
-                  if [ -n "$PID2" ]; then
-                    wp post meta update $PID2 _regular_price "59.99" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID2 _price "59.99" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID2 _sku "URUMI-HOODIE-001" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID2 _visibility "visible" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID2 _stock_status "instock" --allow-root --path=$WP_PATH || true
-                    wp post meta update $PID2 _manage_stock "no" --allow-root --path=$WP_PATH || true
-                    echo "Seeded Urumi Hoodie PID2=$PID2"
-                  fi
-                else
-                  # wc succeeded — ensure visibility/stock meta for storefront (wc sometimes leaves drafts)
-                  echo "wc seeded, ensuring stock/visibility..."
-                  for TITLE in "Urumi Classic Tee" "Urumi Hoodie"; do
-                    PID=$(wp post list --post_type=product --post_title="$TITLE" --format=ids --allow-root --path=$WP_PATH | awk '{print $1}')
-                    if [ -n "$PID" ]; then
-                      wp post meta update $PID _stock_status "instock" --allow-root --path=$WP_PATH || true
-                      wp post meta update $PID _visibility "visible" --allow-root --path=$WP_PATH || true
-                      wp post meta update $PID _manage_stock "no" --allow-root --path=$WP_PATH || true
-                      wp post update $PID --post_status=publish --allow-root --path=$WP_PATH || true
-                    fi
-                  done
-                fi
+              $data_path = getenv( 'STORE_PRODUCTS' ) ?: WP_CONTENT_DIR . '/store/products.json';
+              $img_dir   = getenv( 'STORE_IMAGES' ) ?: WP_CONTENT_DIR . '/store/images';
+              $force     = getenv( 'STORE_SEED_FORCE' ) === '1';
+              $raw       = file_get_contents( $data_path );
+              $data      = $raw ? json_decode( $raw, true ) : null;
+              if ( ! is_array( $data ) || empty( $data['products'] ) ) {
+                  fwrite( STDERR, "no products in $data_path\n" );
+                  exit( 2 );
+              }
 
-                wp wc tool run regenerate_product_lookup_tables --user="$ADMIN_USER" --allow-root --path=$WP_PATH || true
+              // Ensure the four category terms exist (Apparel, Home, Accessories, Stationery).
+              $cat_by_name = array();
+              foreach ( ( $data['categories'] ?? array() ) as $c ) {
+                  $name = (string) ( $c['name'] ?? '' );
+                  if ( '' === $name ) { continue; }
+                  $slug = sanitize_title( $name );
+                  $term = term_exists( $slug, 'product_cat' );
+                  if ( ! $term ) {
+                      $term = wp_insert_term( $name, 'product_cat', array( 'slug' => $slug ) );
+                  }
+                  if ( ! is_wp_error( $term ) ) {
+                      $cat_by_name[ $name ] = is_array( $term ) ? (int) $term['term_id'] : (int) $term;
+                  }
+              }
+
+              $attach_image = function ( $pid, $p ) use ( $img_dir ) {
+                  $name = (string) ( $p['image'] ?? ( $p['sku'] . '.png' ) );
+                  $file = $img_dir . '/' . basename( $name );
+                  if ( ! is_file( $file ) ) {
+                      echo "  no image file for " . $p['sku'] . " ($file)\n";
+                      return;
+                  }
+                  $tmp = wp_tempnam( 'urumi-seed' );
+                  if ( ! $tmp || ! copy( $file, $tmp ) ) {
+                      echo "  temp copy failed for " . $p['sku'] . "\n";
+                      return;
+                  }
+                  $att_id = media_handle_sideload( array( 'name' => sanitize_file_name( $name ), 'tmp_name' => $tmp ), 0 );
+                  if ( is_wp_error( $att_id ) ) {
+                      echo "  image sideload failed for " . $p['sku'] . ": " . $att_id->get_error_message() . "\n";
+                      @unlink( $tmp );
+                      return;
+                  }
+                  set_post_thumbnail( $pid, (int) $att_id );
+                  update_post_meta( (int) $att_id, '_wp_attachment_image_alt', (string) ( $p['alt'] ?? $p['name'] ) );
+                  echo "  attached image " . $name . " to " . $p['sku'] . "\n";
+              };
+
+              $created = 0; $kept = 0; $updated = 0; $imaged = 0;
+              foreach ( $data['products'] as $p ) {
+                  $sku    = (string) ( $p['sku'] ?? '' );
+                  $is_new = ! empty( $p['new'] );
+                  if ( '' === $sku ) { continue; }
+
+                  $pid = wc_get_product_id_by_sku( $sku );
+                  if ( $pid ) {
+                      $product = wc_get_product( $pid );
+                      if ( $force ) {
+                          $product->set_name( (string) ( $p['name'] ?? $product->get_name() ) );
+                          $product->set_regular_price( (string) ( $p['price'] ?? $product->get_regular_price() ) );
+                          $product->set_description( (string) ( $p['description'] ?? '' ) );
+                          $product->set_short_description( (string) ( $p['short_description'] ?? '' ) );
+                          $product->set_status( 'publish' );
+                          $product->set_manage_stock( false );
+                          $product->set_stock_status( 'instock' );
+                          $product->set_featured( $is_new );
+                          $product->save();
+                          // Force also re-attaches the catalog image (the previous
+                          // attachment is left as orphan media for the media reset).
+                          $attach_image( $pid, $p );
+                          $imaged++;
+                          // Force sets the category exactly (replaces leftovers like
+                          // Uncategorized from older seeds).
+                          if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
+                              wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', false );
+                          }
+                          $updated++;
+                      } else {
+                          $kept++; // admin edits stay; only missing bits are backfilled below
+                      }
+                      // Non-destructive backfill: image and category when missing.
+                      if ( ! $product->get_image_id() ) {
+                          $attach_image( $pid, $p );
+                          $imaged++;
+                      }
+                      if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
+                          $cats = wp_get_object_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) );
+                          if ( is_wp_error( $cats ) || ! in_array( $cat_by_name[ $p['category'] ], (array) $cats, true ) ) {
+                              // append=true on a plain re-run (never disturbs admin categories);
+                              // below, force replaces the terms exactly.
+                              wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', true );
+                          }
+                      }
+                      continue;
+                  }
+
+                  $product = new WC_Product_Simple();
+                  $product->set_name( (string) ( $p['name'] ?? $sku ) );
+                  $product->set_sku( $sku );
+                  $product->set_regular_price( (string) ( $p['price'] ?? '0' ) );
+                  $product->set_description( (string) ( $p['description'] ?? '' ) );
+                  $product->set_short_description( (string) ( $p['short_description'] ?? '' ) );
+                  $product->set_status( 'publish' );
+                  $product->set_manage_stock( false );
+                  $product->set_stock_status( 'instock' );
+                  $product->set_featured( $is_new );
+                  $pid = $product->save();
+                  if ( ! $pid || is_wp_error( $pid ) ) {
+                      echo "  create failed for " . $sku . "\n";
+                      continue;
+                  }
+                  $created++;
+                  echo "  created " . $sku . " (" . ( $p['name'] ?? '' ) . ") PID=$pid\n";
+                  $attach_image( $pid, $p );
+                  $imaged++;
+                  if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
+                      wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', false );
+                  }
+              }
+
+              wc_update_product_lookup_tables();
+              echo "seed summary: created=$created kept=$kept updated=$updated images=$imaged (force=" . ( $force ? '1' : '0' ) . ")\n";
+              PHP_EOF
+              set +e
+              SEED_OUT=$(STORE_PRODUCTS=/var/www/html/wp-content/store/products.json \
+                          STORE_IMAGES=/var/www/html/wp-content/store/images \
+                          STORE_SEED_FORCE="$STORE_SEED_FORCE" \
+                          wp eval-file /tmp/seed_products.php --allow-root --path=$WP_PATH 2>&1)
+              SEED_RC=$?
+              set -e
+              echo "$SEED_OUT"
+              if [ $SEED_RC -ne 0 ]; then
+                echo "product seeding failed rc=$SEED_RC" >&2
+                exit 1
               fi
+
+              wp wc tool run regenerate_product_lookup_tables --user="$ADMIN_USER" --allow-root --path=$WP_PATH || true
+
+              # --- Storefront configuration (idempotent) ---
+              echo "Activating urumi-store theme..."
+              wp theme activate urumi-store --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
+              if ! wp theme is-active urumi-store --allow-root --path=$WP_PATH >/dev/null 2>&1; then
+                echo "FATAL: urumi-store theme did not activate (is the theme in wp-content/themes?)" >&2
+                exit 1
+              fi
+              echo "Theme urumi-store active."
+
+              # Front page + posts page. The front-page.html template renders the hero.
+              echo "Ensuring front page and posts page..."
+              HOME_ID=$(wp post list --post_type=page --name=home --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)
+              if [ -z "$HOME_ID" ]; then
+                HOME_ID=$(wp post create --post_type=page --post_status=publish --post_title="Home" --post_name=home --post_content="" --porcelain --allow-root --path=$WP_PATH)
+              fi
+              POSTS_ID=$(wp post list --post_type=page --name=blog --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)
+              if [ -z "$POSTS_ID" ]; then
+                POSTS_ID=$(wp post create --post_type=page --post_status=publish --post_title="Blog" --post_name=blog --post_content="Journal posts live here." --porcelain --allow-root --path=$WP_PATH)
+              fi
+              wp option update show_on_front page --allow-root --path=$WP_PATH
+              wp option update page_on_front "$HOME_ID" --allow-root --path=$WP_PATH
+              wp option update page_for_posts "$POSTS_ID" --allow-root --path=$WP_PATH
+              echo "Front page set (id $HOME_ID), posts page set (id $POSTS_ID)."
+
+              # About + Shipping and returns pages (honest demo copy, created only if missing).
+              echo "Ensuring About page..."
+              if [ -z "$(wp post list --post_type=page --name=about --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)" ]; then
+                wp post create --post_type=page --post_status=publish --post_title="About" --post_name=about \
+                  --post_content="Urumi is a demo storefront built for a school project. We sell a small catalog of everyday goods. This store does not take payments online and does not ship real orders." \
+                  --allow-root --path=$WP_PATH
+                echo "  created About page."
+              fi
+              echo "Ensuring Shipping and returns page..."
+              if [ -z "$(wp post list --post_type=page --name=shipping-and-returns --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)" ]; then
+                wp post create --post_type=page --post_status=publish --post_title="Shipping and returns" --post_name=shipping-and-returns \
+                  --post_content="Shipping and returns\n\nPayment is cash on delivery only. There is no carrier integration, so delivery dates are illustrative and no real parcel is dispatched.\n\nReturns: contact us before sending anything back. Items must be unused and in their original packaging. Because this is a demo store, returns are not actually processed.\n\nThis storefront is a demo for a school project. Orders are not fulfilled and payment is not collected." \
+                  --allow-root --path=$WP_PATH
+                echo "  created Shipping and returns page."
+              fi
+
+              # Primary menu: Shop + the four categories, assigned to the `primary`
+              # location (registered in the theme's functions.php).
+              echo "Ensuring Primary menu..."
+              wp menu create "Primary" --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
+              MENU_ID=$(wp menu list --fields=term_id,name --format=csv --allow-root --path=$WP_PATH 2>/dev/null | grep ',Primary' | head -n1 | cut -d, -f1)
+              if [ -n "$MENU_ID" ]; then
+                for ITEM in "Shop|/shop/" "Apparel|/product-category/apparel/" "Home|/product-category/home/" "Accessories|/product-category/accessories/" "Stationery|/product-category/stationery/"; do
+                  TITLE="${ITEM%%|*}"; LINK="${ITEM#*|}"
+                  if ! wp menu item list "$MENU_ID" --format=json --allow-root --path=$WP_PATH 2>/dev/null | grep -q "$LINK"; then
+                    wp menu item add-custom "$MENU_ID" "$TITLE" "$LINK" --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
+                    echo "  menu item $TITLE added."
+                  fi
+                done
+                wp menu location assign "$MENU_ID" primary --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
+              fi
+              echo "Primary menu ready (menu id $MENU_ID)."
+
+              # WooCommerce store options: USD, COD default, reviews off, guest checkout.
+              echo "Setting WooCommerce store options..."
+              wp option update woocommerce_currency USD --allow-root --path=$WP_PATH
+              wp option update woocommerce_currency_pos left --allow-root --path=$WP_PATH
+              wp option update woocommerce_enable_reviews no --allow-root --path=$WP_PATH
+              wp option update woocommerce_enable_review_rating no --allow-root --path=$WP_PATH
+              wp option update woocommerce_enable_guest_checkout yes --allow-root --path=$WP_PATH
+              wp option update show_avatars 0 --allow-root --path=$WP_PATH
+              echo "WooCommerce store options set (USD, COD default, reviews off, guest checkout on)."
 
               echo "Final product list:"
               wp post list --post_type=product --format=table --allow-root --path=$WP_PATH | head -n 20
@@ -677,6 +842,8 @@ spec:
               value: {{ .Values.wpSetup.cod.description | quote }}
             - name: COD_INSTRUCTIONS
               value: {{ .Values.wpSetup.cod.instructions | quote }}
+            - name: STORE_SEED_FORCE
+              value: {{ .Values.wpSetup.seedForce | default "0" | quote }}
           # Share wp-content (plugins/themes/uploads) with the WordPress pod so
           # plugin installs and seeded content are visible on the live storefront.
           volumeMounts:
