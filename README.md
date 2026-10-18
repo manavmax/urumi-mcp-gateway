@@ -163,12 +163,14 @@ scripts/demo-reset.sh --check-only             # only the safety guard (exits 2 
 ```
 
 The seed set (the products that survive) is an auditable file, not a hidden rule:
-`scripts/demo-seeds.json`. Everything not matched there is test data.
+`scripts/demo-seeds.json` (the 12 SKUs of `store/products.json`). Everything not
+matched there is test data.
 
 | deletes | keeps |
 |---|---|
-| every WooCommerce product that is not a seed product (REST `force=true`) | the seed products (`URUMI-TEE-001`, `URUMI-HOODIE-001`), store settings, COD, tax/shipping |
-| every WooCommerce order (all statuses) | all Kubernetes Secrets and PVCs, and the Helm release (the script never runs `helm`) |
+| every WooCommerce product that is not a seed product (REST `force=true`) | the 12 seed products, store settings, COD, tax/shipping |
+| every WooCommerce order (all statuses, incl. checkout drafts) | all Kubernetes Secrets and PVCs, and the Helm release (the script never runs `helm`) |
+| every orphan media attachment (anything that is not a seed product's image; runs in the wordpress pod, ADR-040) | the seed product images |
 | every row in `audit_logs` (ids restart at 1) | the gateway admin user `admin@urumi.local` and its API keys |
 | every `tool_permissions` deny rule (back to default allow-all) | the 3 seeded upstreams `woo`/`time`/`notes`, their encrypted credentials, the Fernet state |
 | every non-admin user + their API keys | any non-seeded server you added — it is listed in the summary, never deleted |
@@ -184,6 +186,39 @@ terminal (never written to a file or log). A dry run only ever issues `kubectl g
 After a confirmed run the script prints a deleted/kept summary and verifies the demo
 contract live: 3 upstreams `Connected` and `tools/list` returning 13 tools (woo 8, time 2,
 notes 3).
+
+## Storefront (urumi-store theme)
+
+The public store at `http://store.127.0.0.1.nip.io` is a standalone block theme
+(`store/theme/urumi-store/`, ADR-037) with a 12-product catalog defined in
+`store/products.json`, the single source of truth for names, SKUs, prices, copy and
+image alt text. Key properties:
+
+- **Zero third-party requests.** Fonts (Instrument Serif + Inter, both OFL) are
+  self-hosted woff2 inside the theme; emoji script, gravatar, oEmbed and resource
+  hints are removed. `scripts/verify-store.mjs` asserts same-origin only, in a real
+  browser.
+- **Delivery.** Theme + catalog + images ship in a static `store-assets` image
+  (`make store-assets-image`) that an initContainer copies onto the wp-content
+  volume on every pod start (the official WordPress image never refreshes an
+  existing wp-content volume; ADR-038).
+- **Seeding.** The wp-setup Job seeds BY SKU from `products.json`, idempotently and
+  without overwriting admin edits (`wpSetup.seedForce: "1"` forces back to the
+  catalog; ADR-039). Product images are generated original illustrations
+  (`scripts/gen-store-images.py`) that live in `store/images/` as
+  `<sku>.png` + `<sku>-cutout.png`.
+- **Swapping product photos.** Drop a new `<sku>.png` (same filename) into
+  `store/images/`, rebuild the store-assets image and restart the WordPress pod.
+  No code changes: the generator keeps existing files, and the seeder attaches
+  what the catalog references. To push new copy/prices, edit `store/products.json`,
+  then either re-run seeding (new/changed SKUs are created) or set
+  `wpSetup.seedForce: "1"` for one upgrade to overwrite everything.
+- **Payments.** Cash on delivery is the only enabled gateway and the checkout
+  default; product reviews are off; guest checkout is allowed.
+- **Verification.** `node scripts/verify-store.mjs` (pages, 12-tile grid, image
+  loads, fonts, hero geometry, mobile overflow + overlay menu, add-to-cart,
+  third-party + console, 12 screenshots into `artifacts/store/`) and
+  `node scripts/verify-store-contrast.mjs` (WCAG rest/hover/focus, zero failures).
 
 ## Submission (when ready)
 

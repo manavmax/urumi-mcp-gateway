@@ -24,6 +24,7 @@ See `docs/01_ARCHITECTURE.md` for diagrams and request flows.
 | Auth domains | Gateway keys (argon2id+sha lookup) ≠ upstream creds (Fernet encrypted) | Upstream never sees user keys; compromise isolation; extra crypto code. |
 | DB | Postgres over SQLite | Concurrent audit writes + multi-replica safe + partitioning; heavier than SQLite single-file. |
 | LLM | `gpt-4o-mini` swappable to Anthropic/Ollama | Cheap tool calling; abstract provider so free/local fallback is one env var. |
+| Storefront | Standalone block theme + store-assets image + by-SKU seeding (ADR-037..040) | Zero third-party requests (self-hosted fonts, hooks removed) and a values-driven image/initContainer copy survive PVC reuse; seeding protects admin edits unless `seedForce=1`; block cart/checkout kept and restyled so no field is hidden or reordered and COD stays default. |
 
 ## Production Deltas (local → VPS)
 

@@ -460,3 +460,91 @@ classified and handled:
    (unchecked track = `rgba(20,23,28,.1)`). The parity selector now pins
    `.switch input:checked + .track` so both sides deterministically sample the
    enabled state. The track token values themselves are unchanged and correct.
+
+## 2026-10-19: Storefront redesign - standalone block theme urumi-store (ADR-037)
+
+**Decision.** The storefront is a STANDALONE WordPress block theme, `wp-content/
+themes/urumi-store/`, with no parent theme, shipped in the new store-assets image.
+
+**Why standalone.** The stock image is WordPress 6.6, which does not ship Twenty
+Twenty-Five (it ships Twenty Twenty-Two/Three/Four). A child theme of any of those
+would inherit a different token system and a `theme.json` merge fight; the redesign
+needs its own token family (the same one the dashboard uses: ink #14171C, greige
+page, Dusk gradient, 12/24/40/999 radii, layered shadows). A standalone block theme
+with `theme.json` (version 3) plus block templates/parts/patterns expresses ~90% of
+the design with zero custom CSS for the layout; `assets/styles.css` carries only
+what blocks cannot (nav, tile hover, cart/checkout restyle, motion, responsive).
+
+**Why not a classic theme.** The store must keep the WooCommerce BLOCK cart and
+checkout (restyled, not replaced: no field hidden, reordered or removed, COD stays
+default), and block templates give per-template control (front page, shop, category
+tint pages, product, cart, checkout, search, 404, order received, my account)
+without PHP template sprawl.
+
+**Fonts.** Instrument Serif (display) + Inter variable (UI), both OFL, self-hosted
+woff2 latin subsets inside `theme/assets/fonts/`, taken from the official
+fontsource release packages (fontsource is the same upstream glyph data with
+stable file naming and ready-made latin subsets - one-line justification for the
+choice of source). `font-display: swap` in theme.json, the display font is
+preloaded in `wp_head`, and no font request leaves the origin.
+
+## 2026-10-19: Storefront delivery - store-assets image + initContainer copy (ADR-038)
+
+**Decision.** A new static image `store-assets` (built from `store/`: theme +
+`products.json` + images; repo/tag values-driven, `ghcr.io/urumi/store-assets` in
+prod, `urumi/store-assets` local via `make store-assets-image`) is copied into the
+wp-content volume by an initContainer on EVERY WordPress pod start.
+
+**Why the copy is mandatory.** The official WordPress image only populates
+wp-content on the FIRST start of an empty volume; an existing PVC is never
+refreshed from the image. Without an explicit copy step every redeploy would
+silently run the previous theme. The copy is idempotent and copies directory
+CONTENTS (`cp -rf src/. dst/`): a plain `cp -rf src dst` NESTS the tree when dst
+already exists, which leaves a stale theme live beside the new one (observed and
+fixed during this pass). Files are chowned 33:33 (www-data) to match the volume.
+
+**Security posture.** The initContainer runs as root with CHOWN/DAC_OVERRIDE/FOWNER
+only (the wp-content volume is www-data-owned; documented because the main
+wordpress container also needs the same relaxation, so no NEW relaxation was
+introduced). The image contains no secrets and no code that runs at runtime.
+
+## 2026-10-19: Storefront seeding - idempotent by SKU, admin edits protected (ADR-039)
+
+**Decision.** `store/products.json` is the single source of truth. The wp-setup
+Job seeds through wp-cli/PHP BY SKU: create missing products, attach the catalog
+image (temp-copy sideload into the media library), set the category, and mirror
+the `new` flag to the WooCommerce featured flag (featured == new on this store).
+
+**Re-run semantics.** On a re-run the seed never duplicates (SKU lookup via
+`wc_get_product_id_by_sku`) and never overwrites admin edits (name, price, copy,
+image, categories are left as the admin set them) - only missing bits are
+backfilled (image when none, category when none, append-only so admin categories
+are never disturbed). `STORE_SEED_FORCE=1` (values `wpSetup.seedForce`) is the
+explicit operator path back to the catalog: it updates name/price/copy, re-attaches
+the catalog image and REPLACES the category terms exactly. Orders and customers are
+never touched by seeding. Proven live: second run reports
+`created=0 kept=12 updated=0 images=0 (force=0)`.
+
+**Seeded state.** The job also (idempotently) activates urumi-store, sets the front
+page and posts page, creates the About and Shipping and returns pages (honest copy:
+cash on delivery only, no carrier integration, demo notice in the footer), builds
+the Primary menu, sets USD, keeps COD enabled and default, disables reviews and
+enables guest checkout. Third-party calls (emoji script, gravatar, oEmbed, resource
+hints, external fonts) are removed at the theme level.
+
+## 2026-10-19: Orphan media reset runs in the wordpress pod, not via REST (ADR-040)
+
+**Decision.** The demo reset purges orphan media with `scripts/demo-reset-media.php`
+executed INSIDE the wordpress pod (`kubectl exec ... -- php`), driven by
+`scripts/demo-reset.sh`. An attachment is kept iff it is the featured thumbnail of
+one of the 12 seeded products (SKUs from store/products.json); everything else is
+deleted with `wp_delete_attachment(id, true)`.
+
+**Why not wp/v2/media.** The Woo consumer key cannot authenticate wp/v2 routes
+(verified live: the internal-rest mu-plugin marks /wp-json/ as HTTPS, WordPress
+then tries application-password auth, and `ck_...` is not a username -> 401
+invalid_username), and the F3 upload route deliberately has no delete endpoint
+(ADR-035: no delete tools, ever). Adding a second store credential (an application
+password) just for cleanup was rejected. The wordpress pod already owns the DB and
+the upload filesystem, so `wp_delete_attachment` there is the capability-scoped
+path; the reset keeps its local-kind guard (ADR-032) for the new exec.
