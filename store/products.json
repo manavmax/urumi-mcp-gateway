@@ -1,0 +1,144 @@
+{
+  "currency": "USD",
+  "note": "Single source of truth for the storefront catalog. The wp-setup job seeds by SKU and never overwrites admin edits unless STORE_SEED_FORCE=1. The image generator (scripts/gen-store-images.py) leaves existing <sku>.png files alone so the owner can drop in better photos without code changes.",
+  "categories": [
+    { "slug": "apparel", "name": "Apparel", "tint": "periwinkle" },
+    { "slug": "home", "name": "Home", "tint": "peach" },
+    { "slug": "accessories", "name": "Accessories", "tint": "lilac" },
+    { "slug": "stationery", "name": "Stationery", "tint": "sand" }
+  ],
+  "products": [
+    {
+      "sku": "URUMI-TEE-001",
+      "name": "Urumi Classic Tee",
+      "category": "Apparel",
+      "price": "29.99",
+      "short_description": "Heavyweight cotton tee with a relaxed fit.",
+      "description": "A heavyweight cotton tee in a relaxed fit with a clean crew neckline. The brushed fabric feels soft against the skin. Machine wash cold and tumble dry low.",
+      "image": "URUMI-TEE-001.png",
+      "alt": "Urumi Classic Tee, a heavyweight cotton t-shirt in a relaxed fit",
+      "new": false
+    },
+    {
+      "sku": "URUMI-HOODIE-001",
+      "name": "Urumi Hoodie",
+      "category": "Apparel",
+      "price": "59.99",
+      "short_description": "Fleece-lined hoodie with a kangaroo pocket.",
+      "description": "A fleece-lined hoodie with a comfortable kangaroo pocket and a drawstring hood. The cotton blend keeps its shape after many washes. Layer it over anything.",
+      "image": "URUMI-HOODIE-001.png",
+      "alt": "Urumi Hoodie, a fleece-lined hoodie with a kangaroo pocket",
+      "new": false
+    },
+    {
+      "sku": "102938",
+      "name": "Urumi Shoes",
+      "category": "Apparel",
+      "price": "149.99",
+      "short_description": "Everyday sneakers in a minimalist white.",
+      "description": "Everyday sneakers in a clean minimalist silhouette. The cotton-lined upper and rubber outsole keep the build simple. A versatile pair for daily wear.",
+      "image": "102938.png",
+      "alt": "Urumi Shoes, minimalist white everyday sneakers",
+      "new": false
+    },
+    {
+      "sku": "URUMI-CAP-001",
+      "name": "Urumi Cap",
+      "category": "Apparel",
+      "price": "24.00",
+      "short_description": "Six-panel cap in a sturdy cotton twill.",
+      "description": "A six-panel cap with an adjustable strap at the back. The cotton twill keeps its shape and the curved brim sits low. One size fits most.",
+      "image": "URUMI-CAP-001.png",
+      "alt": "Urumi Cap, a six-panel cap in cotton twill",
+      "new": true
+    },
+    {
+      "sku": "URUMI-MUG-001",
+      "name": "Ceramic Mug",
+      "category": "Home",
+      "price": "18.00",
+      "short_description": "Hand-glazed ceramic mug, 12 oz.",
+      "description": "A hand-glazed ceramic mug with a comfortable handle. Each one carries its own glaze pattern, so no two are alike. Dishwasher safe.",
+      "image": "URUMI-MUG-001.png",
+      "alt": "Ceramic Mug, a hand-glazed ceramic mug",
+      "new": true
+    },
+    {
+      "sku": "URUMI-CANDLE-001",
+      "name": "Scented Candle",
+      "category": "Home",
+      "price": "22.00",
+      "short_description": "Soy wax candle with a sandalwood scent.",
+      "description": "A soy wax candle with a soft sandalwood and cedar fragrance. Poured into a recyclable glass jar with a cotton wick. A calm addition to any room.",
+      "image": "URUMI-CANDLE-001.png",
+      "alt": "Scented Candle, a soy wax candle in a glass jar",
+      "new": true
+    },
+    {
+      "sku": "URUMI-THROW-001",
+      "name": "Wool Throw",
+      "category": "Home",
+      "price": "64.00",
+      "short_description": "Woven wool throw, 50 by 60 inches.",
+      "description": "A woven wool throw with a soft hand feel and a neat fringe. Generous 50 by 60 inches so it drapes well over a sofa. Dry clean only.",
+      "image": "URUMI-THROW-001.png",
+      "alt": "Wool Throw, a woven wool throw blanket",
+      "new": true
+    },
+    {
+      "sku": "URUMI-TOTE-001",
+      "name": "Canvas Tote",
+      "category": "Accessories",
+      "price": "28.00",
+      "short_description": "Heavy canvas tote with an interior pocket.",
+      "description": "A heavy canvas tote with reinforced handles and one interior pocket. Roomy enough for a laptop and your daily carry. Spot clean only.",
+      "image": "URUMI-TOTE-001.png",
+      "alt": "Canvas Tote, a heavy canvas tote bag",
+      "new": true
+    },
+    {
+      "sku": "URUMI-BACKPACK-001",
+      "name": "Everyday Backpack",
+      "category": "Accessories",
+      "price": "89.00",
+      "short_description": "Waxed canvas backpack with padded straps.",
+      "description": "A waxed canvas backpack with padded straps and a simple two-compartment layout. The front pocket holds small items within easy reach. A dependable bag for work or weekends.",
+      "image": "URUMI-BACKPACK-001.png",
+      "alt": "Everyday Backpack, a waxed canvas backpack",
+      "new": true
+    },
+    {
+      "sku": "URUMI-BOTTLE-001",
+      "name": "Steel Water Bottle",
+      "category": "Accessories",
+      "price": "32.00",
+      "short_description": "Double-wall steel bottle with a matte finish.",
+      "description": "A double-wall steel bottle with a matte finish and a wide mouth. The loop cap clips neatly onto a bag. Hand wash only.",
+      "image": "URUMI-BOTTLE-001.png",
+      "alt": "Steel Water Bottle, a double-wall steel bottle",
+      "new": true
+    },
+    {
+      "sku": "URUMI-NOTEBOOK-001",
+      "name": "Hardcover Notebook",
+      "category": "Stationery",
+      "price": "14.00",
+      "short_description": "Lay-flat notebook with 192 pages.",
+      "description": "A hardcover notebook with 192 pages of smooth, fountain-pen friendly paper. The lay-flat binding keeps both hands free while you write. Ruled pages in a cloth-bound cover.",
+      "image": "URUMI-NOTEBOOK-001.png",
+      "alt": "Hardcover Notebook, a lay-flat hardcover notebook",
+      "new": true
+    },
+    {
+      "sku": "URUMI-PEN-001",
+      "name": "Pen Set",
+      "category": "Stationery",
+      "price": "12.00",
+      "short_description": "Two gel pens in a small canvas case.",
+      "description": "A set of two gel pens in a small canvas zip case. The black and navy inks write smoothly on any paper. A tidy everyday carry for the desk.",
+      "image": "URUMI-PEN-001.png",
+      "alt": "Pen Set, two gel pens in a canvas case",
+      "new": true
+    }
+  ]
+}
