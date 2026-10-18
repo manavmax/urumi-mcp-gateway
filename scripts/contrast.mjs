@@ -225,13 +225,25 @@ async function evaluateChatAttach(browser, role, theme, failures, counts, auth) 
     }
 
     // 4) Drag-over state: dragover over the composer must surface the ring.
-    await page.dispatchEvent(".composer", "dragover", { dataTransfer: { files: [] } });
+    await page.evaluate(() => {
+      const form = document.querySelector(".composer");
+      if (form) {
+        const dt = new DataTransfer();
+        form.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+      }
+    });
     await page.waitForTimeout(200);
     await evalState("attach-dragover");
 
     // 5) Client-side rejection: an oversized PNG and a GIF must both show the
     //    inline alert-error and never create a preview.
-    await page.dispatchEvent(".composer", "dragleave");
+    await page.evaluate(() => {
+      const form = document.querySelector(".composer");
+      if (form) {
+        const dt = new DataTransfer();
+        form.dispatchEvent(new DragEvent("dragleave", { bubbles: true, cancelable: true, dataTransfer: dt }));
+      }
+    });
     await page.setInputFiles(".composer input[type=file]", { name: "big.png", mimeType: "image/png", buffer: Buffer.concat([TINY_PNG, Buffer.alloc(5 * 1024 * 1024 + 1, 0)]) });
     await page.waitForTimeout(200);
     await evalState("attach-reject-oversize");

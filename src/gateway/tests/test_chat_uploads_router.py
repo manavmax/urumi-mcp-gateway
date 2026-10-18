@@ -262,6 +262,8 @@ async def test_vision_unsupported_chain_gets_a_clear_message(monkeypatch, harnes
 
     class _S:
         openai_api_key = "test-key"
+        chat_max_messages = 40
+        chat_max_total_chars = 100000
 
         def model_chain(self):
             return ["gpt-3.5-turbo"]  # known text-only family
