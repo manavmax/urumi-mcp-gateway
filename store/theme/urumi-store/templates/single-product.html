@@ -1,0 +1,54 @@
+<!-- wp:template-part {"slug":"header","tagName":"header"} /-->
+
+<!-- wp:group {"tagName":"main","layout":{"type":"constrained"}} -->
+<main class="wp-block-group">
+	<!-- wp:woocommerce/breadcrumbs /-->
+	<!-- wp:woocommerce/store-notices /-->
+
+	<!-- wp:columns {"align":"wide","className":"urumi-pdp"} -->
+	<div class="wp-block-columns alignwide urumi-pdp">
+		<!-- wp:column {"width":"520px","className":"urumi-pdp__gallery"} -->
+		<div class="wp-block-column urumi-pdp__gallery" style="flex-basis:520px">
+			<!-- wp:woocommerce/product-image-gallery /-->
+		</div>
+		<!-- /wp:column -->
+
+		<!-- wp:column {"className":"urumi-pdp__info"} -->
+		<div class="wp-block-column urumi-pdp__info">
+			<!-- wp:urumi-store/new-badge /-->
+			<!-- wp:post-title {"level":1,"className":"urumi-pdp__title","__woocommerceNamespace":"woocommerce/product-query/product-title"} /-->
+			<!-- wp:woocommerce/product-price {"isDescendentOfSingleProductTemplate":true,"className":"urumi-pdp__price"} /-->
+			<!-- wp:post-excerpt {"__woocommerceNamespace":"woocommerce/product-query/product-summary","excerptLength":100,"className":"urumi-pdp__excerpt"} /-->
+			<!-- wp:woocommerce/add-to-cart-form {"className":"urumi-pdp__form"} /-->
+		</div>
+		<!-- /wp:column -->
+	</div>
+	<!-- /wp:columns -->
+
+	<!-- wp:columns {"align":"wide"} -->
+	<div class="wp-block-columns alignwide">
+		<!-- wp:column -->
+		<div class="wp-block-column">
+			<!-- wp:woocommerce/product-details {"className":"urumi-details"} /-->
+		</div>
+		<!-- /wp:column -->
+		<!-- wp:column -->
+		<div class="wp-block-column">
+			<!-- wp:html -->
+			<details class="urumi-details urumi-accordion" open>
+				<summary>Shipping and returns</summary>
+				<div class="urumi-accordion__body">
+					<p>This demo store accepts cash on delivery only. There is no carrier integration, so delivery timing is illustrative. Read the full <a href="/shipping-and-returns/">shipping and returns policy</a> before you buy.</p>
+				</div>
+			</details>
+			<!-- /wp:html -->
+		</div>
+		<!-- /wp:column -->
+	</div>
+	<!-- /wp:columns -->
+
+	<!-- wp:pattern {"slug":"woocommerce-blocks/related-products","align":"wide"} /-->
+</main>
+<!-- /wp:group -->
+
+<!-- wp:template-part {"slug":"footer","tagName":"footer"} /-->

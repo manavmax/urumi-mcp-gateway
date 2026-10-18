@@ -1,0 +1,55 @@
+<!-- wp:group {"tagName":"header","area":"header","className":"urumi-site-header","layout":{"type":"constrained"}} -->
+<header class="wp-block-group urumi-site-header">
+	<!-- wp:html -->
+	<div class="urumi-announce" role="note">
+		<p>Cash on delivery at checkout</p>
+	</div>
+	<!-- /wp:html -->
+
+	<!-- wp:group {"className":"urumi-nav","layout":{"type":"constrained"}} -->
+	<div class="wp-block-group urumi-nav">
+		<!-- wp:html -->
+		<a class="urumi-nav__logo" href="/" aria-label="Urumi home">
+			<span class="urumi-nav__logo-mark" aria-hidden="true">U</span>
+			<span class="urumi-nav__logo-word">Urumi</span>
+		</a>
+
+		<nav class="urumi-nav__links" aria-label="Primary">
+			<a href="/shop/">Shop</a>
+			<a href="/product-category/apparel/">Apparel</a>
+			<a href="/product-category/home/">Home</a>
+			<a href="/product-category/accessories/">Accessories</a>
+			<a href="/product-category/stationery/">Stationery</a>
+		</nav>
+
+		<div class="urumi-nav__actions">
+			<a class="urumi-nav__search" href="/?s=" aria-label="Search products" role="search">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+			</a>
+		</div>
+		<!-- /wp:html -->
+
+		<!-- wp:woocommerce/mini-cart {"addToCartBehaviour":"open_drawer"} /-->
+
+		<!-- wp:html -->
+		<input type="checkbox" id="urumi-menu-toggle" class="urumi-menu-toggle" autocomplete="off" />
+		<label class="urumi-menu-button" for="urumi-menu-toggle" aria-label="Open menu" aria-expanded="false">
+			<span></span><span></span><span></span>
+		</label>
+		<!-- /wp:html -->
+	</div>
+	<!-- /wp:group -->
+
+	<!-- wp:html -->
+	<nav class="urumi-menu-overlay" aria-label="Menu" aria-hidden="true">
+		<a href="/shop/">Shop</a>
+		<a href="/product-category/apparel/">Apparel</a>
+		<a href="/product-category/home/">Home</a>
+		<a href="/product-category/accessories/">Accessories</a>
+		<a href="/product-category/stationery/">Stationery</a>
+		<a href="/about/">About</a>
+		<a href="/shipping-and-returns/">Shipping and returns</a>
+	</nav>
+	<!-- /wp:html -->
+</header>
+<!-- /wp:group -->

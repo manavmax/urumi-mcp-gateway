@@ -1,0 +1,39 @@
+<!-- wp:template-part {"slug":"header","tagName":"header"} /-->
+
+<!-- wp:group {"tagName":"main","layout":{"type":"constrained"}} -->
+<main class="wp-block-group">
+	<!-- wp:group {"className":"urumi-archive-head","align":"full","layout":{"type":"constrained"}} -->
+	<div class="wp-block-group urumi-archive-head alignfull">
+		<!-- wp:query-title {"type":"search","showPrefix":false,"align":"wide"} /-->
+		<!-- wp:search {"label":"Search","placeholder":"Search products","buttonText":"Search","buttonPosition":"button-only","className":"urumi-search-form"} /-->
+		<!-- wp:html -->
+		<div class="urumi-filter-pills" role="navigation" aria-label="Shop by category">
+			<a class="urumi-pill" href="/shop/">All</a>
+			<a class="urumi-pill" href="/product-category/apparel/">Apparel</a>
+			<a class="urumi-pill" href="/product-category/home/">Home</a>
+			<a class="urumi-pill" href="/product-category/accessories/">Accessories</a>
+			<a class="urumi-pill" href="/product-category/stationery/">Stationery</a>
+		</div>
+		<!-- /wp:html -->
+	</div>
+	<!-- /wp:group -->
+
+	<!-- wp:query {"queryId":1,"query":{"perPage":12,"pages":0,"offset":0,"postType":"product","order":"asc","orderBy":"title","search":"","exclude":[],"sticky":"","inherit":true},"tagName":"div","layout":{"type":"flex","columns":4,"flexWrap":"wrap"}} -->
+	<div class="wp-block-query alignwide">
+		<!-- wp:post-template {"layout":{"type":"grid","columnCount":4}} -->
+			<!-- wp:woocommerce/product-image {"imageSizing":"full","isDescendentOfQueryLoop":true,"className":"urumi-tile-media"} /-->
+			<!-- wp:post-title {"level":3,"isLink":true,"fontSize":"medium","className":"urumi-tile-name"} /-->
+			<!-- wp:post-excerpt {"className":"urumi-tile-desc"} /-->
+			<!-- wp:woocommerce/product-price {"isDescendentOfQueryLoop":true,"className":"urumi-tile-price"} /-->
+		<!-- /wp:post-template -->
+		<!-- wp:query-no-results -->
+			<!-- wp:paragraph {"placeholder":"No results"} -->
+			<p class="urumi-empty">No products matched your search.</p>
+			<!-- /wp:paragraph -->
+		<!-- /wp:query-no-results -->
+	</div>
+	<!-- /wp:query -->
+</main>
+<!-- /wp:group -->
+
+<!-- wp:template-part {"slug":"footer","tagName":"footer"} /-->
