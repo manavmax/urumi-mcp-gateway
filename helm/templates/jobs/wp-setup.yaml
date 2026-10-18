@@ -266,9 +266,13 @@ spec:
                   $ck = isset( $_SERVER['PHP_AUTH_USER'] ) ? wp_unslash( $_SERVER['PHP_AUTH_USER'] ) : '';
                   $cs = isset( $_SERVER['PHP_AUTH_PW'] ) ? wp_unslash( $_SERVER['PHP_AUTH_PW'] ) : '';
                   if ( '' === $ck && ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
-                      $decoded = base64_decode( substr( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], 6 ), true );
-                      if ( false !== $decoded && false !== strpos( $decoded, ':' ) ) {
-                          list( $ck, $cs ) = explode( ':', $decoded, 2 );
+                      // Only ever decode a Basic scheme header (case-insensitive); anything
+                      // else (Bearer, Digest, ...) is ignored, never base64-decoded.
+                      if ( 0 === stripos( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], 'Basic ' ) ) {
+                          $decoded = base64_decode( substr( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], 6 ), true );
+                          if ( false !== $decoded && false !== strpos( $decoded, ':' ) ) {
+                              list( $ck, $cs ) = explode( ':', $decoded, 2 );
+                          }
                       }
                   }
                   if ( '' === $ck || '' === $cs || 0 !== strpos( $ck, 'ck_' ) ) {
@@ -296,6 +300,12 @@ spec:
               }
 
               function urumi_media_upload_permission() {
+                  // Cluster-internal only: ingress-nginx ALWAYS adds X-Forwarded-For and
+                  // X-Real-IP, so a request carrying either proves it came through the
+                  // public Ingress. The woo-mcp in-cluster call adds neither header.
+                  if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) || ! empty( $_SERVER['HTTP_X_REAL_IP'] ) ) {
+                      return new WP_Error( 'urumi_media_ingress', 'forbidden', array( 'status' => 403 ) );
+                  }
                   // determine_current_user (priority 10) has already authenticated the existing
                   // woo-secrets Basic pair; the permission callback enforces the capability. A
                   // read-only key is rejected during auth (it never sets a user), so POST with a
@@ -350,7 +360,9 @@ spec:
                   $att_id = media_handle_sideload( array( 'name' => $name, 'tmp_name' => $tmp ), 0 );
                   if ( is_wp_error( $att_id ) ) {
                       wp_delete_file( $tmp );
-                      return new WP_Error( 'urumi_media_sideload', $att_id->get_error_message(), array( 'status' => 502 ) );
+                      // Generic client message; the WP error detail is server-side only.
+                      error_log( 'urumi media sideload failed: ' . $att_id->get_error_message() );
+                      return new WP_Error( 'urumi_media_sideload', 'media sideload failed', array( 'status' => 502 ) );
                   }
 
                   return rest_ensure_response(
