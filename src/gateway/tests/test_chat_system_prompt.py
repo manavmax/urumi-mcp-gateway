@@ -79,7 +79,7 @@ async def test_route_accepts_tz_field(monkeypatch):
 
     import routes.chat as chat_route
 
-    monkeypatch.setattr(chat_route, "get_settings", lambda: SimpleNamespace(openai_api_key=""))
+    monkeypatch.setattr(chat_route, "get_settings", lambda: SimpleNamespace(openai_api_key="", chat_max_messages=40, chat_max_total_chars=100000))
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.post("/api/auth/login", json={"email": "tz-admin@urumi.local", "password": "tz-pass-123"})

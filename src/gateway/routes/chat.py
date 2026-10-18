@@ -84,8 +84,10 @@ async def expand_messages(db, user, raw_messages: list[dict]) -> tuple[list[dict
     from db.models import ChatUpload
     from sqlalchemy import select
 
+    settings = get_settings()
     msgs: list[dict] = []
     image_count = 0
+    total_chars = 0
     for m in raw_messages:
         if not isinstance(m, dict):
             continue
@@ -100,11 +102,22 @@ async def expand_messages(db, user, raw_messages: list[dict]) -> tuple[list[dict
                 {"detail": f"role '{role}' is not allowed: only user and assistant messages are accepted"},
                 status_code=400,
             )
+        if len(msgs) >= settings.chat_max_messages:
+            return None, JSONResponse(
+                {"detail": f"too many messages (at most {settings.chat_max_messages} per request)"},
+                status_code=400,
+            )
         if isinstance(content, str):
             # Text size cap; empty/whitespace-only messages are skipped (as before).
             if len(content) > MAX_TEXT_CHARS:
                 return None, JSONResponse(
                     {"detail": f"message text exceeds {MAX_TEXT_CHARS} characters"},
+                    status_code=400,
+                )
+            total_chars += len(content)
+            if total_chars > settings.chat_max_total_chars:
+                return None, JSONResponse(
+                    {"detail": f"request text exceeds {settings.chat_max_total_chars} characters in total"},
                     status_code=400,
                 )
             if content.strip():
@@ -137,6 +150,12 @@ async def expand_messages(db, user, raw_messages: list[dict]) -> tuple[list[dict
                         status_code=400,
                     )
                 if text:
+                    total_chars += len(text)
+                    if total_chars > settings.chat_max_total_chars:
+                        return None, JSONResponse(
+                            {"detail": f"request text exceeds {settings.chat_max_total_chars} characters in total"},
+                            status_code=400,
+                        )
                     parts.append({"type": "text", "text": text})
             elif ptype == "image_upload":
                 upload_id = part.get("upload_id")
@@ -158,7 +177,7 @@ async def expand_messages(db, user, raw_messages: list[dict]) -> tuple[list[dict
                 expires = row.expires_at.replace(tzinfo=UTC) if row.expires_at and row.expires_at.tzinfo is None else row.expires_at
                 if expires and expires <= datetime.now(UTC):
                     return None, JSONResponse(
-                        {"detail": "that upload has expired (uploads live 15 minutes) — attach the image again"},
+                        {"detail": "that upload has expired (uploads live 15 minutes). Attach the image again"},
                         status_code=410,
                     )
                 image_count += 1

@@ -104,7 +104,7 @@ export default function Chat() {
       return;
     }
     if (file.size > IMAGE_MAX_BYTES) {
-      setImgErr("Image is too large — the limit is 5 MB.");
+      setImgErr("Image is too large. The limit is 5 MB.");
       return;
     }
     setImgErr("");

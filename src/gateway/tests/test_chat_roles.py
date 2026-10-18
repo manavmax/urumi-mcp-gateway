@@ -26,6 +26,11 @@ from sqlalchemy.pool import StaticPool
 
 ADMIN = {"email": "admin-roles@urumi.local", "password": "admin-roles-pass-123"}
 
+# D3 request-level caps come from the settings module; tests that stub
+# get_settings need the caps (plus a non-empty openai_api_key is irrelevant here
+# because the stub is used to short-circuit the LLM call).
+STUB_SETTINGS = SimpleNamespace(openai_api_key="", chat_max_messages=40, chat_max_total_chars=100000)
+
 
 @pytest.fixture()
 async def harness():
@@ -82,7 +87,7 @@ async def test_chat_accepts_user_and_assistant_roles(harness, monkeypatch):
     """Legitimate history (user + assistant turns) is accepted."""
     import routes.chat as chat_route
 
-    monkeypatch.setattr(chat_route, "get_settings", lambda: SimpleNamespace(openai_api_key=""))
+    monkeypatch.setattr(chat_route, "get_settings", lambda: STUB_SETTINGS)
     app = harness
     async with _client(app) as (client, headers):
         r = await client.post(
@@ -100,7 +105,7 @@ async def test_chat_accepts_user_and_assistant_roles(harness, monkeypatch):
 @pytest.mark.asyncio
 async def test_chat_rejects_empty_messages(harness, monkeypatch):
     app = harness
-    monkeypatch.setattr("routes.chat.get_settings", lambda: SimpleNamespace(openai_api_key=""))
+    monkeypatch.setattr("routes.chat.get_settings", lambda: STUB_SETTINGS)
     async with _client(app) as (client, headers):
         r = await client.post("/api/chat/completions", headers=headers, json={"messages": []})
         assert r.status_code == 400, r.text
@@ -176,3 +181,61 @@ async def test_chat_rejects_too_many_parts(harness):
         )
         assert r.status_code == 400, r.text
         assert "too many message parts" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_too_many_messages(harness):
+    """D3 request cap: a single request may carry at most chat_max_messages turns."""
+    app = harness
+    async with _client(app) as (client, headers):
+        messages = [
+            {"role": "user" if i % 2 == 0 else "assistant", "content": f"turn {i}"}
+            for i in range(STUB_SETTINGS.chat_max_messages + 1)
+        ]
+        r = await client.post(
+            "/api/chat/completions",
+            headers=headers,
+            json={"messages": messages},
+        )
+        assert r.status_code == 400, r.text
+        assert "too many messages" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_request_total_chars_over_cap(harness):
+    """D3 request cap: total text across all messages may not exceed chat_max_total_chars."""
+    app = harness
+    async with _client(app) as (client, headers):
+        # 6 messages under the per-message cap but summing over the total cap.
+        chunk = "y" * 17000
+        r = await client.post(
+            "/api/chat/completions",
+            headers=headers,
+            json={"messages": [
+                {"role": "user", "content": chunk},
+                {"role": "assistant", "content": chunk},
+                {"role": "user", "content": chunk},
+                {"role": "assistant", "content": chunk},
+                {"role": "user", "content": chunk},
+                {"role": "assistant", "content": chunk},
+            ]},
+        )
+        assert r.status_code == 400, r.text
+        assert "in total" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_chat_accepts_normal_conversation_within_caps(harness):
+    """D3: a normal multi-turn conversation stays inside both request caps."""
+    app = harness
+    async with _client(app) as (client, headers):
+        messages = [
+            {"role": "user" if i % 2 == 0 else "assistant", "content": f"turn {i} text"}
+            for i in range(8)
+        ]
+        r = await client.post(
+            "/api/chat/completions",
+            headers=headers,
+            json={"messages": messages},
+        )
+        assert r.status_code == 200, r.text

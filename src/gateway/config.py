@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     image_upload_max_bytes: int = 5 * 1024 * 1024
     chat_upload_ttl_seconds: int = 15 * 60
 
+    # D3 request-level caps on ONE chat request (expanded in expand_messages):
+    # at most chat_max_messages turns, and at most chat_max_total_chars total text
+    # characters across every message and text part in the request.
+    chat_max_messages: int = 40
+    chat_max_total_chars: int = 100000
+
     # CORS (dashboard dev)
     cors_allow_origins: str = ""
 

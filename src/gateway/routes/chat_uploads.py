@@ -64,7 +64,7 @@ async def upload_chat_image(
     verify_csrf(request)
     if not _check_upload_rate_limit(str(user.id)):
         return JSONResponse(
-            {"detail": "upload rate limit exceeded (10 per minute) — try again in a minute"},
+            {"detail": "upload rate limit exceeded (10 per minute). Try again in a minute"},
             status_code=429,
         )
     settings = get_settings()

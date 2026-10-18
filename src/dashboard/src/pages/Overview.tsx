@@ -371,12 +371,12 @@ export default function Overview() {
               {rate == null ? "n/a" : `${gaugeRate}%`}
             </text>
             <text x="100" y="106" textAnchor="middle" fontSize="10" fill="var(--chart-axis-label)" fontFamily="-apple-system, Segoe UI, Roboto, sans-serif">
-              {stats ? `${stats.audit.success} of ${stats.audit.calls} calls succeeded` : "—"}
+              {stats ? `${stats.audit.success} of ${stats.audit.calls} calls succeeded` : "-"}
             </text>
           </svg>
           <div className="stat-foot" style={{ justifyContent: "center" }}>
-            <span className="chip chip-danger"><Icon name="x-circle" />{stats ? `${stats.audit.errors} errors` : "—"}</span>
-            <span className="chip chip-neutral"><Icon name="clock" />{stats ? `p95 ${fmtMs(stats.audit.p95_ms)}` : "—"}</span>
+            <span className="chip chip-danger"><Icon name="x-circle" />{stats ? `${stats.audit.errors} errors` : "-"}</span>
+            <span className="chip chip-neutral"><Icon name="clock" />{stats ? `p95 ${fmtMs(stats.audit.p95_ms)}` : "-"}</span>
           </div>
         </div>
 
