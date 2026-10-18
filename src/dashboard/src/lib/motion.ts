@@ -2,7 +2,7 @@
    staggered 40ms in DOM order (first 8 cards), and the first 12 table rows
    fade in the same way. Pure CSS animations (styles.css keyframes); this hook
    only assigns the stagger delays exactly like the mockup script does. */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function useMockupMotion(dep: unknown) {
   useEffect(() => {
@@ -31,10 +31,13 @@ export function useCountUp(target: number, duration = 700, decimals = 0): number
   const [value, setValue] = useState(0);
   const rafRef = useRef<number>(0);
   const startRef = useRef<number>(0);
+  const prefersReduced = useMemo(
+    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
 
   useEffect(() => {
     if (target === 0) { setValue(0); return; }
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (prefersReduced) { setValue(target); return; }
 
     setValue(0);
@@ -50,7 +53,10 @@ export function useCountUp(target: number, duration = 700, decimals = 0): number
       }
     });
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [target, duration]);
+  }, [target, duration, prefersReduced, decimals]);
 
-  return value;
+  // Under reduced motion the FIRST render must already show the final value:
+  // rendering from state would paint a fake 0 for one frame before the effect
+  // commits, so return the target itself (never an intermediate count).
+  return prefersReduced ? target : value;
 }

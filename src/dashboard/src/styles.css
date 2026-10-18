@@ -313,7 +313,7 @@ details.tools[open] { border-radius: var(--r-inner); padding: 0; }
 .tool-item span { color: var(--text-muted); }
 
 /* ---------- note banner, invite, reveal, keybox (family F) ---------- */
-.note-banner { display: flex; gap: var(--s3); align-items: flex-start; background: var(--surface-2); border: 1px solid var(--hairline-strong); border-radius: var(--r-inner); padding: var(--s3) var(--s4); font-size: var(--t-sm); color: var(--text); }
+.note-banner { display: flex; gap: var(--s3); align-items: flex-start; background: var(--primary-tint); border: 1px solid var(--primary-tint); border-radius: var(--r-inner); padding: var(--s3) var(--s4); font-size: var(--t-sm); color: var(--text); }
 .note-banner .ic { color: var(--text); margin-top: 1px; }
 .note-banner b { color: var(--text); }
 .invite { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: flex-end; background: var(--surface-2); border: 1px solid var(--hairline); border-radius: var(--r-inner); padding: var(--s3) var(--s4); margin-bottom: var(--s4); }
@@ -463,9 +463,6 @@ details.tools[open] .tool-list, details.out[open] pre { animation: expand var(--
 .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); display: inline-block; vertical-align: middle; margin-left: 10px; animation: breathe 2.4s var(--ease) infinite; }
 .dot-pulse { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; flex: none; animation: breathe 2.8s var(--ease) infinite; }
 .shake-once { animation: shake 450ms var(--ease) 1 both; }
-.card.stat { transition: transform var(--dur-mid) var(--ease); }
-.card.stat:hover { transform: translateY(-2px); }
-.btn:active { transform: translateY(1px); }
 
 /* ---------- hover motion (FIX PASS F1-3, token-driven) ----------
    Tiles lift about 3px with a deeper shadow, hero tile drifts its gradient,
@@ -497,7 +494,7 @@ details.tools[open] .tool-list, details.out[open] pre { animation: expand var(--
 .hist-item { transition: transform var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease); }
 .hist-item:hover { transform: translateX(2px); }
 /* buttons: press scales down (mockup pressed state) */
-.btn:active, .send:active, .search-go:active, .icon-btn:active, .starter:active {
+.btn:active, .send:active, .search-go:active, .icon-btn:active, .starter:active, .seg button:active {
   transform: scale(var(--press-scale, 0.97));
 }
 .reveal.show { animation: slide-down var(--dur-mid) var(--ease) both; }
@@ -593,44 +590,17 @@ tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--ink); }
   .url, .err { max-width: none; white-space: normal; }
 }
 
-/* ---------- F1 item 3: hover motion (transform + opacity only,
-   token-driven durations/easing; shadows switch without transitioning) ---------- */
-.card { transition: transform var(--dur-mid) var(--ease); }
-.card:hover { transform: translateY(-3px); box-shadow: var(--shadow-pop); }
-/* hero tile: soft gradient drift via a ::after highlight that glides */
-.stat.hero { position: relative; overflow: hidden; }
-.stat.hero > * { position: relative; z-index: 1; }
-.stat.hero::after { content: ""; position: absolute; inset: -25%; background: radial-gradient(closest-side, var(--white-50), transparent 75%); opacity: 0; transform: translate(-18%, -18%); transition: opacity var(--dur-slow) var(--ease), transform var(--dur-slow) var(--ease); pointer-events: none; }
-.stat.hero:hover::after { opacity: .3; transform: translate(14%, 10%); }
-/* chart bars: opacity focus (the grow animation owns transform via
-   fill:both, so hover deepens/dims instead of scaling) */
-.bar, .cap { transition: opacity var(--dur-fast) var(--ease); }
-.bar:hover, .cap:hover { opacity: 1; }
-/* floating mini-cards / starter tiles / list rows */
-.float-chip, .starter, .hist-item { transition: transform var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease); }
-.float-chip:hover { transform: translateY(-2px); }
-.starter:hover { transform: translateY(-2px); }
-.hist-item:hover { transform: translateX(2px); }
-tbody tr { transition: transform var(--dur-fast) var(--ease); }
-tbody tr:hover { transform: translateX(2px); }
-/* buttons press */
-.btn:active, .send:active, .search-go:active, .theme-dot:active, .icon-btn:active { transform: scale(0.97); }
-
 /* reduced motion: kill everything, show final values immediately */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0 !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
-  /* F1-3: no hover/press transforms at all under reduced motion */
-  .card:hover, .stat.hero:hover::after, .float-chip:hover, .starter:hover,
-  .hist-item:hover, tbody tr:hover, .btn:active, .send:active,
-  .search-go:active, .theme-dot:active, .icon-btn:active { transform: none !important; }
   /* FIX PASS F1-3: hover and press must not move anything either */
   .row1 > .card:hover, .row2 > .card:hover, .row3 > .card:hover, .grid-4 > .card:hover,
   .activity-row > .card:hover, .ct-row > .card:hover, .card.stat:hover,
   .starter:hover, .float-chip:hover, .feed-row:hover, .hist-item:hover,
-  .btn:active, .send:active, .search-go:active, .icon-btn:active, .starter:active { transform: none !important; }
+  .btn:active, .send:active, .search-go:active, .icon-btn:active, .starter:active, .seg button:active { transform: none !important; }
   .stat.hero:hover::after { transform: none !important; }
 }
 body.rm *, body.rm *::before, body.rm *::after { animation-duration: .01ms !important; animation-delay: 0 !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
 body.rm .row1 > .card:hover, body.rm .row2 > .card:hover, body.rm .row3 > .card:hover, body.rm .grid-4 > .card:hover,
 body.rm .card.stat:hover, body.rm .starter:hover, body.rm .float-chip:hover,
-body.rm .feed-row:hover, body.rm .hist-item:hover, body.rm .btn:active { transform: none !important; }
+body.rm .feed-row:hover, body.rm .hist-item:hover, body.rm .btn:active, body.rm .seg button:active { transform: none !important; }

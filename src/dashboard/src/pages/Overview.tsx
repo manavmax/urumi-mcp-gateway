@@ -226,12 +226,12 @@ export default function Overview() {
             </g>
           </svg>
           <div className="stat-foot">
-            <span className="small muted">{stats?.audit.errors ?? 0} errors</span>
+            <span className="small muted">{stats ? `${stats.audit.errors} errors` : <span className="sk" style={{ width: 60 }} />}</span>
           </div>
         </div>
         <div className="card stat">
           <div className="stat-label">p95 latency, {windowDays} days</div>
-          <div className="stat-num">{p95.value}<span className="stat-unit">{p95.unit}</span></div>
+          <div className="stat-num">{stats ? <>{p95.value}<span className="stat-unit">{p95.unit}</span></> : <span className="sk num" style={{ width: 72 }} />}</div>
           <svg width="100%" height="34" viewBox="0 0 140 34" preserveAspectRatio="none" role="img" aria-label="Line squiggle of p95 latency">
             <title>p95 latency trend (live data)</title>
             {perDay.length > 1 && (
@@ -255,14 +255,14 @@ export default function Overview() {
             )}
           </svg>
           <div className="stat-foot">
-            <span className="chip chip-neutral">p50 {fmtMs(stats?.audit.p50_ms ?? 0)}</span>
+            <span className="chip chip-neutral">{stats ? `p50 ${fmtMs(stats.audit.p50_ms)}` : <span className="sk chip" />}</span>
           </div>
         </div>
         <div className="card stat">
           <div className="tint-circle" style={{ background: "var(--lilac)" }}><Icon name="server" /></div>
           <div className="stat-label">Servers connected</div>
-          <div className="stat-num">{connectedCount} <span className="stat-unit">of {servers.length}</span></div>
-          <div className="small muted">{unreachable} unreachable, {disabled} disabled</div>
+          <div className="stat-num">{stats ? <>{connectedCount} <span className="stat-unit">of {servers.length}</span></> : <span className="sk num" style={{ width: 120 }} />}</div>
+          <div className="small muted">{stats ? `${unreachable} unreachable, ${disabled} disabled` : <span className="sk" style={{ width: 140 }} />}</div>
         </div>
       </section>
 
@@ -371,12 +371,12 @@ export default function Overview() {
               {rate == null ? "n/a" : `${gaugeRate}%`}
             </text>
             <text x="100" y="106" textAnchor="middle" fontSize="10" fill="var(--chart-axis-label)" fontFamily="-apple-system, Segoe UI, Roboto, sans-serif">
-              {stats?.audit.success ?? 0} of {stats?.audit.calls ?? 0} calls succeeded
+              {stats ? `${stats.audit.success} of ${stats.audit.calls} calls succeeded` : "—"}
             </text>
           </svg>
           <div className="stat-foot" style={{ justifyContent: "center" }}>
-            <span className="chip chip-danger"><Icon name="x-circle" />{stats?.audit.errors ?? 0} errors</span>
-            <span className="chip chip-neutral"><Icon name="clock" />p95 {fmtMs(stats?.audit.p95_ms ?? 0)}</span>
+            <span className="chip chip-danger"><Icon name="x-circle" />{stats ? `${stats.audit.errors} errors` : "—"}</span>
+            <span className="chip chip-neutral"><Icon name="clock" />{stats ? `p95 ${fmtMs(stats.audit.p95_ms)}` : "—"}</span>
           </div>
         </div>
 
@@ -452,9 +452,15 @@ export default function Overview() {
         <div className="card stat">
           <div className="card-title" style={{ fontSize: "var(--t-md)" }}>Fleet status</div>
           <div className="stat-foot" style={{ marginTop: 8 }}>
-            <span className="chip chip-ok"><span className="dot-pulse" aria-hidden="true"></span>{connected} Connected</span>
-            <span className="chip chip-danger"><Icon name="x-circle" />{unreachable} Unreachable</span>
-            <span className="chip chip-warn"><Icon name="pause" />{disabled} Disabled</span>
+            {stats ? (
+              <>
+                <span className="chip chip-ok"><span className="dot-pulse" aria-hidden="true"></span>{connected} Connected</span>
+                <span className="chip chip-danger"><Icon name="x-circle" />{unreachable} Unreachable</span>
+                <span className="chip chip-warn"><Icon name="pause" />{disabled} Disabled</span>
+              </>
+            ) : (
+              <span className="sk chip" style={{ width: 220 }} />
+            )}
           </div>
           {servers.filter((s) => s.status !== "Connected" || !s.enabled).map((s) => (
             <div className="feed-row" style={{ marginTop: 8 }} key={s.id}>
