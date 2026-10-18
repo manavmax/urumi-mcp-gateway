@@ -33,6 +33,7 @@ esac
 case "$*" in
   *"-l app=gateway"*) echo "urumi-gateway-stub-1" ;;
   *"-l app=woo-mcp"*) echo "urumi-woo-mcp-stub-1" ;;
+  *"-l app=wordpress"*) echo "urumi-wordpress-stub-1" ;;
   exec*)
     # the exec'd container decides which worker this is (-c woo-mcp vs -c gateway)
     worker=gateway

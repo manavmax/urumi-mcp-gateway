@@ -50,12 +50,14 @@ spec:
             - |
               set -eu
               echo "Copying store assets (theme + catalog + images) into wp-content..."
-              mkdir -p /var/www/html/wp-content/themes /var/www/html/wp-content/store
-              # -f refreshes an existing volume: the official WordPress image does
-              # NOT refresh an existing wp-content volume, so this copy is mandatory.
-              cp -rf /assets/themes/urumi-store /var/www/html/wp-content/themes/urumi-store
+              mkdir -p /var/www/html/wp-content/themes/urumi-store /var/www/html/wp-content/store/images
+              # Copy the CONTENTS (trailing /.): cp src dest NESTS when dest already
+              # exists, which would leave a stale theme on the volume. The official
+              # WordPress image does NOT refresh an existing wp-content volume, so
+              # this copy is mandatory on every pod start.
+              cp -rf /assets/themes/urumi-store/. /var/www/html/wp-content/themes/urumi-store/
               cp -f /assets/products.json /var/www/html/wp-content/store/products.json
-              cp -rf /assets/images /var/www/html/wp-content/store/images
+              cp -rf /assets/images/. /var/www/html/wp-content/store/images/
               chown -R 33:33 /var/www/html/wp-content/themes/urumi-store /var/www/html/wp-content/store 2>/dev/null || true
               echo "store assets copied."
           volumeMounts:

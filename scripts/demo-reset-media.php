@@ -24,7 +24,9 @@
 $dry_run = getenv( 'MEDIA_DRY_RUN' ) === '1';
 
 if ( ! defined( 'ABSPATH' ) ) {
-    require dirname( __DIR__, 2 ) . '/wp-load.php'; // <html>/wp-load.php relative to wp-content
+    // Runs from stdin inside the wordpress pod (kubectl exec ... -- php): the
+    // official image keeps WordPress at /var/www/html.
+    require '/var/www/html/wp-load.php';
 }
 
 if ( ! function_exists( 'wc_get_product_id_by_sku' ) ) {

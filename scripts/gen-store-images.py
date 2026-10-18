@@ -288,7 +288,7 @@ def render_product(sku: str, transparent: bool) -> Image.Image:
 
 
 def main() -> int:
-    with open(PRODUCTS_JSON, "r", encoding="utf-8") as fh:
+    with open(PRODUCTS_JSON, encoding="utf-8") as fh:
         data = json.load(fh)
     os.makedirs(OUT_DIR, exist_ok=True)
     total_tiles = 0

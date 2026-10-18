@@ -645,7 +645,10 @@ spec:
               wp option update woocommerce_enable_reviews no --allow-root --path=$WP_PATH
               wp option update woocommerce_enable_review_rating no --allow-root --path=$WP_PATH
               wp option update woocommerce_enable_guest_checkout yes --allow-root --path=$WP_PATH
-              wp option update show_avatars 0 --allow-root --path=$WP_PATH
+              # show_avatars: the theme already filters option_show_avatars; the option
+              # write is belt and braces and wp-cli errors when the value is unchanged,
+              # so it must not be able to fail the whole job.
+              wp option update show_avatars 0 --allow-root --path=$WP_PATH || true
               echo "WooCommerce store options set (USD, COD default, reviews off, guest checkout on)."
 
               echo "Final product list:"
