@@ -6,6 +6,7 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "./icons";
+import { NotificationBell } from "./Notifications";
 import { useAuth } from "../lib/auth";
 import { initials, useSearch } from "../lib/search";
 import { useSharedTheme } from "../lib/theme";
@@ -72,10 +73,7 @@ export function Topbar() {
           onChange={(e) => setQuery(e.target.value)}
         />
       </label>
-      <button className="icon-btn" type="button" aria-label="Notifications">
-        <Icon name="bell" />
-        <span className="dot"></span>
-      </button>
+      <NotificationBell />
       <div className="user-menu">
         <button type="button" aria-label="Account menu">
           <div className="avatar">{initials(user?.email)}</div>

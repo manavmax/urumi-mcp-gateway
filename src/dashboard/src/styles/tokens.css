@@ -46,6 +46,8 @@
   /* Shadows: very soft and layered; hover may lift slightly, never harden */
   --shadow-card: 0 1px 2px rgba(20, 23, 28, 0.04), 0 10px 30px rgba(20, 23, 28, 0.05);
   --shadow-pop: 0 2px 4px rgba(20, 23, 28, 0.05), 0 16px 40px rgba(20, 23, 28, 0.10);
+  /* Deeper shadow under a lifted (hovered) tile */
+  --shadow-lift: 0 2px 4px rgba(20, 23, 28, 0.06), 0 18px 44px rgba(20, 23, 28, 0.11);
   /* Spacing: 20px grid, 20px gaps, 24px card padding */
   --gap: 20px;
   --pad: 24px;
@@ -76,6 +78,10 @@
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --stagger: 40ms;
   --stagger-rail: 20ms;
+  /* Hover motion (FIX PASS F1-3): tiles lift a little with a deeper shadow,
+     buttons press down; all transform/box-shadow values are token-driven. */
+  --lift: -3px;
+  --press-scale: 0.97;
   /* Rail intent timing: 80ms delay before expanding, 150ms after the pointer
      leaves before collapsing. */
   --rail-delay-open: 80ms;
@@ -200,6 +206,8 @@
   /* Shadows: softer, darker for dark surfaces */
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 10px 30px rgba(0, 0, 0, 0.30);
   --shadow-pop: 0 2px 4px rgba(0, 0, 0, 0.30), 0 16px 40px rgba(0, 0, 0, 0.50);
+  /* Deeper shadow under a lifted (hovered) tile */
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.32), 0 18px 44px rgba(0, 0, 0, 0.50);
   /* Chart tokens */
   --chart-bar: #6B7B9A;
   --chart-bar-err: #C08070;
@@ -308,6 +316,8 @@
   /* Shadows */
   --shadow-card: 0 1px 2px rgba(20, 23, 28, 0.04), 0 10px 30px rgba(20, 23, 28, 0.05);
   --shadow-pop: 0 2px 4px rgba(20, 23, 28, 0.05), 0 16px 40px rgba(20, 23, 28, 0.10);
+  /* Deeper shadow under a lifted (hovered) tile */
+  --shadow-lift: 0 2px 4px rgba(20, 23, 28, 0.06), 0 18px 44px rgba(20, 23, 28, 0.11);
   /* Chart tokens */
   --chart-bar: #C9D2E2;
   --chart-bar-err: #EFC9C0;

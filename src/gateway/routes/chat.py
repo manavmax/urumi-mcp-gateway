@@ -18,6 +18,21 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 class ChatBody(BaseModel):
     messages: list[dict] = Field(default_factory=list)
+    tz: str | None = None
+
+
+def _valid_tz(name: str | None) -> str | None:
+    """Validate an IANA zone from the client; anything unknown falls back to None
+    (the prompt then simply carries no local-time stamp)."""
+    if not name or not isinstance(name, str) or len(name) > 64:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+
+        ZoneInfo(name)
+        return name
+    except Exception:
+        return None
 
 
 @router.post("/completions")
@@ -31,14 +46,23 @@ async def chat_completions(
     # run WRITE tools, so a cross-site POST must not ride the session cookie.
     # The dashboard already sends X-CSRF-Token on this call.
     verify_csrf(request)
-    # Validate messages shape
+    # Validate messages shape. FIX PASS F1-4: a client may send ONLY user and
+    # assistant roles - system and tool roles from the client are rejected so a
+    # caller cannot inject fake system text or forged tool results into the
+    # conversation (tool output is always produced server-side, inside the
+    # per-turn envelope in chat/agent.py).
     msgs = []
     for m in body.messages:
         if not isinstance(m, dict):
             continue
         role = m.get("role")
         content = m.get("content")
-        if role in ("user", "assistant", "system") and isinstance(content, str):
+        if role not in ("user", "assistant"):
+            return JSONResponse(
+                {"detail": f"role '{role}' is not allowed: only user and assistant messages are accepted"},
+                status_code=400,
+            )
+        if isinstance(content, str) and content.strip():
             msgs.append({"role": role, "content": content})
 
     if not msgs:
@@ -55,8 +79,10 @@ async def chat_completions(
 
     from chat.agent import chat_loop
 
+    tz = _valid_tz(body.tz)
+
     async def sse_gen():
-        async for evt in chat_loop(db, user, msgs, request_id):
+        async for evt in chat_loop(db, user, msgs, request_id, tz=tz):
             data = json.dumps(evt, default=str)
             yield f"data: {data}\n\n"
         yield "data: [DONE]\n\n"

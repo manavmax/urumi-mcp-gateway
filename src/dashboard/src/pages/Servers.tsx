@@ -138,21 +138,26 @@ export default function Servers() {
 
   useMockupMotion(loading);
 
+  /* Per-row tools expander. FIX PASS F1-7 root cause: the old code stored the
+     WHOLE grouped tool map, so opening one server also marked every other
+     server as open. Now the row toggle is keyed by the server's slug and only
+     that slug's filtered list is stored - other rows are untouched. */
   async function toggleTools(slug: string) {
     if (tools[slug]) {
-      const copy = { ...tools };
-      delete copy[slug];
-      setTools(copy);
+      setTools((prev) => {
+        const copy = { ...prev };
+        delete copy[slug];
+        return copy;
+      });
       return;
     }
     try {
       const res = await api.listTools();
-      const grouped: Record<string, Tool[]> = {};
-      for (const t of res.tools) {
+      const mine = res.tools.filter((t) => {
         const key = t.server_slug || (t.name.includes("__") ? t.name.split("__")[0] : "unknown");
-        (grouped[key] ||= []).push(t);
-      }
-      setTools(grouped);
+        return key === slug;
+      });
+      setTools((prev) => ({ ...prev, [slug]: mine }));
     } catch {
       /* tools stay collapsed when the probe fails */
     }

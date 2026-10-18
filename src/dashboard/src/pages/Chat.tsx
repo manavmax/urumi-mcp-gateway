@@ -1,8 +1,12 @@
 /* Chat, exact port of design/mockups/chat.html (family O) with the real SSE
    loop against POST /api/chat/completions: events model, token, tool_call,
    text, [DONE]; tool output is truncated at 2000 chars in the UI. The history
-   rail is the STAGE 1 decision: browser-only localStorage (last 20 sessions
-   per user, cleared on sign out), replacing the mockup's NEEDS DECISION note.
+   rail is the STAGE 1 decision: browser-only localStorage threads (FIX PASS
+   F1-4: one thread per conversation, the ACTIVE thread continues on send,
+   "New chat" or opening the page starts a new one, last 20 threads per user,
+   cleared on sign out). Assistant replies render through the safe markdown
+   renderer (FIX PASS F1-8); LLM error text is shown inline and never stored
+   in a thread.
 
    FIX 1: Supports prefill state from OverviewMember "Try in chat" cards:
    navigate("/chat", { state: { prefill: text } }) pre-fills the composer without
@@ -13,7 +17,8 @@ import { api } from "../lib/api";
 import { outcomeChip } from "../lib/audit-outcome";
 import { useAuth } from "../lib/auth";
 import { displayName } from "../lib/search";
-import { clearHistory, loadHistory, saveSession, type ChatSession, type ChatTurn } from "../lib/history";
+import { chatPayloadTurns, loadHistory, saveThread, type ChatThread } from "../lib/history";
+import { Markdown } from "../lib/markdown";
 import { useMockupMotion } from "../lib/motion";
 import { Icon } from "../components/icons";
 
@@ -59,11 +64,12 @@ export default function Chat() {
   const { user } = useAuth();
   const email = user?.email || "";
   const [messages, setMessages] = useState<Msg[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [servingModel, setServingModel] = useState<string | null>(null);
-  const [history, setHistory] = useState<ChatSession[]>([]);
+  const [history, setHistory] = useState<ChatThread[]>([]);
   const [histFilter, setHistFilter] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
@@ -93,13 +99,20 @@ export default function Chat() {
     return history.filter((h) => `${h.title} ${h.snippet}`.toLowerCase().includes(q));
   }, [history, histFilter]);
 
-  function loadSession(s: ChatSession) {
+  /* Clicking a thread restores the WHOLE conversation and continues it: the
+     next send appends to this thread id. */
+  function openThread(t: ChatThread) {
     setErr("");
-    setMessages(s.turns.map((t) => ({ role: t.role, content: t.content })));
+    setServingModel(null);
+    setActiveId(t.id);
+    setMessages(t.turns.map((turn) => ({ role: turn.role, content: turn.content })));
   }
 
+  /* Opening the chat page or pressing "New chat" always starts a new thread:
+     activeId goes back to null, so the next send creates a fresh thread. */
   function newChat() {
     setMessages([]);
+    setActiveId(null);
     setErr("");
     setServingModel(null);
   }
@@ -112,8 +125,15 @@ export default function Chat() {
     setMessages(next);
     setInput("");
     setBusy(true);
+    const threadId = activeId;
+    // Prior context: user and assistant text only (tool chips never go back),
+    // last 10 turns and a total size cap (see chatPayloadTurns).
+    const payload = chatPayloadTurns(next.filter((m): m is Msg & { role: "user" | "assistant" } => m.role !== "tool").map((m) => ({ role: m.role, content: m.content })));
+    // the browser's IANA zone: the server validates it and stamps the system
+    // prompt with the user's local "today" (FIX PASS F1-8)
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
     try {
-      const res = await api.chatCompletions(next.filter((m) => m.role !== "tool").map((m) => ({ role: m.role, content: m.content })));
+      const res = await api.chatCompletions(payload, tz);
       if (!res.ok) {
         const body = await res.text();
         throw new Error(body.slice(0, 500) || res.statusText);
@@ -123,6 +143,7 @@ export default function Chat() {
         const reader = res.body?.getReader();
         const decoder = new TextDecoder();
         let assistant = "";
+        let errorText = "";
         const commitAssistant = () =>
           setMessages((prev) => {
             const copy = [...prev];
@@ -142,10 +163,10 @@ export default function Chat() {
           for (const part of parts) {
             const line = part.trim();
             if (!line.startsWith("data:")) continue;
-            const payload = line.slice(5).trim();
-            if (payload === "[DONE]") break;
+            const sse = line.slice(5).trim();
+            if (sse === "[DONE]") break;
             try {
-              const evt = JSON.parse(payload);
+              const evt = JSON.parse(sse);
               if (evt.type === "model") {
                 setServingModel(evt.model || null);
               } else if (evt.type === "token") {
@@ -158,20 +179,30 @@ export default function Chat() {
                   tool: evt.tool || evt.name, outcome: evt.outcome || evt.status,
                 }]);
               } else if (evt.type === "text") {
-                const label = evt.category ? ` [${evt.category}]` : "";
-                assistant += (evt.content || "") + label;
-                commitAssistant();
+                // A category means an abnormal turn end (quota, timeout, write
+                // caveat...): show it inline, never store it in the thread.
+                if (evt.category) {
+                  errorText = evt.content || "The assistant could not finish this turn.";
+                  setErr(errorText);
+                } else {
+                  assistant += evt.content || "";
+                  commitAssistant();
+                }
               }
             } catch {
               /* ignore malformed SSE line */
             }
           }
         }
-        if (assistant) {
-          setHistory(saveSession(email, [
+        // Only a clean answer is committed to the thread; an error turn stays
+        // inline and is never saved as thread title or reply.
+        if (assistant && !errorText) {
+          const saved = saveThread(email, threadId, [
             { role: "user", content: prompt },
             { role: "assistant", content: assistant },
-          ]));
+          ]);
+          setActiveId(saved.id);
+          setHistory(saved.threads);
         }
       } else {
         const data = await res.json();
@@ -181,10 +212,12 @@ export default function Chat() {
           return { role: "tool" as const, content: out.text, truncated: out.truncated, tool: tc.tool, outcome: tc.outcome };
         });
         setMessages((prev) => [...prev, ...toolCalls, { role: "assistant", content: String(content) }]);
-        setHistory(saveSession(email, [
+        const saved = saveThread(email, threadId, [
           { role: "user", content: prompt },
           { role: "assistant", content: String(content) },
-        ]));
+        ]);
+        setActiveId(saved.id);
+        setHistory(saved.threads);
       }
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -256,7 +289,11 @@ export default function Chat() {
                   ) : (
                     <div className={`msg ${m.role}`}>
                       <div className={`avatar${m.role === "assistant" ? " ai" : ""}`}>{m.role === "assistant" ? "UR" : (email.slice(0, 2).toUpperCase() || "ME")}</div>
-                      {m.content ? <div className="bubble">{m.content}</div> : null}
+                      {m.content ? (
+                        m.role === "assistant"
+                          ? <div className="bubble"><Markdown text={m.content} /></div>
+                          : <div className="bubble">{m.content}</div>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -276,7 +313,7 @@ export default function Chat() {
           </form>
         </section>
 
-        {/* right-hand chat history panel */}
+        {/* right-hand chat history panel: one row per THREAD */}
         <aside className="history">
           <div className="card" style={{ padding: 16 }}>
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
@@ -289,11 +326,11 @@ export default function Chat() {
             </label>
             <div className="hist-list">
               {shownHistory.map((h) => (
-                <div className="hist-item" key={h.id} onClick={() => loadSession(h)} role="button" tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === "Enter") loadSession(h); }}>
+                <div className={`hist-item${h.id === activeId ? " on" : ""}`} key={h.id} onClick={() => openThread(h)} role="button" tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter") openThread(h); }}>
                   <b>{h.title}</b>
                   <span>{h.snippet || "No reply text"}</span>
-                  <span className="faint">{relTime(h.ts)}</span>
+                  <span className="faint">{h.count} messages · {relTime(h.ts)}</span>
                 </div>
               ))}
               {shownHistory.length === 0 && (
