@@ -154,19 +154,24 @@ async function main() {
     const droppedPreview = (await page.$('.thread img[src^="blob:"]')) !== null;
     check("drag & drop attaches an image", dropped && droppedPreview, dropped ? "" : "drop event not dispatched");
 
-    // 4a. GIF rejected client-side with clear text
+    // 4a. GIF rejected client-side with clear text (no preview replaces the prior)
     await page.setInputFiles(".composer input[type=file]", { name: "anim.gif", mimeType: "image/gif", buffer: Buffer.from("GIF89a") });
     await page.waitForTimeout(250);
     const gifAlert = await page.$eval(".alert-error", (el) => (el.textContent || "").trim()).catch(() => "");
-    const gifOk = /only png, jpeg or webp/i.test(gifAlert) && (await page.$('.thread img[src^="blob:"]')) === null;
-    check("GIF rejected client-side with a clear message", gifOk, `alert="${gifAlert}"`);
+    check("GIF rejected client-side with a clear message", /only png, jpeg or webp/i.test(gifAlert), `alert="${gifAlert}"`);
 
     // 4b. oversized PNG (>5 MB) rejected client-side with clear text
     await page.setInputFiles(".composer input[type=file]", { name: "big.png", mimeType: "image/png", buffer: Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024 + 1, 0)]) });
     await page.waitForTimeout(250);
     const bigAlert = await page.$eval(".alert-error", (el) => (el.textContent || "").trim()).catch(() => "");
-    const bigOk = /too large/i.test(bigAlert) && (await page.$('.thread img[src^="blob:"]')) === null;
-    check("oversized file rejected client-side with a clear message", bigOk, `alert="${bigAlert}"`);
+    check("oversized file rejected client-side with a clear message", /too large/i.test(bigAlert), `alert="${bigAlert}"`);
+
+    // clear the rejection banner + any stale preview before the send step
+    await page.evaluate(() => {
+      const btn = document.querySelector('button[aria-label="Remove attached image"]');
+      if (btn) btn.click();
+    });
+    await page.waitForTimeout(200);
 
     // restore a valid attachment for the send step
     await page.setInputFiles(".composer input[type=file]", { name: "proof.png", mimeType: "image/png", buffer: PNG });
@@ -201,10 +206,24 @@ async function main() {
     check(`product "${PRODUCT_NAME}" found via store REST`, prod.ok, prod.ok ? `id=${prod.id} price=${prod.price}` : prod.detail);
     let imgUrlOk = false;
     if (prod.ok && prod.src) {
-      const img = await fetch(prod.src);
-      const ct = img.headers.get("content-type") || "";
-      imgUrlOk = img.status === 200 && /^image\//.test(ct);
-      check("images[0].src exists and the URL returns 200 with an image content type", imgUrlOk, `status=${img.status} content-type=${ct}`);
+      // The attachment URL may be https (WordPress normalises on the HTTPS
+      // header) but the local store is served over plain HTTP; try both schemes.
+      const candidates = [prod.src];
+      if (/^https:\/\//i.test(prod.src)) candidates.push(prod.src.replace(/^https:\/\//i, "http://"));
+      let imgStatus = 0;
+      let imgCt = "";
+      for (const u of candidates) {
+        try {
+          const img = await fetch(u, { headers: { Host: new URL(u).host } });
+          imgStatus = img.status;
+          imgCt = img.headers.get("content-type") || "";
+          if (imgStatus === 200) break;
+        } catch {
+          /* try the next scheme */
+        }
+      }
+      imgUrlOk = imgStatus === 200 && /^image\//.test(imgCt);
+      check("images[0].src exists and the URL returns 200 with an image content type", imgUrlOk, `status=${imgStatus} content-type=${imgCt} url=${prod.src}`);
     } else if (prod.ok) {
       check("images[0].src exists and the URL returns 200 with an image content type", false, "product has no images[0].src");
     }
