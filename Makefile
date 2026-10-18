@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard verify-llm deploy test demo-reset
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard verify-llm deploy test demo-reset
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -99,6 +99,15 @@ demo-notes-image:
 	@echo "loaded urumi/demo-mcp-notes:0.1.0 into kind node"
 
 demo-images: demo-time-image demo-notes-image
+
+# Static storefront assets (theme + catalog + images). Local Kind: build and
+# import into the node; the WordPress pod's `store-assets` initContainer copies
+# them onto the wp-content volume on pod start, so restart wordpress after a
+# rebuild (`kubectl rollout restart deployment/urumi-wordpress -n urumi`).
+store-assets-image:
+	docker build -t urumi/store-assets:0.1.0 store
+	docker save urumi/store-assets:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	@echo "loaded urumi/store-assets:0.1.0 into kind node"
 
 # Verify both demo servers with a real MCP SDK ClientSession: list tools, call each,
 # and show the 401 the notes server returns without a token.

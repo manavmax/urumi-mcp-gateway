@@ -41,6 +41,32 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
             readOnlyRootFilesystem: true
+        {{- if .Values.storeAssets.enabled }}
+        - name: store-assets
+          image: "{{ .Values.storeAssets.image.repository }}:{{ .Values.storeAssets.image.tag }}"
+          imagePullPolicy: {{ .Values.storeAssets.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "Copying store assets (theme + catalog + images) into wp-content..."
+              mkdir -p /var/www/html/wp-content/themes /var/www/html/wp-content/store
+              # -f refreshes an existing volume: the official WordPress image does
+              # NOT refresh an existing wp-content volume, so this copy is mandatory.
+              cp -rf /assets/themes/urumi-store /var/www/html/wp-content/themes/urumi-store
+              cp -f /assets/products.json /var/www/html/wp-content/store/products.json
+              cp -rf /assets/images /var/www/html/wp-content/store/images
+              chown -R 33:33 /var/www/html/wp-content/themes/urumi-store /var/www/html/wp-content/store 2>/dev/null || true
+              echo "store assets copied."
+          volumeMounts:
+            - name: wp-content
+              mountPath: /var/www/html/wp-content
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: true
+            capabilities: { add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"] }
+        {{- end }}
       containers:
         - name: wordpress
           image: "{{ .Values.wordpress.image.repository }}:{{ .Values.wordpress.image.tag }}"

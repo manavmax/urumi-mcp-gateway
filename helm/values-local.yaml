@@ -59,6 +59,10 @@ demoNotes:
     requests: { cpu: 20m, memory: 128Mi }
     limits: { cpu: 200m, memory: 256Mi }
 
+# Local Kind: store-assets is built from store/ and imported by `make store-assets-image`.
+storeAssets:
+  image: { repository: urumi/store-assets, tag: "0.1.0", pullPolicy: Never }
+
 # --- Sizing for the 2-CPU kind node ---
 # `kind create` gives this node 2 allocatable cpu, and the workloads this chart does
 # NOT own (kube-apiserver, kube-controller-manager, kube-scheduler, etcd, 2x coredns,
