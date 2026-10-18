@@ -399,8 +399,8 @@ export default function Chat() {
             onDrop={(e) => { e.preventDefault(); setDragOver(false); attachImage(e.dataTransfer?.files?.[0]); }}>
             <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }}
               onChange={(e) => { attachImage(e.target.files?.[0]); e.currentTarget.value = ""; }} />
-            <button className="send" type="button" aria-label="Attach image" title="Attach an image (PNG, JPEG or WEBP, up to 5 MB)"
-              style={{ background: "var(--surface)" }} disabled={busy}
+            <button className="attach-btn" type="button" aria-label="Attach image" title="Attach an image (PNG, JPEG or WEBP, up to 5 MB)"
+              disabled={busy}
               onClick={() => fileInputRef.current?.click()}>
               <Icon name="image" />
             </button>
