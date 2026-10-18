@@ -106,6 +106,10 @@ spec:
               value: {{ .Values.gateway.health.intervalSeconds | default 5 | quote }}
             - name: HEALTH_TIMEOUT_SECONDS
               value: {{ .Values.gateway.health.timeoutSeconds | default 2 | quote }}
+            # F3: chat image upload byte cap (default 5 MB, validated by magic bytes
+            # and re-encoded with Pillow before anything is stored).
+            - name: IMAGE_UPLOAD_MAX_BYTES
+              value: {{ .Values.gateway.imageUploadMaxBytes | default 5242880 | quote }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:

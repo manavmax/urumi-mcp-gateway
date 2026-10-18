@@ -215,6 +215,155 @@ spec:
               PHP_EOF
               echo "mu-plugin installed."
 
+              echo "Installing product image sideload mu-plugin..."
+              cat > "$WP_PATH/wp-content/mu-plugins/urumi-image-upload.php" <<'PHP_EOF'
+              <?php
+              /**
+               * Plugin Name: Urumi - Product image sideload route
+               * Description: POST /wp-json/urumi/v1/media accepts {filename, image_base64} and
+               *              sideloads the bytes into the media library (media_handle_sideload).
+               *              Auth reuses the EXISTING WooCommerce consumer key/secret Basic pair:
+               *              WooCommerce's REST auth only processes its wc/* namespaces, so this
+               *              route authenticates the Basic pair itself on determine_current_user
+               *              (priority 10, BEFORE WordPress' application-password gate) with the
+               *              exact scheme WooCommerce stores keys under (wc_api_hash of the key,
+               *              hash_equals on the secret), rejects read-only keys for POST, binds
+               *              the request to the key's user, and enforces an upload_files
+               *              capability check. No new credential (docs/DECISIONS.md ADR-035).
+               *              There is deliberately NO delete route (no delete tools, ever).
+               */
+
+              if ( ! defined( 'ABSPATH' ) ) { exit; }
+
+              define( 'URUMI_IMAGE_MAX_BYTES', 5 * 1024 * 1024 ); // mirrors the gateway's 5 MB cap
+
+              add_action( 'rest_api_init', function () {
+                  register_rest_route( 'urumi/v1', '/media', array(
+                      'methods'             => 'POST',
+                      'permission_callback' => 'urumi_media_upload_permission',
+                      'callback'            => 'urumi_media_upload_handler',
+                  ) );
+              } );
+
+              // Authenticate the Woo consumer key BEFORE WP core's application-password gate:
+              // a Basic "ck_..." header is not a WP username, and with the internal-rest
+              // mu-plugin marking REST as HTTPS, WordPress would otherwise try to authenticate
+              // it as an application password and fail the request with invalid_username.
+              add_filter( 'determine_current_user', 'urumi_media_determine_user', 10 );
+
+              function urumi_media_determine_user( $user_id ) {
+                  if ( $user_id || ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
+                      return $user_id;
+                  }
+                  $path = isset( $_SERVER['REQUEST_URI'] ) ? wp_parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH ) : '';
+                  if ( 0 !== strpos( (string) $path, '/wp-json/urumi/' ) ) {
+                      return $user_id; // only our routes: ck/cs never authenticates anything else
+                  }
+                  return urumi_media_auth_user_id();
+              }
+
+              function urumi_media_auth_user_id() {
+                  $ck = isset( $_SERVER['PHP_AUTH_USER'] ) ? wp_unslash( $_SERVER['PHP_AUTH_USER'] ) : '';
+                  $cs = isset( $_SERVER['PHP_AUTH_PW'] ) ? wp_unslash( $_SERVER['PHP_AUTH_PW'] ) : '';
+                  if ( '' === $ck && ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+                      $decoded = base64_decode( substr( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], 6 ), true );
+                      if ( false !== $decoded && false !== strpos( $decoded, ':' ) ) {
+                          list( $ck, $cs ) = explode( ':', $decoded, 2 );
+                      }
+                  }
+                  if ( '' === $ck || '' === $cs || 0 !== strpos( $ck, 'ck_' ) ) {
+                      return 0;
+                  }
+
+                  global $wpdb;
+                  $row = $wpdb->get_row(
+                      $wpdb->prepare(
+                          "SELECT consumer_secret, permissions, user_id FROM {$wpdb->prefix}woocommerce_api_keys WHERE consumer_key = %s LIMIT 1",
+                          function_exists( 'wc_api_hash' ) ? wc_api_hash( $ck ) : hash_hmac( 'sha256', $ck, 'wc-api' )
+                      )
+                  );
+                  if ( ! $row || ! hash_equals( (string) $row->consumer_secret, $cs ) ) {
+                      return 0;
+                  }
+                  if ( 'write' !== $row->permissions && 'read_write' !== $row->permissions ) {
+                      return 0; // a read-only key must never upload
+                  }
+                  if ( ! $row->user_id ) {
+                      return 0; // a key not bound to a user cannot carry the capability
+                  }
+                  wp_set_current_user( (int) $row->user_id );
+                  return (int) $row->user_id;
+              }
+
+              function urumi_media_upload_permission() {
+                  // determine_current_user (priority 10) has already authenticated the existing
+                  // woo-secrets Basic pair; the permission callback enforces the capability. A
+                  // read-only key is rejected during auth (it never sets a user), so POST with a
+                  // read-only key cannot pass either.
+                  if ( ! is_user_logged_in() ) {
+                      return new WP_Error( 'urumi_media_auth', 'valid read/write consumer key required', array( 'status' => 401 ) );
+                  }
+                  if ( ! current_user_can( 'upload_files' ) ) {
+                      return new WP_Error( 'urumi_media_forbidden', 'capability denied', array( 'status' => 403 ) );
+                  }
+                  return true;
+              }
+
+              function urumi_media_upload_handler( WP_REST_Request $request ) {
+                  $b64 = (string) $request->get_param( 'image_base64' );
+                  if ( '' === $b64 ) {
+                      return new WP_Error( 'urumi_media_empty', 'image_base64 required', array( 'status' => 400 ) );
+                  }
+                  $bin = base64_decode( $b64, true );
+                  if ( false === $bin || '' === $bin ) {
+                      return new WP_Error( 'urumi_media_invalid', 'image_base64 is not valid base64', array( 'status' => 400 ) );
+                  }
+                  if ( strlen( $bin ) > URUMI_IMAGE_MAX_BYTES ) {
+                      return new WP_Error( 'urumi_media_too_large', 'image exceeds the 5 MB cap', array( 'status' => 413 ) );
+                  }
+
+                  if ( ! function_exists( 'media_handle_sideload' ) ) {
+                      require_once ABSPATH . 'wp-admin/includes/file.php';
+                      require_once ABSPATH . 'wp-admin/includes/image.php';
+                      require_once ABSPATH . 'wp-admin/includes/media.php';
+                  }
+
+                  // Magic bytes only: getimagesize() decodes the real header, ignoring the
+                  // client's claimed type/extension. WordPress' own media handling re-checks
+                  // against the allowed mime types as a second layer (SVG is not an allowed
+                  // upload type by default, so it cannot pass either layer).
+                  $tmp = wp_tempnam( 'urumi-upload' );
+                  if ( ! $tmp ) {
+                      return new WP_Error( 'urumi_media_tmp', 'cannot create temp file', array( 'status' => 500 ) );
+                  }
+                  file_put_contents( $tmp, $bin );
+                  $info = @getimagesize( $tmp );
+                  $mime = is_array( $info ) && ! empty( $info['mime'] ) ? $info['mime'] : '';
+                  if ( ! in_array( $mime, array( 'image/png', 'image/jpeg', 'image/webp' ), true ) ) {
+                      wp_delete_file( $tmp );
+                      return new WP_Error( 'urumi_media_type', 'only png, jpeg and webp are accepted', array( 'status' => 415 ) );
+                  }
+
+                  // Stored name is GENERATED here; the caller's filename is never used as-is.
+                  $ext  = array( 'image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp' )[ $mime ];
+                  $name = sanitize_file_name( 'urumi-' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 8, false ) . '.' . $ext );
+                  $att_id = media_handle_sideload( array( 'name' => $name, 'tmp_name' => $tmp ), 0 );
+                  if ( is_wp_error( $att_id ) ) {
+                      wp_delete_file( $tmp );
+                      return new WP_Error( 'urumi_media_sideload', $att_id->get_error_message(), array( 'status' => 502 ) );
+                  }
+
+                  return rest_ensure_response(
+                      array(
+                          'id'   => (int) $att_id,
+                          'url'  => wp_get_attachment_url( $att_id ),
+                          'mime' => get_post_field( 'post_mime_type', $att_id ),
+                      )
+                  );
+              }
+              PHP_EOF
+              echo "image mu-plugin installed."
+
               echo "Installing Woo pages..."
               wp wc tool run install_pages --user="$ADMIN_USER" --allow-root --path=$WP_PATH || true
 
