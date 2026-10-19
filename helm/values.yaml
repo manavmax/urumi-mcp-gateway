@@ -159,6 +159,12 @@ gateway:
   trustedProxies: ""
   # CORS: comma-separated allowed origins. Prod sets the https dashboard origin.
   corsAllowOrigins: ""
+  # Deployment progressDeadlineSeconds (default 300). With --atomic a bad upgrade
+  # surfaces at the deadline (the pod never becomes Ready, the Deployment flips to
+  # ProgressDeadlineExceeded and helm fails + rolls back), so a deliberate bad
+  # upgrade rehearsed with `--timeout 6m` finishes in about 6 minutes instead of
+  # the 10 the 600s default takes (docs/UPGRADE_ROLLBACK.md).
+  progressDeadlineSeconds: 300
   # LLM wiring for the chat assistant. No API key is ever committed here (the brief
   # forbids committed secrets): the chart renders a `gateway-llm` Secret whose key
   # OPENAI_API_KEY is looked up from the cluster and left EMPTY until an operator

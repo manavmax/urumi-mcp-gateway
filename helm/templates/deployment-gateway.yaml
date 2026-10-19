@@ -32,6 +32,9 @@ metadata:
 spec:
   strategy:
     type: Recreate
+  # Fails the rollout (and with --atomic triggers the rollback) when no progress for
+  # this long; value default 300 so a rehearsed bad upgrade + rollback lands in ~6m.
+  progressDeadlineSeconds: {{ .Values.gateway.progressDeadlineSeconds | default 300 }}
   replicas: 1
   selector:
     matchLabels:
