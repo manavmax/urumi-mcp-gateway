@@ -17,9 +17,12 @@ global:
   ingressClass: nginx
   storageClass: local-path    # k3s default storage class (values-driven)
   tlsEnabled: true
-  # k3s node/pod network CIDR (NetworkPolicy API-server egress). k3s default pod
-  # CIDR is 10.42.0.0/16; the gateway trusted-proxy CIDR below matches it.
-  nodeCIDR: 10.42.0.0/16
+  # k3s NODE network CIDR (NetworkPolicy API-server egress for the wp-setup job:
+  # on k3s the ClusterIP of the Kubernetes API DNATs to the node's 6443, so this
+  # must contain the NODE IP). EC2 default-VPC private range is 172.31.0.0/16;
+  # confirm on the box with `ip -4 addr show` and set the /16 that holds it
+  # (or narrow to <node-ip>/32). k3s defaults: pods 10.42.0.0/16, services 10.43.0.0/16.
+  nodeCIDR: 172.31.0.0/16
 
 ingress:
   enabled: true
@@ -47,7 +50,14 @@ gateway:
     pullPolicy: IfNotPresent
   replicas: 1                  # stateful pods stay at 1 (documented below)
   sessionCookieSecure: true
-  trustedProxies: "10.42.0.0/16"  # k3s pod CIDR (ingress-nginx sources) - real client IP
+  # k3s pod CIDR (10.42.0.0/16), not a single controller pod IP: ingress-nginx
+  # pods source from that range. Trusting it is safe because the chart's
+  # NetworkPolicy makes the ingress controller the ONLY thing that can reach the
+  # gateway's public port - every other in-cluster pod is denied ingress to the
+  # gateway (default-deny + selector allow-list), so only ingress-nginx can
+  # actually present an X-Forwarded-For for the gateway to trust. In-cluster
+  # spoofing is therefore bounded to the controller itself (ADR-049).
+  trustedProxies: "10.42.0.0/16"
   corsAllowOrigins: "https://dashboard.<domain>"  # PLACEHOLDER
   resources:
     requests: { cpu: 250m, memory: 256Mi }

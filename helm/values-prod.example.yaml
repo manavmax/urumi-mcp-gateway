@@ -7,7 +7,9 @@ global:
   ingressClass: nginx
   storageClass: local-path
   tlsEnabled: true
-  nodeCIDR: 10.42.0.0/16
+  # k3s NODE CIDR (the wp-setup job's API egress DNATs to the node's 6443).
+  # EC2 default-VPC range shown; verify with `ip -4 addr show` on the node.
+  nodeCIDR: 172.31.0.0/16
 
 ingress:
   enabled: true
@@ -27,6 +29,9 @@ gateway:
   image: { repository: ghcr.io/urumi/shop-gateway, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
   replicas: 1
   sessionCookieSecure: true
+  # k3s pod CIDR. Safe because only ingress-nginx can reach the gateway (the
+  # chart's NetworkPolicy denies every other in-cluster pod), so only the
+  # controller can present a trusted X-Forwarded-For (ADR-049).
   trustedProxies: "10.42.0.0/16"
   corsAllowOrigins: "https://dashboard.shop.example.com"
   resources:
