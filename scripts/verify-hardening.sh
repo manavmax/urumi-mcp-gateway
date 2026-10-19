@@ -8,6 +8,9 @@
 # (throwaway pod blocked from every private tier port; gateway reaches each
 # upstream), the login lockout probe (429 after N attempts), and the security
 # header probe on the dashboard and the gateway API.
+# NP enforcement here is REAL, not manifest-level: kindnet (kind's CNI) enforces
+# NetworkPolicy - a scratch-namespace control test (no policy connects, default-deny
+# blocks, allow rule unblocks) proves the datapath, and the probes below exercise it.
 set -u
 NS=${NAMESPACE:-urumi}
 PASS=0; FAIL=0

@@ -708,8 +708,10 @@ per-boot copy cost. Measured fresh installs: BEFORE (download path) 2m42s,
 AFTER (baked, zero-internet egress) 3m37s, both wall-clock of
 `helm upgrade --install --timeout 15m`. The wp-setup NetworkPolicy now carries
 NO 0.0.0.0/0 rule, so a fresh install succeeding under it is the offline proof;
-on k3s the policy is enforced, on kind (kindnet) it is not (documented in
-DEPLOY_VPS.md, probe repeated on the VPS).
+NetworkPolicy ENFORCEMENT is real on kind too (kindnet): a control test in a
+scratch namespace showed no-policy CONNECT_OK, default-deny CONNECT_FAIL, and the
+allow rule CONNECT_OK again (documented in DEPLOY_VPS.md). The blocked-connection
+probe is still repeated on the VPS as a live confirmation of the real k3s CNI.
 
 ## 2026-10-20: Real client IP behind the ingress (ADR-049)
 
