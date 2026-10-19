@@ -23,6 +23,7 @@ spec:
     spec:
       serviceAccountName: {{ include "urumi.fullname" . }}-wordpress
       automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
       # Hardening (ADR-041/043): pod fsGroup 33 makes the wp-content PVC
       # group-writable for www-data, so the root `fix-permissions` chown
       # initContainer that used to run here is gone entirely.

@@ -24,6 +24,7 @@ spec:
     spec:
       serviceAccountName: {{ include "urumi.fullname" . }}-postgres
       automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
       {{- include "urumi.podSecurityContext" (dict "root" $ "workload" "postgres") | nindent 6 }}
       containers:
         - name: postgres

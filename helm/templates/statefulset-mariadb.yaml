@@ -24,6 +24,7 @@ spec:
     spec:
       serviceAccountName: {{ include "urumi.fullname" . }}-mariadb
       automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
       # Hardening (ADR-043): the official mariadb image supports running the whole
       # container as the mysql user (uid 999) - its entrypoint skips the root chown
       # steps and execs mariadbd directly when it is not root. fsGroup 999 makes the

@@ -1,31 +1,105 @@
+# Production values for the Urumi chart.
+#
+# PLACEHOLDERS, NO REAL DOMAIN COMMITTED. The real domain is supplied at install
+# time via --set or a local, uncommitted overlay file (see docs/DEPLOY_VPS.md):
+#
+#   helm upgrade --install urumi ./helm -n urumi --create-namespace \
+#     -f helm/values-prod.yaml \
+#     --set global.domain=example.com \
+#     --set ingress.hosts.store=store.example.com \
+#     --set ingress.hosts.dashboard=dashboard.example.com \
+#     --set ingress.tls[0].hosts[0]=store.example.com \
+#     --set ingress.tls[0].hosts[1]=dashboard.example.com
+#
+# helm/values-prod.example.yaml shows a fully filled-in shape.
 global:
-  domain: yourdomain.com  # override with real domain or <ip>.nip.io
+  domain: <domain>            # PLACEHOLDER: real domain supplied at install
   ingressClass: nginx
-  storageClass: local-path  # k3s default; longhorn if installed
+  storageClass: local-path    # k3s default storage class (values-driven)
   tlsEnabled: true
+  # k3s node/pod network CIDR (NetworkPolicy API-server egress). k3s default pod
+  # CIDR is 10.42.0.0/16; the gateway trusted-proxy CIDR below matches it.
+  nodeCIDR: 10.42.0.0/16
 
 ingress:
   enabled: true
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # cert-manager integration: the ClusterIssuer (staging first, docs/DEPLOY_VPS.md)
+    # signs the TLS Secret named below. swap to letsencrypt-prod after staging works.
+    cert-manager.io/cluster-issuer: letsencrypt-staging
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
   hosts:
-    store: store.yourdomain.com
-    dashboard: dashboard.yourdomain.com
+    store: store.<domain>        # PLACEHOLDER
+    dashboard: dashboard.<domain>  # PLACEHOLDER
   tls:
     - secretName: urumi-tls
-      hosts: [store.yourdomain.com, dashboard.yourdomain.com]
+      hosts: [store.<domain>, dashboard.<domain>]  # PLACEHOLDER
+
+# --- Workload images: GHCR, IfNotPresent, PINNED tags (never :latest) -------------
+# After `make images-push`, pin the produced tag (e.g. 1.0.0-70d640d) here for every
+# image; the PUSHED_SHA marker below is replaced by that concrete tag at deploy time.
+gateway:
+  enabled: true
+  image:
+    repository: ghcr.io/urumi/gateway
+    tag: "PUSHED_SHA"          # PINNED - set to the tag images-push produced
+    pullPolicy: IfNotPresent
+  replicas: 1                  # stateful pods stay at 1 (documented below)
+  sessionCookieSecure: true
+  trustedProxies: "10.42.0.0/16"  # k3s pod CIDR (ingress-nginx sources) - real client IP
+  corsAllowOrigins: "https://dashboard.<domain>"  # PLACEHOLDER
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: 1000m, memory: 768Mi }
+  llm:
+    enabled: true
+    # Operator supplies the key via scripts/create-llm-secret.sh (hidden prompt) into
+    # the chart's gateway-llm Secret; or set existingSecret to an operator Secret.
+    existingSecret: ""
+
+dashboard:
+  enabled: true
+  image: { repository: ghcr.io/urumi/dashboard, tag: "PUSHED_SHA", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+wooMcp:
+  enabled: true
+  image: { repository: ghcr.io/urumi/woo-mcp, tag: "PUSHED_SHA", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+
+demoTime:
+  enabled: true
+  image: { repository: ghcr.io/urumi/demo-mcp-time, tag: "PUSHED_SHA", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+demoNotes:
+  enabled: true
+  image: { repository: ghcr.io/urumi/demo-mcp-notes, tag: "PUSHED_SHA", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+storeAssets:
+  image: { repository: ghcr.io/urumi/store-assets, tag: "PUSHED_SHA", pullPolicy: IfNotPresent }
 
 wordpress:
   replicaCount: 1
+  image:
+    repository: ghcr.io/urumi/wordpress
+    tag: "6.6-php8.2-apache-hardened"   # built tag; PINNED, never :latest
+    pullPolicy: IfNotPresent
+  persistence:
+    size: 10Gi
   resources:
-    requests: { cpu: 500m, memory: 512Mi }
+    requests: { cpu: 300m, memory: 384Mi }
     limits: { cpu: 1000m, memory: 1Gi }
-
-# Hardening (ADR-044): prod TLS terminates at the Ingress (cert-manager, ssl-redirect),
-# so the dashboard session cookie must be Secure and never travel over plain http.
-gateway:
-  sessionCookieSecure: true
 
 mariadb:
   storage: { size: 20Gi }
@@ -41,3 +115,13 @@ postgres:
 
 wpSetup:
   enabled: true
+  image: { repository: ghcr.io/urumi/wp-cli, tag: "cli-php8.2-hardened", pullPolicy: IfNotPresent }
+  resources:
+    requests: { memory: 128Mi }
+    limits: { cpu: 300m, memory: 512Mi }
+
+# --- Secrets: generated at install, never rotated on upgrade -----------------------
+# Every generated Secret is rendered unconditionally but its VALUES are
+# lookup-guarded (ADR-015/016): an upgrade reuses the existing Secret verbatim.
+# To supply your own, pre-create the Secret with the documented keys and (where
+# supported) set the existingSecret value. Nothing here holds a credential value.

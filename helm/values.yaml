@@ -8,6 +8,12 @@ global:
   # node IP, so egress policies must allow this range on 443/6443.
   nodeCIDR: 172.18.0.0/16
 
+# imagePullSecrets: a LIST, empty by default (public GHCR packages - the custom
+# images hold no secrets, proven by scripts/smoke-images.sh). For private packages,
+# create a docker-registry Secret once from a token fed via stdin (docs/DEPLOY_VPS.md)
+# and list its name here. Never commit a token.
+imagePullSecrets: []
+
 ingress:
   enabled: true
   annotations: {}
@@ -142,6 +148,17 @@ gateway:
   # nip.io is plain http); values-prod sets true (TLS terminates at the Ingress,
   # browsers must never send the cookie over http).
   sessionCookieSecure: false
+  # Hardening (ADR-049): trusted reverse-proxy CIDRs for the REAL client IP, fed to
+  # uvicorn --forwarded-allow-ips via the gateway image CMD. Empty (default) trusts
+  # NOBODY: the login throttle and audit log see the immediate peer (the ingress
+  # controller pod IP). Set this to the POD CIDR in local (10.244.0.0/24) and prod
+  # (k3s 10.42.0.0/16) values so ingress-nginx's appended client IP is used. A
+  # spoofed X-Forwarded-For from a client is ignored: uvicorn walks the chain from
+  # the right, skipping trusted proxies, so the first UNTRUSTED IP wins (the real
+  # client). Proof: docs/UPGRADE_ROLLBACK.md and scripts/verify-hardening.sh.
+  trustedProxies: ""
+  # CORS: comma-separated allowed origins. Prod sets the https dashboard origin.
+  corsAllowOrigins: ""
   # LLM wiring for the chat assistant. No API key is ever committed here (the brief
   # forbids committed secrets): the chart renders a `gateway-llm` Secret whose key
   # OPENAI_API_KEY is looked up from the cluster and left EMPTY until an operator

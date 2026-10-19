@@ -4,6 +4,13 @@ gateway:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
+  # Real client IP behind the ingress (ADR-049): trust ONLY the ingress-nginx
+  # controller pod IP (10.244.0.2 on this kind cluster) so the login throttle keys
+  # on the true client, and a client-spoofed X-Forwarded-For is ignored. Trusting
+  # the whole pod CIDR would let ANY pod spoof XFF (they share the range); a fixed
+  # controller IP is the correct narrow trust. On k3s/VPS, trust the ingress-nginx
+  # controller pod IP(s) - see docs/DEPLOY_VPS.md.
+  trustedProxies: "10.244.0.2"
   # Upstream health probing (docs/11_OBSERVABILITY.md): default 5s interval / 2s probe
   # timeout - the values.yaml default. Kept here explicitly so the live "kill the pod,
   # watch it flip" demo is reproducible and the cadence is visible in the local values.

@@ -1,0 +1,92 @@
+# FILLED-IN shape of values-prod.yaml for a real deployment.
+# Copy this to a LOCAL (uncommitted) file with your real domain, or pass --set at
+# install. This example is only documentation; the committed values-prod.yaml keeps
+# placeholders so a real domain is never committed (docs/DEPLOY_VPS.md).
+global:
+  domain: shop.example.com
+  ingressClass: nginx
+  storageClass: local-path
+  tlsEnabled: true
+  nodeCIDR: 10.42.0.0/16
+
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging   # switch to letsencrypt-prod once green
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    store: store.shop.example.com
+    dashboard: dashboard.shop.example.com
+  tls:
+    - secretName: urumi-tls
+      hosts: [store.shop.example.com, dashboard.shop.example.com]
+
+gateway:
+  enabled: true
+  image: { repository: ghcr.io/urumi/shop-gateway, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  replicas: 1
+  sessionCookieSecure: true
+  trustedProxies: "10.42.0.0/16"
+  corsAllowOrigins: "https://dashboard.shop.example.com"
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: 1000m, memory: 768Mi }
+
+dashboard:
+  enabled: true
+  image: { repository: ghcr.io/urumi/shop-dashboard, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+wooMcp:
+  enabled: true
+  image: { repository: ghcr.io/urumi/shop-woo-mcp, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+
+demoTime:
+  enabled: true
+  image: { repository: ghcr.io/urumi/shop-demo-time, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+demoNotes:
+  enabled: true
+  image: { repository: ghcr.io/urumi/shop-demo-notes, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+storeAssets:
+  image: { repository: ghcr.io/urumi/shop-store-assets, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+
+wordpress:
+  replicaCount: 1
+  image: { repository: ghcr.io/urumi/shop-wordpress, tag: "6.6-php8.2-apache-hardened", pullPolicy: IfNotPresent }
+  persistence: { size: 10Gi }
+  resources:
+    requests: { cpu: 300m, memory: 384Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+mariadb:
+  storage: { size: 20Gi }
+  resources:
+    requests: { cpu: 300m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+postgres:
+  storage: { size: 10Gi }
+  resources:
+    requests: { cpu: 300m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+wpSetup:
+  enabled: true
+  image: { repository: ghcr.io/urumi/shop-wp-cli, tag: "cli-php8.2-hardened", pullPolicy: IfNotPresent }
+  resources:
+    requests: { memory: 128Mi }
+    limits: { cpu: 300m, memory: 512Mi }

@@ -23,6 +23,7 @@ spec:
     spec:
       serviceAccountName: {{ include "urumi.fullname" . }}-demo-time
       automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: demo-time
           image: "{{ .Values.demoTime.image.repository }}:{{ .Values.demoTime.image.tag }}"

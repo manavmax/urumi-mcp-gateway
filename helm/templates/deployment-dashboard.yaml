@@ -23,6 +23,7 @@ spec:
     spec:
       serviceAccountName: {{ include "urumi.fullname" . }}-dashboard
       automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: dashboard
           image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"

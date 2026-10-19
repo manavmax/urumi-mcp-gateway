@@ -53,6 +53,23 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+  urumi.imagePullSecrets
+  Renders the pod-level imagePullSecrets list from .Values.imagePullSecrets (empty by
+  default = use PUBLIC images only). The custom images hold no secrets (proven by
+  scripts/smoke-images.sh), so public GHCR packages are the default. An operator who
+  must use private packages creates a pull Secret once (docker-registry type, from a
+  token fed via stdin - docs/DEPLOY_VPS.md) and names it here.
+*/}}
+{{- define "urumi.imagePullSecrets" -}}
+{{- if .Values.imagePullSecrets }}
+imagePullSecrets:
+{{- range .Values.imagePullSecrets }}
+  - name: {{ . }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
   urumi.securityContext (dict "root" $ "workload" "gateway")
   The ONE hardened container securityContext for the whole chart (ADR-041), so pod
   security cannot drift between templates: runAsNonRoot with the workload's explicit
