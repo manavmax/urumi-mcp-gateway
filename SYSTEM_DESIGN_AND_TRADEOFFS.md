@@ -26,15 +26,28 @@ See `docs/01_ARCHITECTURE.md` for diagrams and request flows.
 | LLM | `gpt-4o-mini` swappable to Anthropic/Ollama | Cheap tool calling; abstract provider so free/local fallback is one env var. |
 | Storefront | Standalone block theme + store-assets image + by-SKU seeding (ADR-037..040) | Zero third-party requests (self-hosted fonts, hooks removed) and a values-driven image/initContainer copy survive PVC reuse; seeding protects admin edits unless `seedForce=1`; block cart/checkout kept and restyled so no field is hidden or reordered and COD stays default. |
 
-## Production Deltas (local → VPS)
+## Production Deltas (local -> VPS)
 
-Only `values-*.yaml` changes — same chart: `domain` (nip.io → real), `storageClass` (standard → local-path/longhorn), `ingressClass`/`tlsEnabled` + cert-manager `ClusterIssuer`, `resources`/`replicas` (gateway 1→2), secrets via `kubectl create secret` (no hardcode). Ingress hosts `store.<domain>` + `dashboard.<domain>` (paths `/api`, `/mcp` → gateway). Upgrade `helm upgrade --install --atomic`; rollback `helm rollback`.
+Same chart; only values change (docs/DEPLOY_VPS.md). Rehearsed locally on kind, VPS run pending:
+
+| delta | local (kind) | prod (values-prod.yaml) | why |
+|---|---|---|---|
+| DNS / hostnames | `*.127.0.0.1.nip.io` (nip.io -> 127.0.0.1 + kind extraPortMappings) | real domain via `--set`/uncommitted overlay (never committed, ADR-050) | hosts stay values-driven |
+| Ingress | kind provider manifest, controller v1.15.1 | same chart, `externalTrafficPolicy=Local` (client-IP preservation) | pinned chart in DEPLOY_VPS.md |
+| TLS | kind test only: cert-manager SelfSigned issuer, cert for `*.127.0.0.1.nip.io` (proven: https login, zero console errors, Secure+HttpOnly+SameSite cookie) | cert-manager staging first then prod issuers (deploy/cluster-issuer-*.yaml, email placeholder) | LE rate limits: staging first |
+| Storage class | `standard` (kind) | `local-path` (k3s default), PVC sizes from values | k3s ships local-path provisioner |
+| Images | node-local `urumi/*` + pullPolicy Never (ctr import) | `ghcr.io/<owner>/<name>:<appVersion>-<sha>` pinned, IfNotPresent, optional imagePullSecrets list | reproducible deploys; tags pinned per ADR-048 |
+| wp-setup | copies BAKED WP core + installs Woo from the BAKED zip: zero runtime internet | same (no wordpress.org dependency at runtime) | ADR-048; the wp-setup NetworkPolicy carries no public-egress rule |
+| Secrets | chart-generated, lookup-guarded | unchanged + `existingSecret` options; LLM key via `scripts/create-llm-secret.sh` (hidden prompt, stdin only) | upgrades never rotate (proven: resourceVersion+data hashes identical across a real upgrade) |
+| Replicas | 1 | 1 for stateful parts (mariadb/postgres single PVCs; a second replica needs shared storage or operator-managed replication - out of scope, documented); gateway 1 (in-memory lockout/rate limit is per replica, documented residual) | honest single-node posture |
+| Real client IP | `gateway.trustedProxies` = ingress controller pod IP (kind) / pod CIDR (k3s) | uvicorn forwarded-allow-ips; throttle + audit see the true client (ADR-049) | spoofed XFF ignored (proven live) |
+| Upgrade policy | `--timeout 15m --atomic --wait` everywhere (ADR-050); rehearsed good upgrade / bad upgrade auto-rollback / manual rollback with data survival | same | docs/UPGRADE_ROLLBACK.md |
 
 ## Failure Handling
 
 Timeout 10s per call, health probe 15s, breaker open 30s, audit async queue (10k) never blocks request, `follow_redirects=False` + DNS IP blocklist.
 
-## Security Controls (hardening pass 2026-10-19, ADR-041..047)
+## Security Controls (hardening pass 2026-10-19, ADR-041..047; prod-readiness 2026-10-20, ADR-048..050)
 
 | Control | Where | Proof |
 |---|---|---|
@@ -49,9 +62,7 @@ Timeout 10s per call, health probe 15s, breaker open 30s, audit async queue (10k
 | SSRF guard | save-time shape + connect-time DNS re-resolution, decimal/hex/metadata/redirect cases pinned by tests; one shared `follow_redirects=False` client factory | `src/gateway/tests/test_ssrf_guard.py` |
 | No secrets in git/values/logs | generated Secrets (or operator-provided), placeholder values files, log scans 0 key-shaped strings (the Apache `%u` consumer-key leak found and fixed) | working-tree + git-history blob scan + verify-hardening.sh §5 |
 
-Trade-offs accepted: gateway egress open to public 443 (LLM provider IP unknowable); the LLM provider sees chat text and images; per-replica in-memory rate limit/lockout (single-replica demo); readOnlyRootFilesystem=false for wordpress/mariadb/wp-setup (non-root still holds); wp-setup is the only token-mounted SA (secrets-only Role, ~2 min lifetime per hook run).
-
-Trade-offs accepted: gateway egress open to public 443 (LLM provider IP unknowable); the LLM provider sees chat text and images; per-replica in-memory rate limit/lockout (single-replica demo); readOnlyRootFilesystem=false for wordpress/mariadb/wp-setup (non-root still holds); wp-setup is the only token-mounted SA (secrets-only Role, ~2 min lifetime per hook run).
+Trade-offs accepted: gateway egress open to public 443 (LLM provider IP unknowable); the LLM provider sees chat text and images; per-replica in-memory rate limit/lockout (single-replica demo); readOnlyRootFilesystem=false for wordpress/mariadb/wp-setup (non-root still holds); wp-setup is the only token-mounted SA (secrets-only Role, ~2 min lifetime per hook run). Prod additions: trusting the k3s pod CIDR for X-Forwarded-For lets an IN-CLUSTER pod spoof the header (external clients cannot - their IPs sit outside the pod CIDR; narrow to the controller pod IP when possible, ADR-049); kind's CNI (kindnet) does not enforce NetworkPolicy, so egress-deny proofs are manifest-level locally and enforced on k3s (probe repeated on the VPS).
 
 ## Stand-out
 

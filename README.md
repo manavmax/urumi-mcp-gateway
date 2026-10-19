@@ -47,6 +47,7 @@ make kind-up                                  # kind create cluster --name urumi
 make ingress                                  # ingress-nginx for kind
 make helm-local                              # secrets-local + helm upgrade --install (runs wp-setup hook)
 make woo-mcp-image                            # Layer 2: build + import woo-mcp image into the kind node
+make smoke-images                             # build all 8 images host-platform + per-image smoke test (no push)
 make verify-store                             # lint, ps, wp-setup logs, store curl, woo-secrets
 make verify-cod                               # COD offered at checkout (Store API) + COD option value
 make verify-mcp                               # Layer 2: MCP handshake, 6 tools, error mapping, isolation
@@ -55,7 +56,7 @@ open http://store.127.0.0.1.nip.io             # title: "Urumi Store" (COD check
 kubectl port-forward -n urumi svc/urumi-woo-mcp 8000:8000   # then connect to http://localhost:8000/mcp
 ```
 
-VPS is same `helm/` + `helm/values-prod.yaml` (domain, storageClass, TLS). See `docs/06_KUBERNETES_AND_HELM.md`.
+VPS is the same `helm/` + `helm/values-prod.yaml` (domain, storageClass, TLS). Full stranger-runnable walkthrough: **[docs/DEPLOY_VPS.md](docs/DEPLOY_VPS.md)**. Upgrade and rollback (rehearsed with real output): **docs/UPGRADE_ROLLBACK.md**.
 
 ## Credentials & LLM wiring (no committed secrets)
 
