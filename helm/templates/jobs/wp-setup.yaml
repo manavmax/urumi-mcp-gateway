@@ -64,6 +64,7 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       serviceAccountName: {{ include "urumi.fullname" . }}-wp-setup
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
       # Never => failed pods persist for log inspection (setups are debuggable)
       restartPolicy: Never
       # Hardening (ADR-043): the whole job runs as www-data (uid 33) with ALL
@@ -133,10 +134,17 @@ spec:
               # --- Bring up a standalone WP install for CLI to work against ---
               # wp-content/ (plugins/themes/uploads) is a shared PVC with the WordPress pod,
               # and the DB is shared too, so install/seed actions here apply to the live site.
+              # Core is BAKED into the image (/var/www/wordpress-core, checksum-verified at
+              # build): copied, never downloaded (prod-readiness: no runtime internet).
               if ! wp core is-installed --allow-root --path=$WP_PATH 2>/dev/null; then
                 if [ ! -f "$WP_PATH/wp-load.php" ]; then
-                  echo "Downloading WordPress core ${WP_CORE_VERSION} into $WP_PATH..."
-                  wp core download --version="$WP_CORE_VERSION" --skip-content --force --quiet --allow-root --path=$WP_PATH
+                  echo "Copying baked WordPress core ${WP_CORE_VERSION} into $WP_PATH (no download)..."
+                  # cp -a preserves modes/symlinks but emits benign "can't preserve
+                  # ownership" noise on the fsGroup volume (non-root copy; files still
+                  # land owned by www-data). Filter only those exact lines so real
+                  # errors still surface. `cp -a` returns 0 here (ownership warnings
+                  # are non-fatal), so the copy cannot fail the job on noise.
+                  cp -a /var/www/wordpress-core/. "$WP_PATH/" 2> >(grep -v "can't preserve ownership" >&2)
                 fi
                 if [ ! -f "$WP_PATH/wp-config.php" ]; then
                   echo "Creating wp-config.php..."
@@ -181,13 +189,22 @@ spec:
               echo "Admin credentials synced (password taken from the Secret, never logged)."
 
               # --- WooCommerce (pinned version for WP/PHP parity) ---
-              echo "Ensuring WooCommerce ${WOO_WANT}..."
+              # The pinned zip is BAKED into the image (sha256 verified at build);
+              # installs come from the local zip - wordpress.org is never contacted.
+              echo "Ensuring WooCommerce ${WOO_WANT} (from the baked zip, no download)..."
+              WOO_ZIP=/var/www/woocommerce.zip
               if ! wp plugin is-installed woocommerce --allow-root --path=$WP_PATH 2>/dev/null; then
-                echo "  installing woocommerce ${WOO_WANT}..."
-                wp plugin install woocommerce --version="$WOO_WANT" --activate --force --allow-root --path=$WP_PATH
+                echo "  installing woocommerce ${WOO_WANT} from baked zip..."
+                wp plugin install "$WOO_ZIP" --activate --force --allow-root --path=$WP_PATH
               else
-                wp plugin update woocommerce --version="$WOO_WANT" --allow-root --path=$WP_PATH || true
-                wp plugin activate woocommerce --allow-root --path=$WP_PATH || true
+                WOO_ACTIVE=$(wp plugin get woocommerce --allow-root --path=$WP_PATH --field=version 2>/dev/null || echo unknown)
+                if [ "${WOO_ACTIVE:-unknown}" != "$WOO_WANT" ]; then
+                  echo "  wrong WooCommerce ${WOO_ACTIVE:-unknown}: replacing with baked ${WOO_WANT}..."
+                  rm -rf "$WP_PATH/wp-content/plugins/woocommerce"
+                  wp plugin install "$WOO_ZIP" --activate --force --allow-root --path=$WP_PATH
+                else
+                  wp plugin activate woocommerce --allow-root --path=$WP_PATH || true
+                fi
               fi
               echo "WooCommerce version:"
               wp plugin get woocommerce --allow-root --path=$WP_PATH --field=version 2>/dev/null || true

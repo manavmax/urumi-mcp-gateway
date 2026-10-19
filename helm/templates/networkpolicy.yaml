@@ -122,10 +122,11 @@ spec:
       ports:
         - port: {{ .Values.mariadb.port }}
 ---
-# wp-setup job needs wordpress + mariadb + DNS + K8s API + HTTPS (plugin/theme
-# download from downloads.wordpress.org / api.wordpress.org). Egress is restricted
-# to those peers and to public internet only — RFC1918 + metadata ranges are
-# excluded, mirroring the SSRF posture.
+# wp-setup job needs wordpress + mariadb + DNS + the K8s API only. WordPress core
+# and the pinned WooCommerce zip are BAKED into the wp-cli image (checksum-verified
+# at build), so the job needs NO public internet: there is deliberately no
+# 0.0.0.0/0 or ::/0 rule here. A fresh install with this policy live is the proof
+# (docs/DECISIONS.md ADR-048).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -165,26 +166,6 @@ spec:
       ports:
         - port: 443
         - port: 6443
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/8
-              - 172.16.0.0/12
-              - 192.168.0.0/16
-              - 169.254.0.0/16
-              - 100.64.0.0/10
-      ports:
-        - port: 443
-        - port: 80
-    - to:
-        - ipBlock:
-            cidr: ::/0
-            except:
-              - fc00::/7
-      ports:
-        - port: 443
-        - port: 80
 ---
 # woo-mcp must reach the WordPress service (Woo REST) and DNS only — it has no
 # reason to talk to MariaDB, Postgres, the K8s API, or the internet at large.
