@@ -1,0 +1,22 @@
+# Never bake these into an image (secrets and local artifacts).
+.git
+.gitignore
+.env
+.env.*
+**/.env
+*.pem
+*.key
+*.p12
+kubeconfig
+.kube
+.venv
+venv
+__pycache__
+**/__pycache__
+.pytest_cache
+.ruff_cache
+artifacts
+dist
+node_modules
+*.log
+.DS_Store

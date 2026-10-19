@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -37,7 +37,7 @@ template:
 # takes several minutes, so the hook budget must be generous: a too-small --timeout makes
 # helm give up on a hook that is still working and report "context deadline exceeded".
 helm-local:
-	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-local.yaml --timeout 15m
+	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-local.yaml --timeout 15m --atomic --wait
 
 # Rotate generated credentials: delete a Secret and let the chart generate a new one on
 # the next upgrade. For MariaDB/Postgres you MUST also delete the data PVC, because
@@ -49,7 +49,7 @@ rotate-secrets:
 	kubectl get pvc -n $(NAMESPACE) --no-headers 2>/dev/null | grep -E "mariadb|postgres" | awk '{print "  also delete (password is already in the volume): " $$1}'
 
 helm-prod:
-	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-prod.yaml --timeout 8m --atomic
+	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-prod.yaml --timeout 15m --atomic --wait
 
 logs:
 	kubectl logs -l app=wordpress -n $(NAMESPACE) --tail=100 -f
@@ -284,3 +284,45 @@ verify-cod:
 	  else echo "  classic checkout params not present (block checkout in use) - Store API result above is authoritative"; fi'
 	@echo "== COD option value (from MariaDB) =="
 	@kubectl exec -n $(NAMESPACE) urumi-mariadb-0 -c mariadb -- sh -c 'MYSQL_PWD="$$MARIADB_PASSWORD" mariadb -u wordpress wordpress -e "SELECT option_value FROM wp_options WHERE option_name=\"woocommerce_cod_settings\"" 2>/dev/null' | sed 's/^/  /'
+
+# ------------------------------------------------------------------
+# PROD READINESS (PROMPT V)
+# ------------------------------------------------------------------
+# Make a one-line stranger can run (required variables listed by `make help`):
+#   GHCR_OWNER=<owner> GHCR_TOKEN=<token> make images-push
+# Builds all 8 custom images with docker buildx for PLATFORMS (default
+# linux/amd64; add linux/arm64 explicitly) and pushes ghcr.io/<owner>/<name>:<tag>.
+# Tag = <chart appVersion>-<short git SHA>, pinned into helm/values-prod.yaml after.
+# The token is fed to `docker login --password-stdin` (env or hidden prompt), never
+# echoed, never written to disk or shell history. See scripts/push-images.sh.
+images-push:
+	GHCR_OWNER=$${GHCR_OWNER:?set GHCR_OWNER (see make help)} scripts/push-images.sh
+
+# Host-platform build + per-image container smoke test (no push). Proves every
+# build context and Dockerfile works and that no secret-like files land in images.
+smoke-images:
+	scripts/smoke-images.sh
+
+# Prod install/upgrade one-liner with an EXPLICIT helm timeout (ADR-048). The
+# wp-setup hook bakes core + WooCommerce, so 15m covers a cold install; upgrades
+# of an existing site finish far faster. --atomic rolls back automatically when the
+# upgrade fails, so a bad change cannot leave a half-deployed release.
+# Rehearsed upgrade/rollback helpers (docs/UPGRADE_ROLLBACK.md). Overrides are
+# inline so `make upgrade ARGS="--set gateway.image.tag=x"` works like helm.
+upgrade:
+	helm upgrade $(RELEASE) ./helm -n $(NAMESPACE) -f helm/values-local.yaml $(ARGS) --timeout 15m --atomic --wait
+
+rollback:
+	helm rollback $(RELEASE) $(REV) -n $(NAMESPACE) --timeout 15m --wait
+
+# Quick reference for the prod-readiness variables.
+help:
+	@echo "Urumi Make targets"
+	@echo "  make images-push   GHCR_OWNER=<owner> [GHCR_TOKEN=<token>] [PLATFORMS=linux/amd64,linux/arm64]"
+	@echo "    builds all 8 custom images with buildx and pushes ghcr.io/<owner>/<name>:<tag>"
+	@echo "    tag = <chart appVersion>-<short git SHA>; token via GHCR_TOKEN or hidden prompt"
+	@echo "    (GHCR_TOKEN is never echoed, written to a file, or put in shell history)"
+	@echo "  make smoke-images  build host-platform + run a container smoke test per image"
+	@echo "  make helm-local / helm-prod   install/upgrade with explicit --timeout 15m --atomic --wait"
+	@echo "  make upgrade ARGS='--set x=y' / make rollback REV=<n>   rehearsed upgrade/rollback"
+	@echo "  make verify-store verify-mcp verify-gateway verify-llm verify-hardening   live gates"
