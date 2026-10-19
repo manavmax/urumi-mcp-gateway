@@ -22,6 +22,9 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         tier: private
     spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-postgres
+      automountServiceAccountToken: false
+      {{- include "urumi.podSecurityContext" (dict "root" $ "workload" "postgres") | nindent 6 }}
       containers:
         - name: postgres
           image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
@@ -57,12 +60,19 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            # Read-only root fs (ADR-041): the socket dir and /tmp become emptyDirs
+            # (fsGroup 70 makes them group-writable for the postgres uid).
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 70
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
-            capabilities: { drop: ["ALL"] }
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "postgres") | nindent 12 }}
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data

@@ -220,6 +220,37 @@ image alt text. Key properties:
   third-party + console, 12 screenshots into `artifacts/store/`) and
   `node scripts/verify-store-contrast.mjs` (WCAG rest/hover/focus, zero failures).
 
+## Security posture (hardening pass, ADR-041..047)
+
+Short version; the full model lives in `THREAT_MODEL.md` and the decisions in
+`docs/DECISIONS.md` (ADR-041..047).
+
+- **No root anywhere.** Every container and init container runs non-root with an
+  explicit uid, all capabilities dropped, no privilege escalation, seccomp
+  RuntimeDefault (one shared Helm helper, `podSecurity.workloads` values).
+  WordPress runs as www-data (33) on unprivileged 8080 via the hardened image
+  (`src/wordpress`); MariaDB runs as 999; the wp-setup hook runs as 33.
+- **No tokens in pods.** One dedicated ServiceAccount per workload,
+  `automountServiceAccountToken: false` everywhere except the wp-setup hook
+  (secrets-only Role — it writes `woo-secrets` via the K8s API).
+- **Default-deny NetworkPolicies**, ports values-driven; a throwaway pod is
+  blocked from every private tier port while the gateway reaches its upstreams.
+  Gateway egress is open to public 443 only (the LLM provider), RFC1918/metadata
+  excluded.
+- **Login lockout** (per username + per client IP, 5 fails/300s, 429, audited),
+  session cookie HttpOnly/SameSite=lax with a prod `Secure` setting, and
+  security headers with a strict CSP (no inline scripts) on both the dashboard
+  nginx and the gateway API.
+- **SSRF guard** on admin-added upstream URLs: validated at save AND resolved +
+  re-checked at connect time, redirects never followed.
+- **No secrets in git, values, or logs**: chart Secrets are generated on install
+  (or operator-provided); the log scan in `scripts/verify-hardening.sh` checks
+  pod logs for key-shaped strings and reports 0.
+
+`bash scripts/verify-hardening.sh` prints the per-workload security table and
+re-runs the live probes (uid/caps/ro-root/token + NetworkPolicy + lockout +
+headers + pod-log scan).
+
 ## Submission (when ready)
 
 - Demo video (chapters: design, K8s, MCP internals, security, chat, local→VPS) + GitHub repo → https://forms.gle/nftwgyNeenSDmiRb6

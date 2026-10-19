@@ -123,3 +123,20 @@ async def validate_url_and_dns(url: str, *, allowed_host_suffixes: list[str] | N
         if any(lower == s.lstrip(".") or lower.endswith(s.lower()) for s in allowed_host_suffixes):
             return
     await resolve_and_validate(host)
+
+
+def ssrf_safe_client_factory(timeout_seconds: float):
+    """The ONLY httpx client factory the gateway uses for upstream MCP calls.
+
+    Redirects are NEVER followed (follow_redirects=False): the SSRF guard validated
+    the ORIGINAL host at resolve time, and a 30x must not be able to smuggle the
+    call to a private IP (httpx returns the 3xx response instead of chasing it).
+    The MCP SDK passes arbitrary kwargs (headers/timeout/...); they are accepted
+    and IGNORED - timeout is ours, redirects are nobody's.
+    """
+    import httpx
+
+    def _factory(**_kwargs):
+        return httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds), follow_redirects=False)
+
+    return _factory

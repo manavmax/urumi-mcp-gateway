@@ -555,11 +555,16 @@ async def test_permission_change_one_event(harness):
 
 
 @pytest.mark.asyncio
-async def test_login_failed_rate_limit_per_source(harness):
+async def test_login_failed_rate_limit_per_source(harness, monkeypatch):
     """One source (attempted email) can write at most LOGIN_FAILED_EVENT_LIMIT
     rows per window; beyond that, the event is silently dropped."""
     client, _ids = harness
     reset_login_failed_limiter()
+    # This test exercises the AUDIT-EVENT limiter, not the login lockout (ADR-044):
+    # 15 failures must reach the route, so the account/IP lockout cap is lifted here.
+    from config import get_settings
+
+    monkeypatch.setattr(get_settings(), "login_lockout_attempts", 1000)
 
     email = "nonexistent@urumi.local"
     headers = await _login(client, "admin-events@urumi.local", "admin-events-pass")
@@ -580,10 +585,14 @@ async def test_login_failed_rate_limit_per_source(harness):
 
 
 @pytest.mark.asyncio
-async def test_login_failed_different_sources_not_capped(harness):
+async def test_login_failed_different_sources_not_capped(harness, monkeypatch):
     """Different attempted emails each have their own rate limit bucket."""
     client, _ids = harness
     reset_login_failed_limiter()
+    # Audit-event limiter test: lift the ADR-044 lockout so all 10 failures reach the route.
+    from config import get_settings
+
+    monkeypatch.setattr(get_settings(), "login_lockout_attempts", 1000)
     headers = await _login(client, "admin-events@urumi.local", "admin-events-pass")
 
     # 5 failures each from 2 different sources

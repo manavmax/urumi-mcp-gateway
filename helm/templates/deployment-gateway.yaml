@@ -53,6 +53,8 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         tier: public
     spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-gateway
+      automountServiceAccountToken: false
       containers:
         - name: gateway
           image: "{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag }}"
@@ -110,6 +112,15 @@ spec:
             # and re-encoded with Pillow before anything is stored).
             - name: IMAGE_UPLOAD_MAX_BYTES
               value: {{ .Values.gateway.imageUploadMaxBytes | default 5242880 | quote }}
+            # Hardening (ADR-044): login lockout policy (attempts per window, per
+            # username AND per client IP; in-memory counter, so per replica).
+            - name: LOGIN_LOCKOUT_ATTEMPTS
+              value: {{ .Values.gateway.loginLockout.attempts | default 5 | quote }}
+            - name: LOGIN_LOCKOUT_WINDOW_SECONDS
+              value: {{ .Values.gateway.loginLockout.windowSeconds | default 300 | quote }}
+            # Hardening (ADR-044): session cookie Secure flag (values-prod sets true).
+            - name: SESSION_COOKIE_SECURE
+              value: {{ .Values.gateway.sessionCookieSecure | default false | quote }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:
@@ -125,11 +136,7 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 2
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-            readOnlyRootFilesystem: true
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "gateway") | nindent 12 }}
           volumeMounts:
             - mountPath: /tmp
               name: tmp

@@ -142,6 +142,18 @@ def reset_cooldowns():
     fb.MODEL_COOLDOWNS.clear()
 
 
+@pytest.fixture(autouse=True)
+def reset_login_throttle():
+    # ADR-044: the login lockout counter is module-level in-memory state, exactly like
+    # a restarted gateway's cold counter. Without this reset, failures from one test
+    # (and its single testclient IP) leak into every later test's login.
+    from auth import login_throttle
+
+    login_throttle.reset_all()
+    yield
+    login_throttle.reset_all()
+
+
 def fake_settings(chain: list[str] | None = None, max_models_per_turn: int | None = None):
     """Settings double with a small deterministic model chain (default: FAKE_CHAIN)."""
     import chat.llm_fallback as fb

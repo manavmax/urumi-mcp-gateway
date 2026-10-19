@@ -53,6 +53,38 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+  urumi.securityContext (dict "root" $ "workload" "gateway")
+  The ONE hardened container securityContext for the whole chart (ADR-041), so pod
+  security cannot drift between templates: runAsNonRoot with the workload's explicit
+  uid/gid from values, no privilege escalation, every capability dropped,
+  seccompProfile RuntimeDefault, and readOnlyRootFilesystem per workload. Nothing
+  is hardcoded here - the per-workload numbers live in values.podSecurity.workloads.
+*/}}
+{{- define "urumi.securityContext" -}}
+{{- $w := index (.root.Values.podSecurity.workloads | default dict) .workload | default dict -}}
+runAsNonRoot: true
+runAsUser: {{ $w.runAsUser }}
+runAsGroup: {{ $w.runAsGroup | default $w.runAsUser }}
+allowPrivilegeEscalation: false
+capabilities: { drop: ["ALL"] }
+seccompProfile: { type: RuntimeDefault }
+readOnlyRootFilesystem: {{ $w.readOnlyRootFilesystem | default false }}
+{{- end }}
+
+{{/*
+  urumi.podSecurityContext (dict "root" $ "workload" "postgres")
+  Pod-level securityContext: fsGroup (values) so the kubelet makes PVC mounts
+  group-writable for the non-root uid. Empty when the workload sets no fsGroup.
+*/}}
+{{- define "urumi.podSecurityContext" -}}
+{{- $w := index (.root.Values.podSecurity.workloads | default dict) .workload | default dict -}}
+{{- if $w.fsGroup }}
+securityContext:
+  fsGroup: {{ $w.fsGroup }}
+{{- end }}
+{{- end }}
+
+{{/*
   urumi.secretKey (list <secretFromLookup> <key>)
   Plaintext value of a key in a Secret found via `lookup`, or "" when the Secret/key is
   absent. `lookup` returns base64-encoded data, so callers must decode to compare or reuse

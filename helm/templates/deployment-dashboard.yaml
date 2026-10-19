@@ -21,6 +21,8 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         tier: public
     spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-dashboard
+      automountServiceAccountToken: false
       containers:
         - name: dashboard
           image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
@@ -43,11 +45,7 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 2
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 101
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-            readOnlyRootFilesystem: true
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "dashboard") | nindent 12 }}
           volumeMounts:
             - mountPath: /tmp
               name: tmp

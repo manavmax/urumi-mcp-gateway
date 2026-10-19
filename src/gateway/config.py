@@ -48,6 +48,18 @@ class Settings(BaseSettings):
     session_secret: str = ""  # itsdangerous signer; defaults to fernet_key if empty
     session_cookie_name: str = "urumi_session"
     session_max_age_seconds: int = 60 * 60 * 24 * 7  # 7 days
+    # Hardening (ADR-044): Secure flag on the session cookie. False locally (kind +
+    # nip.io is plain http); prod (TLS at the Ingress) sets
+    # gateway.sessionCookieSecure: true -> SESSION_COOKIE_SECURE=1.
+    session_cookie_secure: bool = False
+
+    # Hardening (ADR-044): login lockout. After `login_lockout_attempts` failures
+    # within `login_lockout_window_seconds`, per username AND per client IP, login
+    # returns 429 until the window drains. The counter is in-memory, so it is PER
+    # REPLICA (documented in THREAT_MODEL.md; scaling to >1 replica needs a shared
+    # store and is listed as an accepted residual there).
+    login_lockout_attempts: int = 5
+    login_lockout_window_seconds: int = 300
 
     # security / limits
     mcp_protocol_version: str = "2025-03-26"
@@ -151,6 +163,9 @@ def get_settings() -> Settings:
         "HEALTH_INTERVAL_SECONDS": "health_interval_seconds",
         "HEALTH_TIMEOUT_SECONDS": "health_timeout_seconds",
         "SESSION_SECRET": "session_secret",
+        "SESSION_COOKIE_SECURE": "session_cookie_secure",
+        "LOGIN_LOCKOUT_ATTEMPTS": "login_lockout_attempts",
+        "LOGIN_LOCKOUT_WINDOW_SECONDS": "login_lockout_window_seconds",
         "GATEWAY_ADMIN_PASSWORD": "admin_password",
         "IMAGE_UPLOAD_MAX_BYTES": "image_upload_max_bytes",
     }

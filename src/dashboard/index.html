@@ -5,18 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Urumi Gateway</title>
-    <script>
-    // Apply theme before first paint to prevent flash. Two modes only:
-    // Light (default) and Dark. A stored "system" or unknown value is Light.
-    (function() {
-      var theme = 'light';
-      try {
-        var v = localStorage.getItem('theme');
-        theme = (v === 'dark' || v === 'light') ? v : 'light';
-      } catch(e) {}
-      document.documentElement.setAttribute('data-theme', theme);
-    })();
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image verify-gateway verify-dashboard verify-llm deploy test demo-reset
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -99,6 +99,21 @@ demo-notes-image:
 	@echo "loaded urumi/demo-mcp-notes:0.1.0 into kind node"
 
 demo-images: demo-time-image demo-notes-image
+
+# Hardened WordPress (ADR-043): FROM the pinned wordpress:6.6-php8.2-apache,
+# listening on 8080, running as www-data (uid 33), no root. Build + import into
+# the kind node; `make helm-local` (or a rollout restart) lands it.
+wordpress-image:
+	docker build -t urumi/wordpress:6.6-php8.2-apache-hardened src/wordpress
+	docker save urumi/wordpress:6.6-php8.2-apache-hardened | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	@echo "loaded urumi/wordpress:6.6-php8.2-apache-hardened into kind node"
+
+# Hardened wp-cli runner for the wp-setup hook job (ADR-043): upstream
+# wordpress:cli-php8.2 with /var/www/html owned by www-data, job runs as uid 33.
+wp-cli-image:
+	docker build -t urumi/wp-cli:cli-php8.2-hardened src/wp-cli
+	docker save urumi/wp-cli:cli-php8.2-hardened | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	@echo "loaded urumi/wp-cli:cli-php8.2-hardened into kind node"
 
 # Static storefront assets (theme + catalog + images). Local Kind: build and
 # import into the node; the WordPress pod's `store-assets` initContainer copies

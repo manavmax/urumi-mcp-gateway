@@ -29,7 +29,7 @@ spec:
               service:
                 name: {{ include "urumi.fullname" . }}-wordpress
                 port:
-                  number: 80
+                  number: {{ .Values.wordpress.service.port | default 80 }}
   {{- if .Values.dashboard.enabled }}
     - host: {{ .Values.ingress.hosts.dashboard | quote }}
       http:
@@ -40,21 +40,21 @@ spec:
               service:
                 name: {{ include "urumi.fullname" . }}-gateway
                 port:
-                  number: 8000
+                  number: {{ .Values.gateway.port | default 8000 }}
           - path: /mcp
             pathType: Prefix
             backend:
               service:
                 name: {{ include "urumi.fullname" . }}-gateway
                 port:
-                  number: 8000
+                  number: {{ .Values.gateway.port | default 8000 }}
           - path: /
             pathType: Prefix
             backend:
               service:
                 name: {{ include "urumi.fullname" . }}-dashboard
                 port:
-                  number: 80
+                  number: {{ .Values.dashboard.servicePort | default 80 }}
   {{- else }}
     # Before dashboard ships, dashboard host proxies to wordpress for demo parity
     - host: {{ .Values.ingress.hosts.dashboard | quote }}
@@ -66,6 +66,6 @@ spec:
               service:
                 name: {{ include "urumi.fullname" . }}-wordpress
                 port:
-                  number: 80
+                  number: {{ .Values.wordpress.service.port | default 80 }}
   {{- end }}
 {{- end }}

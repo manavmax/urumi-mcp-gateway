@@ -7,6 +7,13 @@ metadata:
   labels:
     {{- include "urumi.labels" . | nindent 4 }}
     app: wp-setup
+# The ONLY ServiceAccount in the chart that automounts a token (ADR-042): this
+# hook job PROVES an API-server need - it reads the namespace + token to write
+# the generated Woo CK/CS into the woo-secrets Secret through the K8s API (grep
+# the args for "kubernetes.default.svc"; with no token the job degrades to
+# printing a manual kubectl command instead of failing). The Role below grants
+# exactly secrets get/create/patch/update in this namespace, nothing else.
+automountServiceAccountToken: true
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -59,16 +66,17 @@ spec:
       serviceAccountName: {{ include "urumi.fullname" . }}-wp-setup
       # Never => failed pods persist for log inspection (setups are debuggable)
       restartPolicy: Never
+      # Hardening (ADR-043): the whole job runs as www-data (uid 33) with ALL
+      # capabilities dropped; pod fsGroup 33 makes the shared wp-content PVC
+      # group-writable. The hardened wp-cli image (src/wp-cli) owns /var/www/html
+      # so wp-config.php creation still works without root.
+      {{- include "urumi.podSecurityContext" (dict "root" $ "workload" "wpSetup") | nindent 6 }}
       initContainers:
         - name: wait-for-mariadb
           image: busybox:1.36
           command: ["sh", "-c", "until nc -z {{ include "urumi.fullname" . }}-mariadb {{ .Values.mariadb.port }}; do echo waiting for mariadb; sleep 2; done; echo mariadb ready"]
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-            readOnlyRootFilesystem: true
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "util") | nindent 12 }}
         - name: wait-for-wordpress
           image: busybox:1.36
           command:
@@ -77,7 +85,7 @@ spec:
             - |
               echo "Waiting for WordPress HTTP (static asset, avoids PHP-fatal deadlock)..."
               for i in $(seq 1 120); do
-                if wget -qO- http://{{ include "urumi.fullname" . }}-wordpress:80/readme.html >/dev/null 2>&1; then
+                if wget -qO- http://{{ include "urumi.fullname" . }}-wordpress:{{ .Values.wordpress.service.port | default 80 }}/readme.html >/dev/null 2>&1; then
                   echo "WordPress HTTP ready"
                   exit 0
                 fi
@@ -86,11 +94,7 @@ spec:
               echo "WordPress HTTP not ready in time" >&2
               exit 1
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-            readOnlyRootFilesystem: true
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "util") | nindent 12 }}
       containers:
         - name: wp-setup
           image: "{{ .Values.wpSetup.image.repository }}:{{ .Values.wpSetup.image.tag }}"
@@ -666,7 +670,7 @@ spec:
               NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo "$RELEASE_NS")
               TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || echo "")
               CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-              WOO_URL="http://${FULLNAME}-wordpress:80"
+              WOO_URL="http://${FULLNAME}-wordpress:{{ .Values.wordpress.service.port | default 80 }}"
 
               # What does the Secret hold right now? (empty when it does not exist)
               # NOTE: read through the Kubernetes API - this image has no kubectl, and a
@@ -806,7 +810,7 @@ spec:
               # Verify wc/v3 reachable with new keys (Basic auth ck:cs is username:password)
               echo "Verifying Woo REST with new keys..."
               for i in $(seq 1 5); do
-                if curl -sf -u "$CK:$CS" "http://$FULLNAME-wordpress:80/wp-json/wc/v3/products?per_page=1" >/tmp/wc_verify.json 2>&1; then
+                if curl -sf -u "$CK:$CS" "http://$FULLNAME-wordpress:{{ .Values.wordpress.service.port | default 80 }}/wp-json/wc/v3/products?per_page=1" >/tmp/wc_verify.json 2>&1; then
                   echo "Woo REST verified:"
                   cat /tmp/wc_verify.json | head -n 20
                   break
@@ -855,11 +859,7 @@ spec:
           resources:
             {{- toYaml .Values.wpSetup.resources | nindent 12 }}
           securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-            allowPrivilegeEscalation: true
-            capabilities: { add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"] }
-            readOnlyRootFilesystem: false
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "wpSetup") | nindent 12 }}
       volumes:
         - name: wp-content
           persistentVolumeClaim:

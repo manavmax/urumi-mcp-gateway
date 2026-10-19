@@ -9,7 +9,9 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: {{ .Values.dashboard.port }}
+    # Service stays on servicePort (80); targetPort follows the named container
+    # port, which the hardened image moved to the unprivileged 8080 (ADR-043).
+    - port: {{ .Values.dashboard.servicePort | default 80 }}
       targetPort: http
       protocol: TCP
       name: http

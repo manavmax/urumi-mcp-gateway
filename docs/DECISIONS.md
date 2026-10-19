@@ -548,3 +548,134 @@ invalid_username), and the F3 upload route deliberately has no delete endpoint
 password) just for cleanup was rejected. The wordpress pod already owns the DB and
 the upload filesystem, so `wp_delete_attachment` there is the capability-scoped
 path; the reset keeps its local-kind guard (ADR-032) for the new exec.
+
+## 2026-10-19: Pod security hardening — one shared securityContext helper (ADR-041)
+
+**Decision.** Every container and init container in the chart renders its
+securityContext from ONE helper (`urumi.securityContext` in `_helpers.tpl`),
+driven by a per-workload values block (`podSecurity.workloads`): runAsNonRoot
+with an explicit uid/gid, `allowPrivilegeEscalation: false`, ALL capabilities
+dropped, `seccompProfile: RuntimeDefault`, and a per-workload
+`readOnlyRootFilesystem`. Pod-level fsGroup (same helper) makes PVC mounts
+group-writable for the non-root uid, which is what let the root
+`fix-permissions` chown initContainer be deleted entirely.
+
+**Where the uid comes from.** gateway/woo-mcp/demo-* run as uid 1000 (their
+images), dashboard as 101 (nginx), postgres as 70, mariadb as 999 (mysql),
+wordpress as 33 (www-data), wp-setup as 33, the store-assets copier as 33 and
+the busybox wait-probes as 1000. All of these live in
+`values.podSecurity.workloads` — nothing is hardcoded in a template.
+
+**readOnlyRootFilesystem = true** for gateway, dashboard, woo-mcp, demo-time,
+demo-notes (their `/tmp` needs became emptyDirs) and postgres (emptyDirs for
+`/tmp` and the socket dir `/var/run/postgresql`, plus fsGroup 70). FALSE for
+wordpress, mariadb and the wp-setup job: the WordPress image's entrypoint writes
+`wp-config.php` into the image layer each start and MariaDB needs its runtime
+dirs on the image fs. Residual: those three containers can write their own
+filesystem (they still run as non-root with no capabilities) — recorded in
+THREAT_MODEL.md.
+
+## 2026-10-19: Dedicated ServiceAccounts, no automounted tokens (ADR-042)
+
+**Decision.** One ServiceAccount per workload (`urumi-<component>`), rendered by
+`helm/templates/serviceaccounts.yaml`, every one with
+`automountServiceAccountToken: false` on both the SA and the pod. The single
+exception is the wp-setup hook SA (`automountServiceAccountToken: true`): that
+job PROVES an API-server need — it writes the generated Woo CK/CS into the
+`woo-secrets` Secret through the K8s API, under a Role scoped to exactly
+`secrets get/create/patch/update` in the namespace. Every other workload was
+verified by grep to contain no API client and runs green with no token
+(scripts/verify-hardening.sh checks the mount is absent on all eight). The
+chart has no ClusterRole and exactly one Role (wp-setup, secrets only).
+
+## 2026-10-19: Custom hardened WordPress + wp-cli images; everything non-root (ADR-043)
+
+**Decision.** `src/wordpress` builds the WordPress image FROM the pinned
+`wordpress:6.6-php8.2-apache` with three deltas: Apache listens on the
+unprivileged 8080 (`ports.conf` + vhost), `/var/www/html` and the apache
+runtime dirs are owned by www-data (uid 33), and `USER 33`. The wp-setup hook
+runs from `src/wp-cli` (the upstream `wordpress:cli-php8.2` with /var/www/html
+chowned to www-data) so the whole job runs as uid 33. The store-assets
+initContainer runs as uid 33 with pod fsGroup 33, so it needs no chown and no
+capabilities; the root `fix-permissions` initContainer is deleted. MariaDB runs
+as uid 999 (the official image's supported non-root mode; its entrypoint skips
+chown when not root) with fsGroup 999 over the existing root-initialised PVC.
+The pod port change is values-driven end to end: `wordpress.containerPort`
+(8080) with `wordpress.service.port` keeping 80, so the Service, Ingress, the
+woo-mcp `WOO_URL`, the wp-setup waits and the NetworkPolicy ports all follow
+values.
+
+**The one credential leak found and fixed on the way:** Apache's default
+`combined` LogFormat logs `%u` (REMOTE_USER), which for `/wp-json/` Basic auth
+is the Woo CONSUMER KEY — a credential half leaked into pod logs on every MCP
+REST call (observed in real pod logs). The hardened image redefines the
+`combined` format with `%u` replaced by a literal `-`; a fresh Basic-auth call
+logs no key material (verified by re-scanning pod logs).
+
+## 2026-10-19: Login lockout + Secure session cookie (ADR-044)
+
+**Decision.** The dashboard login endpoint counts failures per username AND per
+client IP (in-memory sliding window; `auth/login_throttle.py`). After
+`login_lockout_attempts` (5) failures inside `login_lockout_window_seconds`
+(300s) the next attempt gets `429` with the generic text "too many attempts,
+retry later" — before any credential work and with no user-existence leak. The
+lockout TRANSITION writes exactly one `login.lockout` admin event (reason +
+client IP; the attempted password is never stored), on top of the existing
+`login.failed` trail. A successful login clears the counter.
+
+**Accepted residual:** the counter is in-memory, so it is PER REPLICA — with N
+replicas an attacker gets `attempts x replicas` tries and a pod restart clears
+the counters. Scaling out requires a shared store (Redis/PG); not
+half-implemented. The session cookie gained `Secure` as a setting
+(`gateway.sessionCookieSecure`, values-prod sets true; local kind stays plain
+http so it stays false). SameSite stays `lax`; `strict` was not verified live so
+it is not claimed.
+
+## 2026-10-19: NetworkPolicy ports are values-driven (ADR-045)
+
+**Decision.** The default-deny + explicit allows are unchanged in shape, but
+every port now comes from values (container ports for pod-side rules: wordpress
+8080, dashboard 8080, gateway 8000; the ingress-nginx namespace selector is the
+`networkPolicy.ingressNamespace` value). This was load-bearing: NetworkPolicy
+port matches are evaluated against the POD port (post-DNAT), so moving the
+WordPress/dashboard containers to 8080 required the policy to allow 8080 — the
+policy ports are `wordpress.containerPort` / `dashboard.port` / `gateway.port`,
+never hardcoded. Enforcement is proven by scripts/verify-hardening.sh: a
+throwaway pod is BLOCKED from woo-mcp/notes/time/postgres/mariadb, the gateway
+reaches every upstream, and even the probe pod's own egress is default-denied
+(it needs a scoped egress policy to reach the gateway at all).
+
+## 2026-10-19: Security headers + CSP with no inline scripts (ADR-046)
+
+**Decision.** The dashboard nginx and the gateway API both send:
+Content-Security-Policy (`default-src 'self'; script-src 'self'; style-src
+'self'; img-src 'self' data:; font-src 'self'; connect-src 'self';
+frame-ancestors 'none'; base-uri 'self'; form-action 'self'`),
+X-Content-Type-Options nosniff, Referrer-Policy no-referrer, X-Frame-Options
+DENY and an empty Permissions-Policy. The dashboard's theme-flash inline script
+moved to an external `/theme-init.js` so `script-src 'self'` holds with no
+'unsafe-inline' and no hashes. nginx `add_header` inheritance is handled (the
+`/assets/` location repeats the block). Verified in a real browser: zero CSP
+console errors, app renders. One Playwright harness quirk was fixed, not
+worked around: `waitForFunction` is eval-based (CSP correctly refuses it), so
+scripts/verify-chat-upload.mjs polls with `page.evaluate(fn)` (CDP
+callFunctionOn, CSP-respecting).
+
+## 2026-10-19: One SSRF-safe client factory; connect-time revalidation proven (ADR-047)
+
+**Decision.** The two upstream-call sites (gw_mcp/router.py and
+gw_mcp/aggregator.py) built identical nested httpx factories; both now share
+`registry.validator.ssrf_safe_client_factory(timeout)` — the ONLY client
+factory the gateway uses upstream, with `follow_redirects=False` (a 30x must
+never be chased toward a private IP after the original host was validated) and
+the gateway's own timeout. Tests pin: save-time URL shape rejection
+(127/localhost/metadata/10.x/172.16.x/192.168.x/IPv6 loopback/userinfo/scheme),
+connect-time resolution rejecting literal private IPs, hostnames that RESOLVE
+private (mocked resolver), and decimal/hex inet_aton forms ("2130706433",
+"0x7f000001", "127.1" — glibc's resolver accepts them; the resolved-address
+check is what blocks them), plus the factory's no-redirects contract.
+
+**Found while scanning pod logs (ADR-043 note):** Apache's `combined` format
+logs `%u` (REMOTE_USER) — for /wp-json/ Basic auth that IS the Woo consumer
+key. Fixed in the hardened image by redefining the format with `%u` dropped;
+pod-log scan now reports 0 key-shaped strings.

@@ -28,6 +28,68 @@ Admin-supplied URL validated at write (`validate_url`: no userinfo, https, block
 ## Additional
 Secrets encrypted at rest (k3s `--secrets-encryption` / aescbc), `securityContext` non-root readOnly, minimal SA RBAC, `httpx` timeouts, no secrets in logs, TLS on prod (cert-manager). Audit partitioned, append-only, admin-read.
 
+## Security Hardening Pass (2026-10-19, ADR-041..047)
+
+**What changed** (all values-driven; proven by `scripts/verify-hardening.sh`, 53 checks):
+
+- **Non-root everywhere.** Every container and init container runs non-root with an
+  explicit uid (gateway/woo-mcp/demo-* 1000, dashboard 101, postgres 70, mariadb 999,
+  wordpress 33, wp-setup 33, store-assets init 33, busybox waits 1000),
+  `allowPrivilegeEscalation: false`, ALL capabilities dropped,
+  `seccompProfile: RuntimeDefault`. The root `fix-permissions` chown initContainer is
+  gone (pod fsGroup makes the PVC group-writable). The only root container left in the
+  cluster is the throwaway probe pod verify scripts create and delete.
+- **ServiceAccounts:** one dedicated SA per workload, `automountServiceAccountToken:
+  false` on all but the wp-setup hook (its K8s API use is real: it writes `woo-secrets`
+  under a secrets-only Role). Proven by exec: no token dir on any of the eight
+  workloads.
+- **readOnlyRootFilesystem = true** for gateway, dashboard, woo-mcp, demo-time,
+  demo-notes and postgres (emptyDirs for /tmp + socket/cache paths). **Non-root
+  exceptions (readOnlyRootFilesystem stays false):** wordpress, mariadb and the
+  wp-setup job — the WordPress/wp-cli images write `wp-config.php` into the image
+  layer at start and MariaDB keeps runtime state on its image fs. They still run as
+  non-root (33/999/33) with no capabilities; residual is "can write own image fs",
+  not root.
+- **Login lockout:** per username AND per client IP, 5 failures / 300s (settings),
+  429 with generic text, one `login.lockout` audit row per transition. **Per replica:
+  the counter is in-memory, so with N replicas the budget multiplies by N and a
+  restart clears it** — accepted for the single-replica demo; a shared store is the
+  (deliberately unimplemented) scaling path.
+- **Session cookie:** HttpOnly + SameSite=lax always; Secure is the
+  `gateway.sessionCookieSecure` setting, ON in values-prod (TLS at the Ingress).
+- **Security headers + CSP** on dashboard nginx and gateway API: CSP
+  default-src 'self' / script-src 'self' (no inline scripts — the theme bootstrap
+  moved to /theme-init.js) / connect-src 'self' / frame-ancestors 'none',
+  nosniff, no-referrer, DENY framing, empty Permissions-Policy. Zero CSP console
+  errors in a real browser.
+- **SSRF guard** re-verified with tests: save-time shape rejection, connect-time
+  DNS resolution of every A/AAAA (the guard resolves at CALL time, not only at
+  save), decimal/hex inet_aton forms, hostname-resolves-private, and redirects
+  never followed (one shared `follow_redirects=False` client factory).
+- **Pod-log secret leak fixed:** Apache's `combined` LogFormat logged `%u`
+  (REMOTE_USER) — for /wp-json/ Basic auth that is the Woo CONSUMER KEY. The
+  hardened image drops `%u`; the log scan reports 0 key-shaped strings.
+
+**What remains (documented, not hidden):**
+
+- **Gateway egress stays open to public 443** (minus RFC1918/metadata): the
+  configured LLM provider's IP is not knowable in advance. This is the only open
+  egress in the chart.
+- **The LLM provider sees chat content AND images**: chat text and attached
+  images (re-encoded, max 5 MB, 15-minute TTL) go to the same provider endpoint.
+  There is no on-prem model option in this design.
+- **Rate limit + lockout are per replica** (in-memory): single-replica demo
+  posture; a shared store is the scaling path.
+- **readOnlyRootFilesystem = false for wordpress, mariadb, wp-setup** (residual:
+  those containers can write their own image fs; non-root + no caps still hold).
+- **wp-setup token:** the only automounted token (secrets-only Role) — justified
+  by the job's K8s API use; it lives for the ~2 minutes the hook runs.
+- **MariaDB on the existing PVC:** the data dir was first initialised as root; the
+  kubelet's fsGroup chown makes it group-writable for uid 999. A FRESH install
+  initialises directly as uid 999.
+
+
+
 ## Chat Image Uploads (F3, ADR-035)
 
 A chat message may carry a reference to an uploaded image; the gateway re-encodes

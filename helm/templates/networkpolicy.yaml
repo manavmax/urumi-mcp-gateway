@@ -1,5 +1,8 @@
 {{- if .Values.networkPolicy.enabled }}
-{{- /* Default deny — blocks all pod ingress/egress by default; explicit allows below open what's needed */ -}}
+{{- /* Hardening (ADR-045): default deny — blocks all pod ingress/egress by default;
+        every allow below is selector-driven with ports taken from values, never
+        hardcoded. CNI enforcement is proven live in scripts/verify-hardening.sh
+        (a throwaway pod gets BLOCKED on every private tier port). */ -}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -41,6 +44,11 @@ spec:
         - protocol: TCP
           port: 9153
 ---
+{{- /* ingress-nginx (the only public front door) may reach the public tier on the
+        pods' real container ports (gateway 8000, dashboard 8080, wordpress 8080 —
+        all from values). Same-namespace pods may reach the same ports for the
+        wp-setup waits and kubelet/pod-level probes. The tier labels come from each
+        pod template (tier: public / tier: private), never hardcoded here. */}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -57,15 +65,18 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace | default "ingress-nginx" | quote }}
       ports:
-        - port: 80
-        - port: 8000
-    # allow same-namespace probes / internal (kubelet, etc.)
+        - port: {{ .Values.gateway.port | default 8000 }}
+        - port: {{ .Values.dashboard.port | default 8080 }}
+        - port: {{ .Values.wordpress.containerPort | default 8080 }}
+    # allow same-namespace pods (wp-setup wait-for-wordpress etc.) on the same ports
     - from:
         - podSelector: {}
       ports:
-        - port: 80
+        - port: {{ .Values.gateway.port | default 8000 }}
+        - port: {{ .Values.dashboard.port | default 8080 }}
+        - port: {{ .Values.wordpress.containerPort | default 8080 }}
 ---
 # wordpress -> mariadb (DB ingress from wordpress + wp-setup job)
 apiVersion: networking.k8s.io/v1
@@ -111,9 +122,10 @@ spec:
       ports:
         - port: {{ .Values.mariadb.port }}
 ---
-# wp-setup job needs wordpress:80 + mariadb:3306 + DNS + HTTPS (plugin/theme download
-# from downloads.wordpress.org / api.wordpress.org). Egress is restricted to public
-# internet only — RFC1918 + metadata ranges are excluded, mirroring the SSRF posture.
+# wp-setup job needs wordpress + mariadb + DNS + K8s API + HTTPS (plugin/theme
+# download from downloads.wordpress.org / api.wordpress.org). Egress is restricted
+# to those peers and to public internet only — RFC1918 + metadata ranges are
+# excluded, mirroring the SSRF posture.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -132,7 +144,7 @@ spec:
             matchLabels:
               app: wordpress
       ports:
-        - port: 80
+        - port: {{ .Values.wordpress.containerPort | default 8080 }}
     - to:
         - podSelector:
             matchLabels:
@@ -176,7 +188,6 @@ spec:
 ---
 # woo-mcp must reach the WordPress service (Woo REST) and DNS only — it has no
 # reason to talk to MariaDB, Postgres, the K8s API, or the internet at large.
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -195,9 +206,9 @@ spec:
             matchLabels:
               app: wordpress
       ports:
-        - port: 80
-# woo-mcp must only ever be entered by the gateway (docs/03 §1) — ingress stays
-# covered by allow-gateway-to-woo-mcp above; no other ingress policy selects it.
+        - port: {{ .Values.wordpress.containerPort | default 8080 }}
+# woo-mcp must only ever be entered by the gateway (docs/03 §1): the ingress rule
+# below is the only one that selects it.
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -239,6 +250,11 @@ spec:
       ports:
         - port: {{ .Values.postgres.port }}
 ---
+{{- /* Gateway egress: the exact upstream peers + the LLM provider over public
+        HTTPS. The public-internet hole is deliberate and documented
+        (THREAT_MODEL.md): the gateway must reach the configured LLM endpoint and
+        its IP is not knowable in advance, so egress stays open to public 443 only
+        (RFC1918/metadata still blocked). This is the ONLY open egress in the chart. */}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -277,9 +293,6 @@ spec:
       ports:
         - port: {{ .Values.postgres.port }}
 {{- if .Values.gateway.llm.enabled }}
-    # Chat LLM (gateway.llm.*): the gateway must reach the configured LLM endpoint
-    # over HTTPS. Egress is restricted to public internet only — RFC1918 + metadata
-    # ranges are excluded, mirroring the SSRF posture in the wp-setup rule above.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -299,14 +312,10 @@ spec:
       ports:
         - port: 443
 {{- end }}
-{{- end }}
----
-# --- Extra demo upstreams -------------------------------------------------------
-# Both are ClusterIP-only MCP servers whose ingress is restricted to the gateway,
-# exactly like woo-mcp. Neither needs Woo, the DBs, or the internet, so their
-# only egress is DNS.
 {{- if .Values.demoTime.enabled }}
 ---
+# demo-time: ClusterIP-only MCP server. Ingress from the gateway only; egress is
+# default-deny + DNS (it needs nothing else).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -329,6 +338,7 @@ spec:
 {{- end }}
 {{- if .Values.demoNotes.enabled }}
 ---
+# demo-notes: same posture as demo-time (default-deny egress + DNS only).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -349,4 +359,4 @@ spec:
       ports:
         - port: {{ .Values.demoNotes.port }}
 {{- end }}
-
+{{- end }}

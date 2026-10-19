@@ -22,8 +22,13 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         tier: private
     spec:
-      securityContext:
-        fsGroup: 999
+      serviceAccountName: {{ include "urumi.fullname" . }}-mariadb
+      automountServiceAccountToken: false
+      # Hardening (ADR-043): the official mariadb image supports running the whole
+      # container as the mysql user (uid 999) - its entrypoint skips the root chown
+      # steps and execs mariadbd directly when it is not root. fsGroup 999 makes the
+      # existing (root-initialised) PVC group-writable for that uid.
+      {{- include "urumi.podSecurityContext" (dict "root" $ "workload" "mariadb") | nindent 6 }}
       containers:
         - name: mariadb
           image: "{{ .Values.mariadb.image.repository }}:{{ .Values.mariadb.image.tag }}"
@@ -60,11 +65,7 @@ spec:
             - name: data
               mountPath: /var/lib/mysql
           securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-            allowPrivilegeEscalation: true
-            readOnlyRootFilesystem: false
-            capabilities: { add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"] }
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "mariadb") | nindent 12 }}
   volumeClaimTemplates:
     - metadata:
         name: data

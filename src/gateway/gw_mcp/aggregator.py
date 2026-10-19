@@ -8,7 +8,6 @@ import time
 import uuid
 from typing import Any
 
-import httpx
 from db.models import Server, Tool
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
@@ -70,10 +69,10 @@ async def _fetch_tools_for_server(server: Server, timeout_seconds: float = 8.0) 
             await resolve_and_validate(host)
 
     headers = _auth_headers(server)
-    # httpx client with timeout + no redirect
-    def _factory(**_kwargs):
-        # SDK may pass headers= / timeout= / etc — accept and ignore; we set timeout ourselves
-        return httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds), follow_redirects=False)
+    # Shared SSRF-safe factory (redirects never followed - ADR-047)
+    from registry.validator import ssrf_safe_client_factory
+
+    _factory = ssrf_safe_client_factory(timeout_seconds)
 
     async with (
         streamablehttp_client(server.url, headers=headers, httpx_client_factory=_factory) as (read, write, _meta),

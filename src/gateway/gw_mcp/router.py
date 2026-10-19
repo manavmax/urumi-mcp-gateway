@@ -7,7 +7,6 @@ import json
 import logging
 import time
 
-import httpx
 from config import get_settings
 from db.models import Server
 from mcp import ClientSession
@@ -199,8 +198,10 @@ async def proxy_call(
 
     headers = _auth_headers(server)
 
-    def _factory(**_kwargs):
-        return httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds), follow_redirects=False)
+    # Shared SSRF-safe factory (redirects never followed - ADR-047)
+    from registry.validator import ssrf_safe_client_factory
+
+    _factory = ssrf_safe_client_factory(timeout_seconds)
 
     async with (
         streamablehttp_client(server.url, headers=headers, httpx_client_factory=_factory) as (read, write, _meta),

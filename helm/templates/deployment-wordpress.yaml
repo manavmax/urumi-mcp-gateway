@@ -21,26 +21,18 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         tier: public
     spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-wordpress
+      automountServiceAccountToken: false
+      # Hardening (ADR-041/043): pod fsGroup 33 makes the wp-content PVC
+      # group-writable for www-data, so the root `fix-permissions` chown
+      # initContainer that used to run here is gone entirely.
+      {{- include "urumi.podSecurityContext" (dict "root" $ "workload" "wordpress") | nindent 6 }}
       initContainers:
-        - name: fix-permissions
-          image: busybox:1.36
-          command: ["sh", "-c", "chown -R 33:33 /var/www/html/wp-content 2>/dev/null || true; chmod -R 775 /var/www/html/wp-content 2>/dev/null || true"]
-          volumeMounts:
-            - name: wp-content
-              mountPath: /var/www/html/wp-content
-          securityContext:
-            runAsUser: 0
-            allowPrivilegeEscalation: true
-            capabilities: { add: ["CHOWN", "FOWNER"] }
         - name: wait-for-db
           image: busybox:1.36
           command: ["sh", "-c", "until nc -z {{ include "urumi.fullname" . }}-mariadb {{ .Values.mariadb.port }}; do echo waiting for mariadb; sleep 2; done; echo mariadb ready"]
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-            readOnlyRootFilesystem: true
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "util") | nindent 12 }}
         {{- if .Values.storeAssets.enabled }}
         - name: store-assets
           image: "{{ .Values.storeAssets.image.repository }}:{{ .Values.storeAssets.image.tag }}"
@@ -58,23 +50,19 @@ spec:
               cp -rf /assets/themes/urumi-store/. /var/www/html/wp-content/themes/urumi-store/
               cp -f /assets/products.json /var/www/html/wp-content/store/products.json
               cp -rf /assets/images/. /var/www/html/wp-content/store/images/
-              chown -R 33:33 /var/www/html/wp-content/themes/urumi-store /var/www/html/wp-content/store 2>/dev/null || true
               echo "store assets copied."
           volumeMounts:
             - name: wp-content
               mountPath: /var/www/html/wp-content
           securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-            allowPrivilegeEscalation: true
-            capabilities: { add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"] }
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "storeAssets") | nindent 12 }}
         {{- end }}
       containers:
         - name: wordpress
           image: "{{ .Values.wordpress.image.repository }}:{{ .Values.wordpress.image.tag }}"
           imagePullPolicy: {{ .Values.wordpress.image.pullPolicy }}
           ports:
-            - containerPort: 80
+            - containerPort: {{ .Values.wordpress.containerPort | default 8080 }}
               name: http
           env:
             - name: WORDPRESS_DB_HOST
@@ -112,11 +100,7 @@ spec:
             - name: wp-content
               mountPath: /var/www/html/wp-content
           securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-            allowPrivilegeEscalation: true
-            readOnlyRootFilesystem: false
-            capabilities: { add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"] }
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "wordpress") | nindent 12 }}
       volumes:
         - name: wp-content
           persistentVolumeClaim:

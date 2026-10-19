@@ -55,7 +55,10 @@ def set_session_cookie(response: Response, cookie_value: str):
         value=cookie_value,
         max_age=s.session_max_age_seconds,
         httponly=True,
-        secure=False,  # true in prod when TLS; keep false for kind nip.io http
+        # Hardening (ADR-044): Secure is a setting now, not a hardcoded False -
+        # values-prod sets gateway.sessionCookieSecure: true once TLS terminates
+        # at the Ingress; local kind stays http so it remains false there.
+        secure=s.session_cookie_secure,
         samesite="lax",
         path="/",
     )

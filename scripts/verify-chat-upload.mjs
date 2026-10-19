@@ -180,10 +180,21 @@ async function main() {
     // 5. send the create + attach request and assert the tool chips
     await page.fill('input[aria-label="Chat message"]', `create a product named ${PRODUCT_NAME} priced 12.99 and attach this image`);
     await page.press('input[aria-label="Chat message"]', "Enter");
-    await page.waitForFunction(
+    // CSP note (ADR-046): page.waitForFunction is eval-based in Playwright and a
+    // strict script-src 'self' correctly refuses it. page.evaluate(fn) goes through
+    // CDP callFunctionOn (no eval), so the poll below keeps the page CSP fully
+    // enforced while the harness waits.
+    const waitUntil = async (condFn, timeoutMs) => {
+      const start = Date.now();
+      for (;;) {
+        if (await page.evaluate(condFn)) return;
+        if (Date.now() - start > timeoutMs) throw new Error("waitUntil: timeout");
+        await page.waitForTimeout(300);
+      }
+    };
+    await waitUntil(
       () => !document.querySelector(".typing") && document.querySelectorAll(".msg.assistant .bubble").length > 0,
-      null,
-      { timeout: 180000 },
+      180000,
     );
     await page.waitForTimeout(800);
     const toolNames = await page.$$eval(".tool-call .head .name", (els) => els.map((e) => (e.textContent || "").trim()));

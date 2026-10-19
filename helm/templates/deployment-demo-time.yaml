@@ -21,6 +21,8 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         tier: private
     spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-demo-time
+      automountServiceAccountToken: false
       containers:
         - name: demo-time
           image: "{{ .Values.demoTime.image.repository }}:{{ .Values.demoTime.image.tag }}"
@@ -49,11 +51,7 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 2
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-            readOnlyRootFilesystem: true
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "demoTime") | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

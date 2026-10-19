@@ -22,6 +22,11 @@ wordpress:
     requests: { cpu: 500m, memory: 512Mi }
     limits: { cpu: 1000m, memory: 1Gi }
 
+# Hardening (ADR-044): prod TLS terminates at the Ingress (cert-manager, ssl-redirect),
+# so the dashboard session cookie must be Secure and never travel over plain http.
+gateway:
+  sessionCookieSecure: true
+
 mariadb:
   storage: { size: 20Gi }
   resources:

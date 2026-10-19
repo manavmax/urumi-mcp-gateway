@@ -9,7 +9,10 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 80
+    # Service keeps port 80 (values: wordpress.service.port) so in-cluster callers
+    # (woo-mcp WOO_URL, wp-setup waits) and the Ingress stay unchanged; targetPort
+    # follows the named container port, which the hardened image moved to 8080.
+    - port: {{ .Values.wordpress.service.port | default 80 }}
       targetPort: http
       protocol: TCP
       name: http

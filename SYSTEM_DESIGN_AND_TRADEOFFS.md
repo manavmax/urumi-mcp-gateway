@@ -34,6 +34,25 @@ Only `values-*.yaml` changes — same chart: `domain` (nip.io → real), `storag
 
 Timeout 10s per call, health probe 15s, breaker open 30s, audit async queue (10k) never blocks request, `follow_redirects=False` + DNS IP blocklist.
 
+## Security Controls (hardening pass 2026-10-19, ADR-041..047)
+
+| Control | Where | Proof |
+|---|---|---|
+| Non-root + explicit uid, ALL caps dropped, no privEsc, seccomp RuntimeDefault | every container + initContainer (gateway 1000, dashboard 101, woo-mcp/demo 1000, postgres 70, mariadb 999, wordpress 33, wp-setup 33, store-assets 33, waits 1000) | `scripts/verify-hardening.sh` §1 (kubectl exec id per pod) |
+| `readOnlyRootFilesystem` | true: gateway, dashboard, woo-mcp, demo-*, postgres (emptyDirs for /tmp + sockets); false (documented): wordpress, mariadb, wp-setup | verify-hardening.sh table |
+| PVC group-write without root | pod fsGroup (70/999/33) replaces the root chown initContainer | helm/templates + live uids |
+| Dedicated ServiceAccounts, no token automount | 8 workloads automount=false; only wp-setup automounts (secrets-only Role) | exec: no token dir on all 8 workloads |
+| Default-deny NetworkPolicy + values-driven allows | throwaway pod blocked from woo-mcp/notes/time/postgres/mariadb; gateway reaches all 4 upstreams; gateway egress public-443-only (LLM) | verify-hardening.sh §2 |
+| Login lockout (username + IP) | 5 fails/300s → 429 generic text + one audit row; in-memory, per replica | verify-hardening.sh §3 + test_login_throttle.py |
+| Session cookie | HttpOnly, SameSite=lax, Secure via `gateway.sessionCookieSecure` (prod ON) | live Set-Cookie probe |
+| Security headers + CSP | dashboard nginx + gateway API: CSP self-only, no inline scripts, frame-ancestors 'none', nosniff, no-referrer, empty Permissions-Policy | verify-hardening.sh §4 + zero CSP console errors in a real browser |
+| SSRF guard | save-time shape + connect-time DNS re-resolution, decimal/hex/metadata/redirect cases pinned by tests; one shared `follow_redirects=False` client factory | `src/gateway/tests/test_ssrf_guard.py` |
+| No secrets in git/values/logs | generated Secrets (or operator-provided), placeholder values files, log scans 0 key-shaped strings (the Apache `%u` consumer-key leak found and fixed) | working-tree + git-history blob scan + verify-hardening.sh §5 |
+
+Trade-offs accepted: gateway egress open to public 443 (LLM provider IP unknowable); the LLM provider sees chat text and images; per-replica in-memory rate limit/lockout (single-replica demo); readOnlyRootFilesystem=false for wordpress/mariadb/wp-setup (non-root still holds); wp-setup is the only token-mounted SA (secrets-only Role, ~2 min lifetime per hook run).
+
+Trade-offs accepted: gateway egress open to public 443 (LLM provider IP unknowable); the LLM provider sees chat text and images; per-replica in-memory rate limit/lockout (single-replica demo); readOnlyRootFilesystem=false for wordpress/mariadb/wp-setup (non-root still holds); wp-setup is the only token-mounted SA (secrets-only Role, ~2 min lifetime per hook run).
+
 ## Stand-out
 
 VPS deploy, per-tool RBAC (members read-only), deny-by-default NetworkPolicy + SSRF validator, optional `search_tools` meta-tool for many-server scale.

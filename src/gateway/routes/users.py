@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from audit.admin_events import key_ref, login_failed_event_allowed, record_admin_event, sanitize_login_email
+from auth import login_throttle
 from auth.keys import create_api_key, revoke_api_key
 from auth.rbac import (
     get_current_user_via_session,
@@ -41,8 +42,15 @@ class KeyCreate(BaseModel):
 
 
 @router.post("/api/auth/login")
-async def login(body: LoginBody, response: Response, db: AsyncSession = Depends(get_db)):
+async def login(body: LoginBody, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     email = body.email.strip().lower()
+    # Hardening (ADR-044): lockout per username AND per client IP. The counter is
+    # in-memory => per replica (documented residual). The lockout check runs
+    # BEFORE any credential work; a locked attempt never reaches password verify
+    # and returns the generic 429 text (no user-existence leak either way).
+    client_ip = request.client.host if request.client else "unknown"
+    if login_throttle.is_locked("user", email) or login_throttle.is_locked("ip", client_ip):
+        raise HTTPException(status_code=429, detail="too many attempts, retry later")
     res = await db.execute(select(User).where(User.email == email))
     user = res.scalars().first()
     reason = ""
@@ -51,6 +59,10 @@ async def login(body: LoginBody, response: Response, db: AsyncSession = Depends(
     elif not await verify_password(user.password_hash, body.password):
         reason = "invalid_credentials"
     if reason:
+        # Hardening (ADR-044): count the failure for both keys; when a cap is
+        # crossed, write ONE audit row per lockout transition.
+        just_locked_user = login_throttle.record_failure("user", email)
+        just_locked_ip = login_throttle.record_failure("ip", client_ip)
         # login.failed trail (ADR-034): attempted email + time + reason only, NEVER
         # the password. One source (attempted email) can write at most
         # LOGIN_FAILED_EVENT_LIMIT rows per window (the same in-memory rate-limit
@@ -59,6 +71,17 @@ async def login(body: LoginBody, response: Response, db: AsyncSession = Depends(
         # the 401 below rolls the request session back otherwise.
         # target_ref is sanitized: only valid email format is stored, otherwise
         # "invalid_format" (prevents XSS from HTML in the email field).
+        if just_locked_user or just_locked_ip:
+            record_admin_event(
+                db,
+                actor_user_id=None,
+                action="login.lockout",
+                target_type="login",
+                target_ref=sanitize_login_email(email),
+                outcome="failure",
+                details={"reason": "lockout", "client_ip": client_ip},
+            )
+            await db.commit()
         if login_failed_event_allowed(email):
             record_admin_event(
                 db,
@@ -71,6 +94,8 @@ async def login(body: LoginBody, response: Response, db: AsyncSession = Depends(
             )
             await db.commit()
         raise HTTPException(status_code=401, detail="invalid credentials")
+    login_throttle.record_success("user", email)
+    login_throttle.record_success("ip", client_ip)
     cookie_val, csrf = create_session_cookie(user.id)
     set_session_cookie(response, cookie_val)
     return {"user": {"id": str(user.id), "email": user.email, "role": user.role}, "csrf_token": csrf}

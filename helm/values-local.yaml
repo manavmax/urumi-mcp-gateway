@@ -33,6 +33,10 @@ gateway:
 dashboard:
   enabled: true
   image: { repository: urumi/dashboard, tag: "0.1.0", pullPolicy: Never }
+  # nginx listens on the unprivileged 8080 (image + values.yaml default); the
+  # Service/Ingress keep servicePort 80, so only the pod port changed.
+  port: 8080
+  servicePort: 80
   resources:
     requests: { cpu: 20m, memory: 64Mi }
     limits: { cpu: 200m, memory: 128Mi }
@@ -74,9 +78,18 @@ storeAssets:
 # 1 Insufficient cpu`). These requests keep the release schedulable with room to spare
 # while leaving every limit untouched, so behaviour under load is unchanged.
 wordpress:
+  # Hardened image built from src/wordpress (`make wordpress-image`): listens on
+  # 8080, runs as www-data (uid 33), no root. Service stays on 80.
+  image: { repository: urumi/wordpress, tag: 6.6-php8.2-apache-hardened, pullPolicy: Never }
+  containerPort: 8080
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
+
+wpSetup:
+  # Hardened wp-cli runner built from src/wp-cli (`make wp-cli-image`): job runs
+  # as uid 33, ALL capabilities dropped.
+  image: { repository: urumi/wp-cli, tag: cli-php8.2-hardened, pullPolicy: Never }
 
 mariadb:
   resources:
