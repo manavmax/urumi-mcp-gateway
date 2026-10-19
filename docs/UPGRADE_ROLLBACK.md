@@ -75,6 +75,32 @@ The bad tag never pulls, the Deployment's progress deadline expires, helm marks
 revision FAILED and ROLLS BACK AUTOMATICALLY. The cluster was serving throughout
 the failure window (old pod kept running).
 
+### b2) The same bad upgrade, FASTER: progressDeadlineSeconds + --timeout 6m
+
+The default progress deadline is 600s, so the rehearsal above burns ~10 minutes.
+The chart now sets `gateway.progressDeadlineSeconds` (default 300, values-driven):
+the Deployment flips to `ProgressDeadlineExceeded` after 5 minutes of no progress
+and helm fails fast instead of waiting out a longer --timeout. Rehearsed with a
+6-minute timeout (real output, 2026-10-20, kind; helm v4.3.0 where --atomic maps
+to --rollback-on-failure):
+
+```
+$ { time helm upgrade urumi ./helm -n urumi -f helm/values-local.yaml \
+    --set gateway.image.tag=0.1.0-NONEXISTENT --timeout 6m --atomic --wait >/tmp/bad-upgrade-6m.log 2>&1; } 2>&1 | tail -4
+helm upgrade urumi ./helm -n urumi -f helm/values-local.yaml --set  --timeout  1.11s user 0.47s system 0% cpu 5:09.84 total
+level=WARN msg="upgrade failed" name=urumi error="resource Deployment/urumi/urumi-gateway not ready. status: Failed, message: Progress deadline exceeded"
+Error: UPGRADE FAILED: release urumi failed, and has been rolled back due to rollback-on-failure being set: ...
+$ helm history urumi -n urumi | tail -3
+18  failed    urumi-0.1.0  1.0.2  Upgrade "urumi" failed: ... Progress deadline exceeded
+19  deployed  urumi-0.1.0  1.0.2  Rollback to 17
+```
+
+5:09.84 wall (was 10:21.27 with the 600s deadline): ~300s to the deadline plus a
+~30s rollback. After the rollback every pod was Ready again and `/healthz` through
+the ingress answered 200. On helm 3 use the same command with `--atomic` (helm 4
+renamed it `--rollback-on-failure`); the timing behaviour is identical because it
+is driven by the Deployment deadline, not the helm version.
+
 ## c) Manual rollback of a good upgrade
 
 ```
@@ -110,7 +136,9 @@ make upgrade ARGS='--set gateway.image.tag=<new-tag>'   # values-driven upgrade
 make rollback REV=4                                      # manual rollback
 ```
 
-Both use `--timeout 15m --atomic --wait` (ADR-048).
+Both use `--timeout 15m --atomic --wait` (ADR-048). For a DELIBERATELY bad upgrade
+use `--timeout 6m` together with the chart's `gateway.progressDeadlineSeconds: 300`
+so the automatic rollback lands in ~6 minutes (section b2).
 
 ## Rehearsal evidence (helm history, real output)
 
@@ -127,7 +155,10 @@ REVISION  STATUS      APP VERSION  DESCRIPTION
 11        failed      1.0.2        Upgrade "urumi" failed ... (second bad case: broken hook)
 12        superseded  1.0.1        Rollback to 10
 13        superseded  urumi-0.1.0  1.0.2  Upgrade complete
-15        deployed    urumi-0.1.0  1.0.2  Upgrade complete
+15        superseded  urumi-0.1.0  1.0.2  Upgrade complete
+17        superseded  urumi-0.1.0  1.0.2  Upgrade complete (progressDeadlineSeconds=300)
+18        failed      urumi-0.1.0  1.0.2  Upgrade "urumi" failed ... Progress deadline exceeded  <- b2 bad upgrade, 5:09.84
+19        deployed    urumi-0.1.0  1.0.2  Rollback to 17
 ```
 
 Revisions 9/11 were MY OWN broken intermediate (tar extract failing as non-root);
