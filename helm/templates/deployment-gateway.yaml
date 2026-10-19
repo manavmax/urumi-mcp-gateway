@@ -55,6 +55,7 @@ spec:
     spec:
       serviceAccountName: {{ include "urumi.fullname" . }}-gateway
       automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: gateway
           image: "{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag }}"
@@ -121,6 +122,21 @@ spec:
             # Hardening (ADR-044): session cookie Secure flag (values-prod sets true).
             - name: SESSION_COOKIE_SECURE
               value: {{ .Values.gateway.sessionCookieSecure | default false | quote }}
+            # Hardening (ADR-049): trusted reverse-proxy CIDRs for the REAL client IP.
+            # Fed to uvicorn --forwarded-allow-ips via the image CMD; empty (default)
+            # trusts nobody, so the login throttle and audit log see the immediate peer
+            # (the ingress controller pod IP) and a spoofed X-Forwarded-For is ignored.
+            - name: FORWARDED_ALLOW_IPS
+              value: {{ .Values.gateway.trustedProxies | default "" | quote }}
+            # Visible build/version stamp: served by the gateway root endpoint and the
+            # FastAPI version. Comes from Chart.yaml appVersion, so a chart bump is a
+            # visible, verifiable change (docs/UPGRADE_ROLLBACK.md).
+            - name: SERVICE_VERSION
+              value: {{ .Chart.AppVersion | quote }}
+            # CORS: comma-separated allowed origins for dashboard cross-origin calls
+            # (values-prod sets the https dashboard origin).
+            - name: CORS_ALLOW_ORIGINS
+              value: {{ .Values.gateway.corsAllowOrigins | default "" | quote }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:
