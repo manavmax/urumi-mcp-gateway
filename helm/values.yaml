@@ -242,6 +242,13 @@ networkPolicy:
   # tier (gateway, dashboard, wordpress). Selector-driven (kubernetes.io/metadata.name),
   # never a hardcoded namespace in a template.
   ingressNamespace: ingress-nginx
+  # cert-manager ACME HTTP-01 solver pods (label acme.cert-manager.io/http01-solver,
+  # created in this namespace while a TLS Ingress is being solved). They are covered
+  # by the default-deny like every other pod, so this value is the ONLY port they
+  # can be entered on: the challenge must arrive through the ingress controller.
+  # The policy renders when TLS is enabled (global.tlsEnabled); see ADR-051.
+  acmeSolver:
+    port: 8089
 
 wpSetup:
   enabled: true

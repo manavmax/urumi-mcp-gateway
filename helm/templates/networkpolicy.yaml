@@ -340,4 +340,36 @@ spec:
       ports:
         - port: {{ .Values.demoNotes.port }}
 {{- end }}
+{{- /* ACME HTTP-01 (ADR-051): while cert-manager solves a challenge for this
+        namespace's TLS Ingress it creates a short-lived solver pod here with the
+        label below and port from values. default-deny blocks it like every other
+        pod, so the challenge request from the internet would never reach it and
+        the CertificateRequest hangs until timeout (observed live on the VPS).
+        This policy lets ONLY the ingress controller namespace reach the solver
+        pods on the solver port, so the challenge still enters through nginx and
+        nothing else can touch them. Rendered only when TLS is enabled, because
+        with TLS off there are no ACME solver pods to protect. */}}
+{{- if .Values.global.tlsEnabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-acme-solver
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace | default "ingress-nginx" | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.acmeSolver.port | default 8089 }}
+{{- end }}
 {{- end }}

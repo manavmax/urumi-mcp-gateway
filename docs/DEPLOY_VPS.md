@@ -275,6 +275,23 @@ What the policies MUST allow on k3s (all values-driven in the chart):
    The mariadb/wordpress legs are pod-selector rules (CNI-agnostic).
 5. gateway -> upstreams (woo-mcp, demo-time, demo-notes, postgres): pod-selector
    rules, no node involvement.
+6. ACME HTTP-01 solver pods (ADR-051): the chart's default-deny also covers
+   cert-manager's short-lived `cm-acme-http-solver-*` pods (label
+   `acme.cert-manager.io/http01-solver=true`, port 8089). The chart now ships
+   `urumi-allow-acme-solver`, ingress ONLY from the ingress controller namespace
+   on port 8089 (values: `networkPolicy.acmeSolver.port`), rendered when TLS is
+   enabled. Without it nginx 502s reaching the solver and the CertificateRequest
+   hangs (observed live, gotcha (c) in the deploy log).
+
+ADOPTION (one-time, before the first upgrade that ships this chart): the live
+cluster already has a manually created `urumi-allow-acme-solver`. Helm refuses
+to adopt a resource it does not manage, so delete it right before that upgrade
+(the solver pod only exists while a challenge is in flight, so deleting the
+policy between renewals is safe):
+
+```bash
+kubectl delete networkpolicy urumi-allow-acme-solver -n urumi
+```
 
 Fast diagnosis recipe:
 

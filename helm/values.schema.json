@@ -67,7 +67,16 @@
     "gateway": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
     "wooMcp": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
     "dashboard": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
-    "networkPolicy": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "acmeSolver": {
+          "type": "object",
+          "properties": { "port": { "type": "integer", "minimum": 1, "maximum": 65535 } }
+        }
+      }
+    },
     "storeAssets": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
     "wpSetup": { "type": "object", "properties": { "enabled": { "type": "boolean" } } }
   }
