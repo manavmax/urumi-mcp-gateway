@@ -136,9 +136,34 @@ async def fetch_and_cache_tools(db: AsyncSession, server: Server, timeout_second
     return result_rows
 
 
+async def _cache_fallback(db: AsyncSession, s: Server, err: str) -> list[dict] | None:
+    """Last-known tool snapshot for one failed server, or None when there is none.
+
+    The health loop keeps the tools table warm (it runs fetch_and_cache_tools every
+    interval), so when a single upstream times out or its breaker is open we serve
+    that snapshot instead of silently dropping the server's tools from the merged
+    tools/list. Without this, one slow upstream makes every MCP client see fewer
+    tools than are actually allowed (member AND admin alike), which external
+    clients like Cursor surface as "tools disappeared".
+
+    A failed fetch can leave the shared request session in PendingRollback (its
+    own flush blew up); roll that back first so the cache read can run. If the
+    read itself fails, give up and let the caller report the plain error.
+    """
+    try:
+        if not db.is_active:
+            await db.rollback()
+        cached = await list_cached_tools(db, [s.id])
+    except Exception:
+        return None
+    return cached or None
+
+
 async def fanout_list_tools(db: AsyncSession, servers: list[Server], timeout_seconds: float = 8.0) -> tuple[list[dict], list[dict]]:
     """Fan-out tools/list across enabled servers with isolation (gather+return_exceptions).
 
+    A server whose live fetch fails (timeout, breaker open) still contributes its
+    last-known cached tools, with a warning entry carrying "stale_cache": True.
     Returns (tools, warnings) where tools are exposed tool dicts.
     """
     from gw_mcp.breaker import breaker
@@ -148,6 +173,9 @@ async def fanout_list_tools(db: AsyncSession, servers: list[Server], timeout_sec
         from gw_mcp.health_state import record_failure, record_success
 
         if breaker.is_open(s.id):
+            cached = await _cache_fallback(db, s, "circuit open")
+            if cached is not None:
+                return {"server": s.slug, "tools": cached, "stale": True, "error": "circuit open"}
             return {"server": s.slug, "error": "circuit open", "circuit": True}
         started = time.monotonic()
         try:
@@ -169,6 +197,9 @@ async def fanout_list_tools(db: AsyncSession, servers: list[Server], timeout_sec
         except Exception as exc:
             breaker.record_failure(s.id)
             record_failure(s, classify(exc), latency_ms=int((time.monotonic() - started) * 1000))
+            cached = await _cache_fallback(db, s, s.last_error or "upstream error")
+            if cached is not None:
+                return {"server": s.slug, "tools": cached, "stale": True, "error": s.last_error or "upstream error"}
             return {"server": s.slug, "error": s.last_error}
 
     results = await asyncio.gather(*[fetch_one(s) for s in servers], return_exceptions=True)
@@ -178,10 +209,13 @@ async def fanout_list_tools(db: AsyncSession, servers: list[Server], timeout_sec
         if isinstance(r, Exception):
             warnings.append({"error": str(r)[:500]})
             continue
+        if "tools" in r:
+            all_tools.extend(r.get("tools", []))
+            if r.get("stale"):
+                warnings.append({"server": r.get("server"), "error": r.get("error") or "upstream error", "stale_cache": True})
+            continue
         if "error" in r:
             warnings.append({"server": r.get("server"), "error": r["error"]})
-            continue
-        all_tools.extend(r.get("tools", []))
     await db.flush()
     return all_tools, warnings
 
