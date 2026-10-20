@@ -21,7 +21,7 @@ import httpx
 import pytest
 from auth.keys import create_api_key
 from auth.rbac import hash_password
-from db.models import Base, Server, Tool, User
+from db.models import Base, Server, Tool, ToolPermission, User
 from db.session import get_db
 from httpx import ASGITransport
 from main import create_app
@@ -453,6 +453,77 @@ async def test_whole_server_deny_is_reflected_in_get(harness):
     assert g.status_code == 200, g.text
     by_slug = {s["slug"]: s for s in g.json()["servers"]}
     assert all(t["member_denied"] for t in by_slug["time"]["tools"]), by_slug["time"]["tools"]
+
+
+# --------------------------------------------------------------------------- persistence end-to-end
+
+
+@pytest.mark.asyncio
+async def test_restricted_tool_persists_and_splits_member_admin_experience(harness):
+    """One test proving the whole save chain the dashboard depends on:
+
+    1. admin PUT /api/permissions restricting a tool returns 200 + restricted_count=1
+    2. the rule PERSISTS (fresh DB session sees the tool_permissions row, and a
+       fresh admin login - the "close and reopen the dialog" flow - still reports
+       member_denied + restricted_count=1)
+    3. the member's tools/list no longer shows the tool, and a member tools/call
+       on it is rejected (unknown-tool error, never reaches upstream)
+    4. an admin still sees the tool in tools/list and tools/call reaches upstream
+    """
+    data = harness
+    client = data["client"]
+    tool = "woo__create_product"
+
+    # 1. admin restricts the tool through the API
+    r = await _put_rules(client, await _login(client, ADMIN["email"], ADMIN["password"]),
+                         [{"server_slug": "woo", "tool_name": tool}])
+    assert r.status_code == 200, r.text
+    assert r.json()["restricted_count"] == 1, r.json()
+
+    # 2a. persistence: a FRESH db session (not the request's) sees the row
+    async with data["db_factory"]() as fresh:
+        rows = (await fresh.execute(select(ToolPermission))).scalars().all()
+        assert len(rows) == 1, rows
+        assert rows[0].role == "member"
+        assert rows[0].server_slug == "woo"
+        assert rows[0].tool_name == tool
+
+    # 2b. persistence: a FRESH admin login (new session) reads the policy back
+    g = await client.get("/api/permissions", headers=await _login(client, ADMIN["email"], ADMIN["password"]))
+    assert g.status_code == 200, g.text
+    by_slug = {s["slug"]: s for s in g.json()["servers"]}
+    flags = {t["name"]: t["member_denied"] for t in by_slug["woo"]["tools"]}
+    assert flags[tool] is True and flags["woo__list_orders"] is False, flags
+    assert g.json()["restricted_count"] == 1
+
+    # 3. member: tool is gone from tools/list and rejected on direct call
+    member_tools = _tool_names(await _mcplist(client, data["ids"]["member_key"]))
+    assert tool not in member_tools
+    r = await client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 21, "method": "tools/call",
+              "params": {"name": tool, "arguments": {}}},
+        headers={"Authorization": f"Bearer {data['ids']['member_key']}"},
+    )
+    assert r.status_code in (400, 403), r.text
+    assert "unknown tool" in r.json()["error"]["message"].lower(), r.json()
+    assert tool not in data["upstream_calls"], "denied member call reached upstream"
+
+    # 4. admin: same tool visible and callable
+    async with data["db_factory"]() as db:
+        admin = (await db.execute(select(User).where(User.email == ADMIN["email"]))).scalars().first()
+        _row, admin_key = await create_api_key(db, admin.id)
+        await db.commit()
+    admin_tools = _tool_names(await _mcplist(client, admin_key))
+    assert tool in admin_tools
+    r = await client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 22, "method": "tools/call",
+              "params": {"name": tool, "arguments": {}}},
+        headers={"Authorization": f"Bearer {admin_key}"},
+    )
+    assert r.status_code == 200, r.text
+    assert data["upstream_calls"] == [tool]
 
 
 # --------------------------------------------------------------------------- dialect guard

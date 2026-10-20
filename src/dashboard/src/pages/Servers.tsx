@@ -370,7 +370,10 @@ export default function Servers() {
 
       {permOpen && isAdmin && (
         <div className="modal-back open" onClick={(e) => { if (e.target === e.currentTarget) setPermOpen(false); }}>
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Tool permissions" style={{ maxWidth: 720 }}>
+          {/* modal-tall: header + footer fixed, tool list scrolls (B fix) so Save
+              stays reachable with 13+ tools; without it the Save button sat below
+              the viewport and no save request was ever sent. */}
+          <div className="modal modal-tall" role="dialog" aria-modal="true" aria-label="Tool permissions" style={{ maxWidth: 720 }}>
             <div className="card-head" style={{ margin: 0 }}>
               <div className="row wrap" style={{ justifyContent: "space-between", width: "100%" }}>
                 <div className="card-title"><Icon name="lock" />Permissions</div>
@@ -378,54 +381,56 @@ export default function Servers() {
               </div>
               <button className="btn btn-ghost btn-sm" type="button" onClick={() => setPermOpen(false)}>Close</button>
             </div>
-            {permErr && <div className="alert alert-error" role="alert">{permErr}</div>}
-            {permLoading && (
-              <span className="sk" style={{ width: "60%" }} />
-            )}
-            {!permLoading && perm.map((s) => (
-              <div key={s.slug} style={{ borderTop: "1px solid var(--hairline)", paddingTop: "var(--s3)" }}>
-                <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
-                  <div className="card-title" style={{ fontSize: "var(--t-sm)" }}><Icon name="server" />{s.slug}</div>
-                  <span className={`chip ${STATUS_CHIP(!s.enabled ? "Disabled" : s.status).cls}`}>
-                    <Icon name={STATUS_CHIP(!s.enabled ? "Disabled" : s.status).icon} />{!s.enabled ? "Disabled" : s.status}
-                  </span>
-                </div>
-                <div className="table-wrap">
-                  <table aria-label={`Member tool access for ${s.slug}`}>
-                    <thead>
-                      <tr>
-                        <th>Tool</th><th>Admin</th><th>Member</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {s.tools.map((t) => (
-                        <tr key={t.name}>
-                          <td data-label="Tool">
-                            <span className="mono">{t.name}</span>
-                            {t.description && <div className="small muted">{t.description.slice(0, 90)}</div>}
-                          </td>
-                          <td data-label="Admin">
-                            <span className="small muted"><Icon name="lock" sm />all tools</span>
-                          </td>
-                          <td data-label="Member">
-                            <label className="switch">
-                              <input
-                                type="checkbox"
-                                checked={permDraft[t.name] !== false}
-                                onChange={(e) => setPermDraft({ ...permDraft, [t.name]: e.target.checked })}
-                                aria-label={`Member may use ${t.name}`}
-                              />
-                              <span className="track"></span>
-                              <span className="lbl">{permDraft[t.name] === false ? "no" : "yes"}</span>
-                            </label>
-                          </td>
+            <div className="modal-body">
+              {permErr && <div className="alert alert-error" role="alert">{permErr}</div>}
+              {permLoading && (
+                <span className="sk" style={{ width: "60%" }} />
+              )}
+              {!permLoading && perm.map((s) => (
+                <div key={s.slug} style={{ borderTop: "1px solid var(--hairline)", paddingTop: "var(--s3)" }}>
+                  <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                    <div className="card-title" style={{ fontSize: "var(--t-sm)" }}><Icon name="server" />{s.slug}</div>
+                    <span className={`chip ${STATUS_CHIP(!s.enabled ? "Disabled" : s.status).cls}`}>
+                      <Icon name={STATUS_CHIP(!s.enabled ? "Disabled" : s.status).icon} />{!s.enabled ? "Disabled" : s.status}
+                    </span>
+                  </div>
+                  <div className="table-wrap">
+                    <table aria-label={`Member tool access for ${s.slug}`}>
+                      <thead>
+                        <tr>
+                          <th>Tool</th><th>Admin</th><th>Member</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {s.tools.map((t) => (
+                          <tr key={t.name}>
+                            <td data-label="Tool">
+                              <span className="mono">{t.name}</span>
+                              {t.description && <div className="small muted">{t.description.slice(0, 90)}</div>}
+                            </td>
+                            <td data-label="Admin">
+                              <span className="small muted"><Icon name="lock" sm />all tools</span>
+                            </td>
+                            <td data-label="Member">
+                              <label className="switch">
+                                <input
+                                  type="checkbox"
+                                  checked={permDraft[t.name] !== false}
+                                  onChange={(e) => setPermDraft({ ...permDraft, [t.name]: e.target.checked })}
+                                  aria-label={`Member may use ${t.name}`}
+                                />
+                                <span className="track"></span>
+                                <span className="lbl">{permDraft[t.name] === false ? "no" : "yes"}</span>
+                              </label>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
             <div className="card-head" style={{ margin: 0 }}>
               <div className="row" style={{ justifyContent: "flex-end", gap: "var(--s3)", width: "100%" }}>
                 {permSaved && <span className="chip chip-ok"><Icon name="check-circle" />Policy saved</span>}

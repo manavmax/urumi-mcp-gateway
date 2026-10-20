@@ -337,7 +337,13 @@ details.tools[open] { border-radius: var(--r-inner); padding: 0; }
 .filters .field { min-width: 150px; }
 .modal-back { position: fixed; inset: 0; background: var(--scrim); display: none; place-items: center; z-index: 50; padding: var(--s4); }
 .modal-back.open { display: grid; }
-.modal { width: 100%; max-width: 480px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-card); box-shadow: var(--shadow-pop); padding: var(--s5); display: grid; gap: var(--s3); }
+.modal { width: 100%; max-width: 480px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-card); box-shadow: var(--shadow-pop); padding: var(--s5); display: grid; gap: var(--s3); max-height: calc(100vh - 2 * var(--s4)); max-height: calc(100dvh - 2 * var(--s4)); overflow-y: auto; }
+/* B fix: tall dialogs (Permissions) keep header + footer fixed and scroll only the
+   body, so the Save button stays reachable no matter how many tools are listed.
+   100dvh tracks the mobile URL bar; the 100vh line is the fallback for old engines. */
+.modal-tall { display: flex; flex-direction: column; overflow: hidden; }
+.modal-tall > .card-head { flex: none; }
+.modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; display: grid; gap: var(--s3); align-content: start; }
 
 /* ---------- chat (family O) ---------- */
 .chat-layout { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
