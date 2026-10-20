@@ -785,3 +785,51 @@ renewals has no effect on the issued certificate.
 (kind local default) there are no ACME solver pods, and rendering the policy
 anyway would be dead manifest. Verified: helm template with values-prod.yaml
 renders exactly one such policy; with values-local.yaml it renders none.
+
+## 2026-10-21: tools/list serves a per-upstream stale cache instead of dropping tools (ADR-052)
+
+**Decision.** When one upstream's live tools/list fails inside
+`fanout_list_tools` (timeout, connection error) or its circuit breaker is open,
+the gateway now serves that server's LAST-KNOWN cached tools (the `tools` table,
+kept warm by the health loop) instead of silently omitting the server from the
+merged list. The response's `_meta.warnings` carries
+`{"server": <slug>, "error": <safe label>, "stale_cache": true}` so callers can
+see the degradation. A server with no cached rows keeps the old behaviour (plain
+error warning, no invented tools). RBAC deny filtering still applies to stale
+tools (the filter runs on the merged list, after the fallback), and
+`tools/call` enforcement is untouched (live rule read, ADR-033).
+
+**Why.** Reproduced live: with an empty deny table, a member API key listed 10
+tools and an admin 13, and repeated calls flipped between 10/11/13 - the
+differences were per-request upstream timeouts (gateway log: `health fail notes
+category=timeout`), NOT per-role filtering. One slow upstream made every MCP
+client (e.g. Cursor) see fewer tools than are allowed. The cache fallback keeps
+`tools/list` stable: 20/20 live calls returned all 13 tools after the fix, with
+the stale marker present on the requests where the old code would have dropped
+tools.
+
+**Consequence.** During an upstream outage clients keep seeing the server's
+tools (stale schemas) and calls to them fail with the normal upstream/circuit
+errors; a brand-new server that never answered has no cache and stays hidden, as
+before. `stale_cache: true` in `_meta.warnings` is the clients' signal.
+
+## 2026-10-21: Permissions dialog scrolls its body; header and footer fixed (ADR-053)
+
+**Decision.** The dashboard's Permissions dialog (`Servers.tsx`) uses a
+`modal-tall` layout: the dialog is capped at `100dvh - 2*padding` (100vh
+fallback), the header (title, restricted-count chip, Close) and the footer
+(Save) are fixed, and only the `.modal-body` (tool list) scrolls. The generic
+`.modal` also gains a `max-height` + `overflow-y: auto` so no dialog can ever
+overflow the viewport again.
+
+**Why.** Reproduced in a real browser (Playwright, 1440x960): the dialog was
+1289px tall in a 960px viewport inside a fixed, non-scrollable backdrop; the
+Save button sat at y=1242, outside the viewport, and playwright could not scroll
+to it. The network log showed the dashboard NEVER sent `PUT /api/permissions`
+while the backend persisted a replayed PUT fine (200, row in
+`tool_permissions`, GET reflects it). So the reported "toggle does not stay
+off / 0 restricted" had one root cause with the unscrollable dialog: the Save
+button was unreachable, so no save ever happened. After the fix the same
+browser flow toggles a tool off, scrolls to Save, gets PUT 200, and after
+closing/reopening shows "1 restricted for members" with the switch still off -
+at 1440x960 and 390x844.
