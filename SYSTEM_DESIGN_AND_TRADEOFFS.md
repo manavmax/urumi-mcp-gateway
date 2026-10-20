@@ -28,7 +28,7 @@ See `docs/01_ARCHITECTURE.md` for diagrams and request flows.
 
 ## Production Deltas (local -> VPS)
 
-Same chart; only values change (docs/DEPLOY_VPS.md). Rehearsed locally on kind, VPS run pending:
+Same chart; only values change (docs/DEPLOY_VPS.md). Rehearsed locally on kind, then deployed for real on 2026-10-20 (log below):
 
 | delta | local (kind) | prod (values-prod.yaml) | why |
 |---|---|---|---|
@@ -41,7 +41,51 @@ Same chart; only values change (docs/DEPLOY_VPS.md). Rehearsed locally on kind, 
 | Secrets | chart-generated, lookup-guarded | unchanged + `existingSecret` options; LLM key via `scripts/create-llm-secret.sh` (hidden prompt, stdin only) | upgrades never rotate (proven: resourceVersion+data hashes identical across a real upgrade) |
 | Replicas | 1 | 1 for stateful parts (mariadb/postgres single PVCs; a second replica needs shared storage or operator-managed replication - out of scope, documented); gateway 1 (in-memory lockout/rate limit is per replica, documented residual) | honest single-node posture |
 | Real client IP | `gateway.trustedProxies` = ingress controller pod IP (kind) / pod CIDR (k3s) | uvicorn forwarded-allow-ips; throttle + audit see the true client (ADR-049) | spoofed XFF ignored (proven live) |
-| Upgrade policy | `--timeout 15m --atomic --wait` everywhere (ADR-050); rehearsed good upgrade / bad upgrade auto-rollback / manual rollback with data survival | same | docs/UPGRADE_ROLLBACK.md |
+| Upgrade policy | fresh install WITHOUT `--wait` (hook ordering, see log below); upgrades `--timeout 15m --rollback-on-failure --wait` (helm 4 spelling; ADR-050 + deploy-fixes 2026-10-20); rehearsed good upgrade / bad upgrade auto-rollback / manual rollback with data survival | same | docs/UPGRADE_ROLLBACK.md |
+
+## Real deployment log (first live deploy, 2026-10-20)
+
+The chart went to the real server on 2026-10-20: AWS EC2 ap-southeast-2, 2 vCPU /
+8 GB, Ubuntu 24.04, k3s, ingress-nginx + cert-manager, and a Let's Encrypt
+PRODUCTION certificate on the live domain (the domain itself is never committed;
+placeholder policy in helm/values-prod.yaml). The first run found four real
+gaps; all four are fixed on the deploy-fixes branch, and each is now a lesson:
+
+- (a) Fresh install with `--wait` DEADLOCKED. The woo-mcp Deployment needs the
+  woo-secrets Secret, which the wp-setup post-install hook creates - but helm
+  only runs the hook after `--wait` is satisfied, so the wait can never
+  complete. Lesson: a FRESH install runs WITHOUT `--wait` (wait for the hook
+  with `kubectl wait --for=condition=complete job/urumi-wp-setup` instead);
+  every later upgrade keeps `--rollback-on-failure --wait` because the Secret
+  already exists. Documented in DEPLOY_VPS.md section 8 and
+  UPGRADE_ROLLBACK.md; `make helm-prod-first` covers the fresh case.
+- (b) On the 2 vCPU node the chart's CPU REQUESTS did not fit once k3s system
+  pods, ingress-nginx and cert-manager were counted: install pods stayed
+  Pending with "Insufficient cpu". Lesson: a request budget must count the
+  WHOLE node (system pods + controllers), not only the chart. Lowered REQUESTS
+  only (gateway 250m->100m, wordpress 300m->150m, mariadb 300m->100m,
+  postgres 300m->100m; chart total 1400m->700m), LIMITS untouched, budget table
+  in helm/values-prod.yaml.
+- (c) cert-manager's HTTP-01 solver pods (label
+  `acme.cert-manager.io/http01-solver=true`, port 8089) were blocked by the
+  chart's default-deny NetworkPolicy: ingress-nginx got 502 reaching the
+  solver and the CertificateRequest hung. A manually applied ingress-only
+  policy fixed issuance immediately. Lesson: default-deny applies to EPHEMERAL
+  pods too - every pod the platform creates needs an explicit allow. The chart
+  now ships the same policy values-driven (`urumi-allow-acme-solver`,
+  ADR-051), with the adoption note: delete the manually created policy right
+  before the first upgrade with that chart or helm refuses to adopt it.
+- (d) A one-off Let's Encrypt "networking error looking up CAA" failure.
+  Lesson: ACME has transient server-side failures; deleting the failed
+  CertificateRequest and letting cert-manager retry issued on the next attempt
+  (exact command in DEPLOY_VPS.md section 8.1).
+
+Also from the live run: scripts/verify-prod.sh had given WRONG results (its
+`/healthz` check passed on the dashboard's HTML catch-all, not the gateway). It
+was rewritten (routing probes via `curl --resolve`, bounded port probes with no
+GNU timeout dependency, optional key-gated checks) and rerun against the live
+domain: ALL CHECKS PASSED with MCP_KEY and VERIFY_ADMIN_PASSWORD unset
+(sections 5 and 8 print SKIPPED until the operator runs them with the keys).
 
 ## Failure Handling
 
