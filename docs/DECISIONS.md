@@ -833,3 +833,47 @@ button was unreachable, so no save ever happened. After the fix the same
 browser flow toggles a tool off, scrolls to Save, gets PUT 200, and after
 closing/reopening shows "1 restricted for members" with the switch still off -
 at 1440x960 and 390x844.
+
+## 2026-10-21: timezone fallback + time server default zone (ADR-054)
+
+**What changed.** The chat system prompt now ALWAYS carries a concrete local
+date/time: a missing or invalid client timezone falls back to the configured
+`gateway.defaultTimezone` (env GATEWAY_DEFAULT_TIMEZONE, Helm value; base default
+UTC, values-local sets Asia/Kolkata). Previously a missing/invalid tz produced a
+prompt with NO local-time stamp, so "today" was ambiguous. The demo Time MCP
+server gained the same idea: `demoTime.defaultTimezone` (env DEFAULT_TIMEZONE)
+replaces the hardcoded UTC default in get_current_time when the caller omits a
+zone; an explicit caller timezone still wins; an invalid configured zone surfaces
+the tool's normal "Unknown timezone" error. The dashboard already sends
+`Intl.DateTimeFormat().resolvedOptions().timeZone` with every chat request
+(F1-8); validation against zoneinfo is unchanged (routes/chat._valid_tz), so an
+attacker-supplied zone can only ever be a valid IANA name.
+
+**Why.** The brief requires "today" in order questions to resolve in the user's
+timezone with a configured fallback, and the Time server to take an optional
+default zone. Frozen-clock tests pin the midnight boundary: 2026-10-21 18:30 UTC
+is 2026-10-22 00:00 IST, and the IST prompt must say the 22nd while the UTC one
+says the 21st.
+
+**Known trade-off.** The configured default (Asia/Kolkata in values-local) stamps
+a zone that may differ from the actual browser zone when the browser refuses to
+send one; that is strictly better than no stamp, and the client tz always wins
+when present.
+
+## 2026-10-21: upstream credential encryption verified in place, not redone (ADR-055)
+
+**Decision.** Upstream credentials were ALREADY encrypted at rest (Fernet,
+key from the gateway-secrets Secret, stored as LargeBinary since migration
+001; re-encrypted on key rotation by resync_internal_credentials, ADR-026).
+Phase 0b therefore VERIFIES instead of re-implements: new
+tests/test_credential_at_rest.py (ciphertext in the DB row, decrypt round-trip,
+secret absent from every API response and from logs) plus a live DB inspection
+in the gateway pod (`plaintext_in_db=False decrypts=True
+value_matches_secret=True` for the notes credential). No migration is needed:
+there are no plaintext rows to migrate - encryption shipped with the initial
+schema, and every seeded credential is re-applied encrypted at startup.
+
+**Rotation note.** Rotating FERNET_KEY (delete gateway-secrets, helm upgrade)
+makes stored credentials undecryptable for seeded servers ONLY until the next
+gateway start: resync_internal_credentials re-encrypts them from the Secrets.
+Admin-added servers must have their credential re-entered after a key rotation.

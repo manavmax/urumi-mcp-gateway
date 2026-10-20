@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     service_version: str = "1.0.0"
     log_level: str = "INFO"
 
+    # Timezone fallback (ADR-054): when a chat client sends no tz (or an invalid
+    # one), the system prompt stamps THIS zone instead of dropping the local-time
+    # context entirely. Helm gateway.defaultTimezone; the base default is UTC and
+    # values-local sets Asia/Kolkata for the demo.
+    default_timezone: str = "UTC"
+
     # SSRF
     # Comma-separated extra allowed host suffixes, e.g. ".svc.cluster.local,.svc"
     allowed_host_suffixes: str = ".svc.cluster.local,.svc,.cluster.local"
@@ -168,6 +174,7 @@ def get_settings() -> Settings:
         "LOGIN_LOCKOUT_WINDOW_SECONDS": "login_lockout_window_seconds",
         "GATEWAY_ADMIN_PASSWORD": "admin_password",
         "IMAGE_UPLOAD_MAX_BYTES": "image_upload_max_bytes",
+        "GATEWAY_DEFAULT_TIMEZONE": "default_timezone",
     }
     for env_key, field in mapping.items():
         if env_key in os.environ and field not in os.environ:

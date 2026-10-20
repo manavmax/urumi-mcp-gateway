@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from config import get_settings
 from mcp.types import ToolAnnotations
 from pydantic import BeforeValidator, Field
 
@@ -60,7 +61,10 @@ def register_tools(mcp) -> None:
     async def get_current_time(
         timezone_name: Annotated[TZ_NAME | None, BeforeValidator(blank_to_none)] = None,
     ) -> str:
-        tz_name = timezone_name or "UTC"
+        # ADR-054: an omitted timezone resolves in the configured default zone
+        # (env DEFAULT_TIMEZONE, Helm demoTime.defaultTimezone) instead of a
+        # hardcoded UTC, so the demo answers in the store's timezone.
+        tz_name = timezone_name or get_settings().default_timezone or "UTC"
         tz = _resolve(tz_name)
         now_local = datetime.now(tz)
         return _serialise(

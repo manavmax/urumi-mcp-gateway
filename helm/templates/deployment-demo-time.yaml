@@ -31,6 +31,11 @@ spec:
           ports:
             - containerPort: {{ .Values.demoTime.port }}
               name: http
+          env:
+            # ADR-054: default timezone for get_current_time when the caller omits
+            # one. Base default UTC; the local demo values set Asia/Kolkata.
+            - name: DEFAULT_TIMEZONE
+              value: {{ .Values.demoTime.defaultTimezone | default "UTC" | quote }}
           resources:
             {{- toYaml .Values.demoTime.resources | nindent 12 }}
           # Same shape as woo-mcp: probe routes live in this app too.

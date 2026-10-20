@@ -140,6 +140,11 @@ spec:
             # (values-prod sets the https dashboard origin).
             - name: CORS_ALLOW_ORIGINS
               value: {{ .Values.gateway.corsAllowOrigins | default "" | quote }}
+            # Timezone fallback (ADR-054): the chat system prompt stamps this zone when
+            # the browser sends no valid IANA timezone. Base default is UTC; the local
+            # demo values set Asia/Kolkata.
+            - name: GATEWAY_DEFAULT_TIMEZONE
+              value: {{ .Values.gateway.defaultTimezone | default "UTC" | quote }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:

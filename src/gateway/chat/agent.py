@@ -39,19 +39,32 @@ def build_system_prompt(tz: str | None = None) -> str:
 
     tz is an IANA zone name validated by the route (ZoneInfo, fallback UTC).
     With it, "today" in the model's answers means the USER's today.
+    ADR-054: a missing or invalid client tz falls back to the configured
+    gateway.defaultTimezone (Helm value, env GATEWAY_DEFAULT_TIMEZONE) so the
+    prompt still carries a concrete local date for "today" resolution; if that
+    zone is itself invalid the prompt ships with no local-time stamp.
     """
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
-    try:
-        zone = ZoneInfo(tz) if tz else None
-    except Exception:
-        zone = None
+    from config import get_settings
+
+    zone = None
+    effective_tz: str | None = None
+    for name in (tz, get_settings().default_timezone):
+        if not name:
+            continue
+        try:
+            zone = ZoneInfo(name)
+            effective_tz = name
+            break
+        except Exception:
+            continue
     if zone is None:
         return SYSTEM_PROMPT
     now = datetime.now(zone)
     stamp = now.strftime("%A, %d %B %Y, %I:%M %p")
-    return f"{SYSTEM_PROMPT}Context: the user's local time is {stamp} ({tz}). \"Today\" means this local date."
+    return f"{SYSTEM_PROMPT}Context: the user's local time is {stamp} ({effective_tz}). \"Today\" means this local date."
 
 
 def _new_marker() -> str:

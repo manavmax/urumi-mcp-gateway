@@ -159,6 +159,10 @@ gateway:
   trustedProxies: ""
   # CORS: comma-separated allowed origins. Prod sets the https dashboard origin.
   corsAllowOrigins: ""
+  # ADR-054 timezone fallback for the chat system prompt when the browser sends
+  # no valid IANA timezone. Empty = code default UTC. Local demo values set
+  # Asia/Kolkata; values-prod can too (unset = UTC).
+  defaultTimezone: ""
   # Deployment progressDeadlineSeconds (default 300). With --atomic a bad upgrade
   # surfaces at the deadline (the pod never becomes Ready, the Deployment flips to
   # ProgressDeadlineExceeded and helm fails + rolls back), so a deliberate bad
@@ -218,6 +222,9 @@ demoTime:
   enabled: true
   image: { repository: ghcr.io/urumi/demo-mcp-time, tag: "0.1.0", pullPolicy: IfNotPresent }
   port: 8000
+  # ADR-054: default timezone when a caller omits it. Empty = code default UTC;
+  # local demo values set Asia/Kolkata.
+  defaultTimezone: ""
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 200m, memory: 256Mi }

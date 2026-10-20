@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     service_version: str = "1.0.0"
     mcp_protocol_version: str = "2025-03-26"
     log_level: str = "INFO"
+    # ADR-054: optional default timezone for get_current_time when the caller
+    # omits one (Helm demoTime.defaultTimezone -> env DEFAULT_TIMEZONE).
+    # Empty keeps the historical UTC default.
+    default_timezone: str = "UTC"
 
 
 @lru_cache

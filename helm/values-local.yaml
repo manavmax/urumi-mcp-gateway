@@ -1,6 +1,9 @@
 gateway:
   enabled: true
   image: { repository: urumi/gateway, tag: "0.1.0", pullPolicy: Never }
+  # ADR-054: the demo's "today" resolves in India Standard Time when the browser
+  # sends no valid timezone.
+  defaultTimezone: Asia/Kolkata
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
@@ -60,6 +63,8 @@ wooMcp:
 # the kind node, so use the node-local image with pullPolicy Never.
 demoTime:
   image: { repository: urumi/demo-mcp-time, tag: "0.1.0", pullPolicy: Never }
+  # ADR-054: the time MCP server answers in IST when the caller omits a timezone.
+  defaultTimezone: Asia/Kolkata
   resources:
     requests: { cpu: 20m, memory: 128Mi }
     limits: { cpu: 200m, memory: 256Mi }

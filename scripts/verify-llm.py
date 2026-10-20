@@ -114,9 +114,36 @@ async def main() -> int:
         if r.status_code != 200:
             print("=== FAILURES:", FAILURES if FAILURES else "none", "===")
             return 1
+        # Secure-cookie fix: with gateway.sessionCookieSecure=true (values-prod) the
+        # session cookie carries the Secure attribute, and httpx's cookie jar then
+        # refuses to send it back over plain http (the in-pod BASE is http://127.0.0.1).
+        # Send the cookie explicitly as a Cookie header instead of trusting the jar:
+        # the value comes from the Set-Cookie response, is never printed, and works
+        # regardless of the Secure flag.
+        try:
+            from config import get_settings as _gw_settings
+
+            cookie_name = _gw_settings().session_cookie_name
+        except Exception:
+            cookie_name = "urumi_session"
+        set_cookie = r.headers.get("set-cookie", "")
+        cookie_value = ""
+        for part in set_cookie.split(";"):
+            if "=" in part and part.strip().startswith(cookie_name + "="):
+                cookie_value = part.strip().split("=", 1)[1]
+                break
+        if not cookie_value and r.cookies.get(cookie_name):
+            cookie_value = r.cookies.get(cookie_name)
+        cookie_header = f"{cookie_name}={cookie_value}" if cookie_value else ""
+        if not cookie_header:
+            check("session cookie captured from login", False, f"no {cookie_name} in Set-Cookie")
         cookies = r.cookies
+        if cookie_header:
+            cookies = None  # an explicit Cookie header replaces the jar
         csrf = r.json().get("csrf_token", "")
         chat_headers = {"Content-Type": "application/json"}
+        if cookie_header:
+            chat_headers["Cookie"] = cookie_header
         if csrf:
             chat_headers["X-CSRF-Token"] = csrf
 

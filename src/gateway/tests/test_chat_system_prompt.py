@@ -33,7 +33,12 @@ def test_valid_tz_stamps_local_time():
 
 def test_invalid_tz_falls_back_cleanly():
     assert "Bogus/Zone" not in build_system_prompt("Bogus/Zone")
-    assert "local time" not in build_system_prompt(None), "no tz must not invent one"
+    # ADR-054: a missing/invalid client tz now falls back to the configured
+    # gateway.defaultTimezone (UTC in the base config) instead of dropping the
+    # stamp entirely, so "today" still resolves somewhere concrete.
+    p = build_system_prompt(None)
+    assert "local time is" in p
+    assert "(UTC)" in p
     # and it still carries the base rules
     assert "Order, Status, Total, Placed, Items" in build_system_prompt("No/Such-Zone")
 
