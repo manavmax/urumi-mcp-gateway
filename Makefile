@@ -224,8 +224,14 @@ test:
 # GATEWAY_ADMIN_PASSWORD and syncs it to the admin row on every start, so this value is
 # always the one that works.
 gateway-admin-password:
-	@PASS=$$(kubectl get secret gateway-admin -n $(NAMESPACE) -o jsonpath='{.data.password}' 2>/dev/null | base64 -d); \
-	if [ -z "$$PASS" ]; then echo "ERROR: no password found in Secret gateway-admin (namespace $(NAMESPACE))" >&2; exit 1; fi; \
+	@RAW=$$(kubectl get secret gateway-admin -n $(NAMESPACE) -o jsonpath='{.data.password}' 2>&1); RC=$$?; \
+	if [ $$RC -ne 0 ]; then \
+	  echo "ERROR: kubectl failed to read Secret gateway-admin (namespace $(NAMESPACE)) - this is a kubectl/connect problem, not an empty Secret. kubectl said:" >&2; \
+	  echo "$$RAW" >&2; \
+	  echo "hint: check the SSH tunnel is up and prefix with KUBECONFIG=<vps kubeconfig> - a bare kubectl targets the local kind cluster (docs/DEPLOY_VPS.md section 5)" >&2; \
+	  exit 1; fi; \
+	PASS=$$(printf '%s' "$$RAW" | base64 -d 2>/dev/null); \
+	if [ -z "$$PASS" ]; then echo "ERROR: no password found in Secret gateway-admin (namespace $(NAMESPACE)): the Secret was READ but key .data.password is empty" >&2; exit 1; fi; \
 	echo "admin email: $${GATEWAY_ADMIN_EMAIL:-admin@urumi.local}"; \
 	echo "admin pass:  $$PASS"; \
 	echo "(from Secret gateway-admin - local development only; never commit this value)"
