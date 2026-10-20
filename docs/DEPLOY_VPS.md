@@ -14,7 +14,7 @@ installed on it (section 4) - do not reinstall or upgrade it as part of a deploy
 | component | pinned version | why |
 |---|---|---|
 | k3s | v1.36.5+k3s1 (ALREADY installed on the server) | pinned to the installed minor; the chart's objects (apps/v1, batch/v1, networking.k8s.io/v1) are identical in the 1.36 API set |
-| ingress-nginx | controller v1.15.1 (chart 4.14.x) | the exact controller the local kind proof ran against (`registry.k8s.io/ingress-nginx/controller:v1.15.1`) |
+| ingress-nginx | controller v1.15.1 (chart 4.15.1) | the exact controller the local kind proof ran against (`registry.k8s.io/ingress-nginx/controller:v1.15.1`); chart 4.15.1 is the chart that ships it (`helm search repo ingress-nginx/ingress-nginx --versions` - the earlier 4.14.x pin here was wrong, chart 4.14.x = controller 1.14.x) |
 | cert-manager | chart v1.21.2 / app v1.21.2 | installed and exercised on kind (self-signed issuer) before the VPS |
 | WordPress core | 6.6 (baked into the wp-cli image, sha1 `6bdc580973c6c5e44c0c6164c348217152874817`) | checksum-verified at image build; no runtime download |
 | WooCommerce | 9.4.2 (zip sha256 `002921d59d6de0eedd062db22485b5725ec25f35ea745b355fbff5b51eb45bf0`, recorded in `src/wp-cli/woocommerce-9.4.2.zip.sha256`) | newer 11.x fatals on the WP 6.6 image (ADR: woocommerce.version_pin) |
@@ -41,6 +41,28 @@ packet filter that matters.
 
 6443 is NOT open to the internet: kubectl/helm reach the cluster over an SSH
 tunnel (section 5). Nothing else is needed inbound.
+
+### When your IP changes: update the SSH source (finding (f))
+
+The ssh rule's source is `<owner-ip>/32`. The owner's home IP is not static:
+when the router reconnects, ISP changes, or you move networks, SSH starts
+timing out and the tunnel in section 5 cannot come up. Update the SG source
+(never widen it to 0.0.0.0/0):
+
+```bash
+curl -s https://checkip.amazonaws.com    # your CURRENT public IP, e.g. 203.0.113.7
+```
+
+- AWS console: EC2 -> Security Groups -> the instance's SG -> Inbound rules ->
+  Edit the `ssh` rule: set source to `<new-ip>/32` (this replaces the old /32).
+- AWS CLI alternative (find the SG id first with `aws ec2 describe-instances`):
+
+```bash
+aws ec2 revoke-security-group-ingress --group-id <sg-id> --protocol tcp --port 22 --cidr <old-ip>/32
+aws ec2 authorize-security-group-ingress --group-id <sg-id> --protocol tcp --port 22 --cidr <new-ip>/32
+```
+
+Then re-establish the tunnel (section 5). Everything else in the SG stays as-is.
 
 Instance hardening checklist (one-time):
 
@@ -124,12 +146,20 @@ scp ops@<ip>:/etc/rancher/k3s/k3s.yaml ~/kubeconfigs/urumi-vps.yaml
 ## 5. kubectl/helm access from the laptop (SSH tunnel)
 
 The API server port 6443 is closed in the security group, so the laptop talks to
-the cluster through an SSH tunnel:
+the cluster through an SSH tunnel. Use the keep-alive flags: without them the
+tunnel dies silently when the network changes (laptop sleep, wifi handover,
+hotspot switch) and every kubectl/helm call then fails with connection errors
+that look like cluster problems (finding (f), gotcha section 8.1).
 
 ```bash
-# terminal 1 (leave open while operating the cluster)
-ssh -N -L 6443:127.0.0.1:6443 ops@<ip>
+# terminal 1 (leave open while operating the cluster; keep-alives every 30s)
+ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -L 6443:127.0.0.1:6443 ops@<ip>
 ```
+
+`ServerAliveInterval=30` sends a keepalive every 30s (keeps NAT/firewall state
+alive) and `ServerAliveCountMax=6` declares the connection dead after ~3 minutes
+of no answer, so a dropped tunnel fails fast instead of hanging. When the network
+changes, rerun this command; the tunnel is the only path to the API server.
 
 Edit the LOCAL copy `~/kubeconfigs/urumi-vps.yaml`: change
 `server: https://127.0.0.1:6443` (the on-node default already points at
@@ -142,9 +172,24 @@ tunnelled address passes certificate verification with no extra flags. If a
 future k3s ever drops that SAN, add `--tls-san 127.0.0.1` and restart k3s - do
 NOT work around it with insecure-skip-tls-verify.
 
+### KUBECONFIG discipline - read this before ANY kubectl or helm command
+
+This laptop ALSO runs the local kind cluster (context `kind-urumi`). A bare
+`kubectl` or `helm` command reads the default kubeconfig and silently targets
+the LOCAL kind cluster, not the VPS. Observed live: `make gateway-admin-password`
+reported "no password found in Secret" when the real problem was kubectl failing
+to reach the VPS (gotcha (g)). ALWAYS do one of:
+
+- prefix every command: `KUBECONFIG=~/kubeconfigs/urumi-vps.yaml kubectl ...`
+  (the prefix propagates into `make` targets too: `KUBECONFIG=~/kubeconfigs/urumi-vps.yaml make ps`)
+- or use ONE dedicated terminal tab where `export
+  KUBECONFIG=~/kubeconfigs/urumi-vps.yaml` runs first, and never reuse it for
+  local kind work.
+
+Before anything destructive, confirm where you are pointing:
+
 ```bash
-export KUBECONFIG=~/kubeconfigs/urumi-vps.yaml
-kubectl get nodes    # through the tunnel
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml kubectl config current-context   # NOT kind-urumi
 ```
 
 Guard rails: never commit the kubeconfig (add it to .gitignore); the tunnel is
@@ -157,7 +202,7 @@ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo add jetstack https://charts.jetstack.io
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -n ingress-nginx --create-namespace \
-  --version 4.14.0 \
+  --version 4.15.1 \
   --set controller.service.externalTrafficPolicy=Local \
   --wait --timeout 5m
 helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace \
@@ -195,14 +240,17 @@ Placeholders: `<domain>` = the real domain, `<owner>` = the GHCR owner,
 Run from the repo root on the laptop with `KUBECONFIG` and the tunnel up.
 
 ```bash
-# 0. tunnel + context (section 5)
-ssh -N -L 6443:127.0.0.1:6443 ops@<ip>          # separate terminal, leave open
+# 0. tunnel + context (section 5). EVERY command below is prefixed with
+#    KUBECONFIG=... (or run in the one dedicated tab that exported it first):
+#    a bare kubectl/helm targets the local kind cluster.
+ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -L 6443:127.0.0.1:6443 ops@<ip>
 export KUBECONFIG=~/kubeconfigs/urumi-vps.yaml
-kubectl get nodes                               # Ready
+kubectl config current-context                   # NOT kind-urumi
+kubectl get nodes                                # Ready
 
 # 1. controllers (section 6)
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-  -n ingress-nginx --create-namespace --version 4.14.0 \
+  -n ingress-nginx --create-namespace --version 4.15.1 \
   --set controller.service.externalTrafficPolicy=Local --wait --timeout 5m
 helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace \
   --version v1.21.2 --set crds.enabled=true --wait --timeout 5m
@@ -214,7 +262,11 @@ kubectl apply -f deploy/cluster-issuer-staging.yaml
 GHCR_OWNER=<owner> make images-push             # prints <tag> = <appVersion>-<sha>
 TAG=<tag>
 
-# 4. install the chart with the real domain + pinned tags
+# 4a. FIRST install: NO --wait and NO --atomic/--rollback-on-failure.
+#     Helm runs post-install hooks only after --wait is satisfied, and the
+#     wp-setup hook is what creates the woo-secrets Secret that the woo-mcp
+#     Deployment needs to become Ready - so a fresh install with --wait waits
+#     forever for a pod that cannot start until the hook has run.
 helm upgrade --install urumi ./helm -n urumi --create-namespace \
   -f helm/values-prod.yaml \
   --set global.domain=<domain> \
@@ -228,15 +280,28 @@ helm upgrade --install urumi ./helm -n urumi --create-namespace \
   --set demoNotes.image.tag=$TAG --set storeAssets.image.tag=$TAG \
   --set wordpress.image.tag=<hardened-wp-tag> --set wpSetup.image.tag=<hardened-wp-cli-tag> \
   --set gateway.corsAllowOrigins=https://dashboard.<domain> \
-  --timeout 15m --atomic --wait
+  --timeout 15m
+
+#    then wait for the hook that bakes WordPress + creates woo-secrets
+#    (15m budget; watch it with the second command):
+kubectl wait --for=condition=complete job/urumi-wp-setup -n urumi --timeout=15m
+kubectl get pods -n urumi                        # all Ready after the hook lands woo-secrets
+
+#    EVERY LATER install/upgrade (the Secret exists now, so waiting works):
+#   KUBECONFIG=... helm upgrade urumi ./helm -n urumi -f helm/values-prod.yaml \
+#     <same --set flags as above> --timeout 15m --rollback-on-failure --wait
+#   (helm 3 spells --rollback-on-failure as --atomic; helm 4 still accepts
+#   --atomic with a deprecation warning - finding (e). Or: make helm-prod.)
 
 # 5. LLM key (hidden prompt, stdin only, restarts the gateway itself)
-scripts/create-llm-secret.sh urumi gateway-llm
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml scripts/create-llm-secret.sh urumi gateway-llm
 
-# 6. post-install checks
-kubectl get pods,svc,ingress,pvc -n urumi       # all pods Ready
-make verify-store                               # wp-setup logs + storefront probe
-scripts/verify-prod.sh <domain>                 # item 5 gate, read-only
+# 6. post-install checks (note the KUBECONFIG prefix on every command)
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml kubectl get pods,svc,ingress,pvc -n urumi
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml make verify-store        # wp-setup logs + storefront probe
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml scripts/verify-prod.sh <domain>   # item 5 gate, read-only
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml make gateway-admin-password       # gateway dashboard login
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml make admin-password               # WordPress admin login
 
 # 7. first NetworkPolicy confirmation on the real CNI (section 9), then,
 #    once staging certs are green, switch the issuer to letsencrypt-prod and re-run
@@ -248,6 +313,70 @@ scripts/verify-prod.sh <domain>                 # item 5 gate, read-only
 `helm/values-prod.yaml`, with the safety comment in that file: only the ingress
 controller can reach the gateway because of the NetworkPolicy, so in-cluster
 spoofing of X-Forwarded-For is bounded to the controller (ADR-049).
+
+## 8.1 Gotchas we hit on the first real deploy (2026-10-20, with the exact commands)
+
+Real findings from the first live run, now handled by the chart/docs/scripts.
+The narrative version lives in SYSTEM_DESIGN_AND_TRADEOFFS.md ("real deployment
+log") and docs/DECISIONS.md ADR-051.
+
+- (b) Fresh install: pods Pending with `Insufficient cpu`. The k3s system pods,
+  ingress-nginx and cert-manager already hold part of the 2 vCPU node's
+  allocatable cpu, and the previous prod REQUESTS (gateway 250m, wordpress
+  300m, mariadb 300m, postgres 300m; chart total 1400m) did not fit alongside
+  them. Fixed by lowering REQUESTS only (limits untouched) - now the chart
+  default in values-prod.yaml (gateway 100m, wordpress 150m, mariadb 100m,
+  postgres 100m, chart total 700m).
+
+```bash
+kubectl describe pod -n urumi <pending-pod> | grep -A3 Events   # shows "Insufficient cpu"
+kubectl get pods -n urumi -o custom-columns=NAME:.metadata.name,CPU_REQ:.spec.containers[*].resources.requests.cpu
+```
+
+- (c) Let's Encrypt HTTP-01 solver pods blocked by the default-deny
+  NetworkPolicy: the challenge reached ingress-nginx, nginx got 502 reaching the
+  solver pod, the CertificateRequest hung. The chart now ships
+  `urumi-allow-acme-solver` (ADR-051). Diagnose with:
+
+```bash
+kubectl get pods -n urumi -l acme.cert-manager.io/http01-solver=true
+kubectl describe certificaterequest -n urumi    # "Waiting for HTTP-01 challenge"
+kubectl get netpol -n urumi                     # urumi-allow-acme-solver must exist
+```
+
+  Remember the adoption note in section 9: delete the manually created
+  `urumi-allow-acme-solver` right before the first upgrade with this chart.
+
+- (d) One-off Let's Encrypt failure "Error looking up CAA records / networking
+  error": transient on the ACME side. Delete the failed CertificateRequest and
+  let cert-manager retry; it issued on the next attempt:
+
+```bash
+kubectl get certificaterequest -n urumi
+kubectl delete certificaterequest <name> -n urumi
+```
+
+- (f) SSH tunnel drops when the network changes (wifi handover, sleep). Use the
+  keep-alive flags from section 5 and rerun the tunnel after any network change;
+  if SSH itself times out, your owner IP changed - update the SG (section 2) and
+  redial:
+
+```bash
+ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -L 6443:127.0.0.1:6443 ops@<ip>
+```
+
+- (g) `make gateway-admin-password` said "no password found in Secret" when the
+  real problem was a dead tunnel / wrong context: a bare kubectl targeted the
+  local kind cluster. The make target now prints the real kubectl error and a
+  hint; run it with the prefix:
+
+```bash
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml make gateway-admin-password
+```
+
+```bash
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml make gateway-admin-password
+```
 
 ## 9. First NetworkPolicy enforcement on k3s (diagnosis guide)
 
@@ -324,7 +453,9 @@ kubectl run egress-probe -n urumi --image=busybox:1.36 --labels="app=wp-setup" \
 
 ## 10. Upgrades and the 6-minute rollback demo
 
-`make helm-prod` upgrades in place (`--timeout 15m --atomic --wait`). The gateway
+`make helm-prod` upgrades in place (`--timeout 15m --rollback-on-failure --wait`;
+helm 4 spelling - helm 3 uses `--atomic`, auto-detected by the Makefile). The
+gateway
 Deployment ships `gateway.progressDeadlineSeconds: 300` (values-driven), so a
 DELIBERATELY bad upgrade rehearsed with `--timeout 6m` fails fast at the 5-minute
 deadline and auto-rolls back in about 6 minutes total instead of 10 - rehearsed

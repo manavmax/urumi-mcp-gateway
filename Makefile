@@ -1,8 +1,14 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod helm-prod-first rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
 CONTEXT   ?= kind-urumi
+
+# helm 4 renamed --atomic to --rollback-on-failure (the old spelling still works
+# there but prints a deprecation warning; helm 3 only has --atomic). Pick the
+# spelling the INSTALLED helm understands so both versions keep working.
+HELM_MAJOR ?= $(shell helm version --short 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
+HELM_ROLLBACK ?= $(if $(filter 4,$(HELM_MAJOR)),--rollback-on-failure,--atomic)
 
 # Admin credentials: the USER comes from values, the PASSWORD only ever comes from the
 # Secret (ADR-019). ADMIN_SECRET_NAME lets `existingAdminSecret` be honoured by make.
@@ -37,7 +43,16 @@ template:
 # takes several minutes, so the hook budget must be generous: a too-small --timeout makes
 # helm give up on a hook that is still working and report "context deadline exceeded".
 helm-local:
-	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-local.yaml --timeout 15m --atomic --wait
+	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-local.yaml --timeout 15m $(HELM_ROLLBACK) --wait
+
+# FIRST install on a FRESH cluster (prod or local): NO --wait and NO rollback flag.
+# Helm runs post-install hooks only after --wait is satisfied, and the wp-setup
+# hook is what CREATES the woo-secrets Secret that woo-mcp needs to be Ready, so a
+# fresh install with --wait can never converge. Every later upgrade CAN use
+# --rollback-on-failure --wait because the Secret already exists
+# (docs/DEPLOY_VPS.md, first-install gotcha).
+helm-prod-first:
+	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-prod.yaml $(ARGS) --timeout 15m
 
 # Rotate generated credentials: delete a Secret and let the chart generate a new one on
 # the next upgrade. For MariaDB/Postgres you MUST also delete the data PVC, because
@@ -49,7 +64,7 @@ rotate-secrets:
 	kubectl get pvc -n $(NAMESPACE) --no-headers 2>/dev/null | grep -E "mariadb|postgres" | awk '{print "  also delete (password is already in the volume): " $$1}'
 
 helm-prod:
-	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-prod.yaml --timeout 15m --atomic --wait
+	helm upgrade --install $(RELEASE) ./helm -n $(NAMESPACE) --create-namespace -f helm/values-prod.yaml --timeout 15m $(HELM_ROLLBACK) --wait
 
 logs:
 	kubectl logs -l app=wordpress -n $(NAMESPACE) --tail=100 -f
@@ -305,12 +320,13 @@ smoke-images:
 
 # Prod install/upgrade one-liner with an EXPLICIT helm timeout (ADR-048). The
 # wp-setup hook bakes core + WooCommerce, so 15m covers a cold install; upgrades
-# of an existing site finish far faster. --atomic rolls back automatically when the
+# of an existing site finish far faster. The rollback flag (helm 4 spelling:
+# --rollback-on-failure, older: --atomic) rolls back automatically when the
 # upgrade fails, so a bad change cannot leave a half-deployed release.
 # Rehearsed upgrade/rollback helpers (docs/UPGRADE_ROLLBACK.md). Overrides are
 # inline so `make upgrade ARGS="--set gateway.image.tag=x"` works like helm.
 upgrade:
-	helm upgrade $(RELEASE) ./helm -n $(NAMESPACE) -f helm/values-local.yaml $(ARGS) --timeout 15m --atomic --wait
+	helm upgrade $(RELEASE) ./helm -n $(NAMESPACE) -f helm/values-local.yaml $(ARGS) --timeout 15m $(HELM_ROLLBACK) --wait
 
 rollback:
 	helm rollback $(RELEASE) $(REV) -n $(NAMESPACE) --timeout 15m --wait
@@ -323,6 +339,9 @@ help:
 	@echo "    tag = <chart appVersion>-<short git SHA>; token via GHCR_TOKEN or hidden prompt"
 	@echo "    (GHCR_TOKEN is never echoed, written to a file, or put in shell history)"
 	@echo "  make smoke-images  build host-platform + run a container smoke test per image"
-	@echo "  make helm-local / helm-prod   install/upgrade with explicit --timeout 15m --atomic --wait"
+	@echo "  make helm-local / helm-prod   upgrade with explicit --timeout 15m --wait and"
+	@echo "    $(HELM_ROLLBACK) (helm 4 spelling; --atomic on helm 3 - auto-detected)"
+	@echo "  make helm-prod-first   FIRST install on a fresh cluster: no --wait (hook ordering,"
+	@echo "    docs/DEPLOY_VPS.md); upgrades afterwards use make helm-prod"
 	@echo "  make upgrade ARGS='--set x=y' / make rollback REV=<n>   rehearsed upgrade/rollback"
 	@echo "  make verify-store verify-mcp verify-gateway verify-llm verify-hardening   live gates"

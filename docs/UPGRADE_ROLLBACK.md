@@ -1,23 +1,52 @@
 # UPGRADE_ROLLBACK.md - rehearsed procedure
 
 Everything in this document was REHEARSED on the local kind cluster with real
+output (release `urumi`, revisions 1-15, 2026-10-19/20). The install/upgrade
+procedure was then run for real on the VPS (first live deploy 2026-10-20,
+including the first-install gotcha below); the deliberately-bad-upgrade
+rehearsal itself has only run on kind so far.
+
+# UPGRADE_ROLLBACK.md - rehearsed procedure
+
+Everything in this document was REHEARSED on the local kind cluster with real
 output (release `urumi`, revisions 1-15, 2026-10-19/20). The VPS run of the same
-procedure is pending; this document is the rehearsed baseline for it.
+procedure is now DONE (first live deploy 2026-10-20); this document is the
+rehearsed baseline for it.
 
 ## The rule
 
+FIRST install on a fresh cluster (no --wait, no rollback flag):
+
+```bash
+helm upgrade --install urumi ./helm -n urumi -f helm/values-prod.yaml --timeout 15m
+# then wait for the hook that provisions WordPress + creates woo-secrets:
+kubectl wait --for=condition=complete job/urumi-wp-setup -n urumi --timeout=15m
+```
+
+Why no --wait on the first install (two sentences): Helm runs post-install
+hooks only after --wait is satisfied, and the wp-setup hook is what CREATES the
+woo-secrets Secret that the woo-mcp Deployment needs to become Ready, so a
+fresh install with --wait waits forever for a pod that cannot start until the
+hook has run. Every later upgrade can wait because the Secret already exists.
+
+EVERY UPGRADE after that:
+
 ```bash
 helm upgrade --install urumi ./helm -n urumi -f helm/values-prod.yaml \
-  --timeout 15m --atomic --wait
+  --timeout 15m --rollback-on-failure --wait
 ```
 
 - `--timeout 15m`: the explicit budget (ADR-048). The post-install/upgrade
   wp-setup hook provisions WordPress on a cold cluster, so a short timeout dies
   with "context deadline exceeded" on a healthy but slow first install. `make
   helm-local` / `make helm-prod` / `make upgrade` all carry it.
-- `--atomic`: a FAILED upgrade is rolled back automatically - a bad change can
-  never leave a half-deployed release.
-- `--wait`: the command returns only when every deployed workload is Ready.
+- `--rollback-on-failure`: a FAILED upgrade is rolled back automatically - a bad
+  change can never leave a half-deployed release. This is the helm 4 spelling;
+  helm 3 only knows `--atomic`, and helm 4 still accepts `--atomic` with a
+  deprecation warning (observed live on helm v4.3.0). The Makefile
+  auto-detects the installed helm major version and uses the right spelling.
+- `--wait`: the command returns only when every deployed workload is Ready
+  (upgrades only; see above for why the FIRST install runs without it).
 
 ## What upgrades/rollbacks do to state
 
@@ -136,7 +165,9 @@ make upgrade ARGS='--set gateway.image.tag=<new-tag>'   # values-driven upgrade
 make rollback REV=4                                      # manual rollback
 ```
 
-Both use `--timeout 15m --atomic --wait` (ADR-048). For a DELIBERATELY bad upgrade
+Both use `--timeout 15m --rollback-on-failure --wait` (ADR-048; the Makefile
+uses the `--atomic` spelling on helm 3 and `--rollback-on-failure` on helm 4).
+For a DELIBERATELY bad upgrade
 use `--timeout 6m` together with the chart's `gateway.progressDeadlineSeconds: 300`
 so the automatic rollback lands in ~6 minutes (section b2).
 
