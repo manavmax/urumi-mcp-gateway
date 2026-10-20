@@ -42,6 +42,34 @@ ingress:
 # --- Workload images: GHCR, IfNotPresent, PINNED tags (never :latest) -------------
 # After `make images-push`, pin the produced tag (e.g. 1.0.0-70d640d) here for every
 # image; the PUSHED_SHA marker below is replaced by that concrete tag at deploy time.
+# --- Workload images: GHCR, IfNotPresent, PINNED tags (never :latest) -------------
+# After `make images-push`, pin the produced tag (e.g. 1.0.0-70d640d) here for every
+# image; the PUSHED_SHA marker below is replaced by that concrete tag at deploy time.
+#
+# CPU REQUESTS sized for the 2 vCPU node (real finding from the first VPS deploy,
+# 2026-10-20): the k3s system pods, ingress-nginx and cert-manager already hold a
+# chunk of the node's allocatable cpu, and with the previous prod requests
+# (gateway 250m, wordpress 300m, mariadb 300m, postgres 300m -> chart total 1400m)
+# the last pods to schedule stayed Pending with "Insufficient cpu". These lowered
+# REQUESTS fit that node; the LIMITS are untouched, so behaviour under load is
+# unchanged (requests only affect scheduling). Budget on a 2 vCPU node:
+#
+# | consumer                                              | cpu requests |
+# |-------------------------------------------------------|--------------|
+# | 2 vCPU node, allocatable (after k3s kube-reserved)     | ~1900m       |
+# | k3s system pods (coredns, metrics-server,             |              |
+# |   local-path-provisioner, svclb) - stated allowance    | ~250m        |
+# | ingress-nginx controller + admission webhook -         |              |
+# |   stated allowance                                     | ~150m        |
+# | cert-manager (controller + webhook) - stated allowance | ~150m        |
+# | this chart (sum below)                                 | 700m         |
+# | total                                                  | ~1250m       |
+# | headroom                                               | ~650m        |
+#
+# (the system rows are a stated allowance, not measured values; the k3s control
+# plane itself runs as host processes and carries no pod requests. Before the
+# change the chart alone requested 1400m and install pods stayed Pending with
+# "Insufficient cpu" on this node class.)
 gateway:
   enabled: true
   image:
@@ -60,7 +88,7 @@ gateway:
   trustedProxies: "10.42.0.0/16"
   corsAllowOrigins: "https://dashboard.<domain>"  # PLACEHOLDER
   resources:
-    requests: { cpu: 250m, memory: 256Mi }
+    requests: { cpu: 100m, memory: 256Mi }
     limits: { cpu: 1000m, memory: 768Mi }
   llm:
     enabled: true
@@ -108,19 +136,19 @@ wordpress:
   persistence:
     size: 10Gi
   resources:
-    requests: { cpu: 300m, memory: 384Mi }
+    requests: { cpu: 150m, memory: 384Mi }
     limits: { cpu: 1000m, memory: 1Gi }
 
 mariadb:
   storage: { size: 20Gi }
   resources:
-    requests: { cpu: 300m, memory: 512Mi }
+    requests: { cpu: 100m, memory: 512Mi }
     limits: { cpu: 1000m, memory: 1Gi }
 
 postgres:
   storage: { size: 10Gi }
   resources:
-    requests: { cpu: 300m, memory: 512Mi }
+    requests: { cpu: 100m, memory: 512Mi }
     limits: { cpu: 1000m, memory: 1Gi }
 
 wpSetup:

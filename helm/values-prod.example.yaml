@@ -2,6 +2,10 @@
 # Copy this to a LOCAL (uncommitted) file with your real domain, or pass --set at
 # install. This example is only documentation; the committed values-prod.yaml keeps
 # placeholders so a real domain is never committed (docs/DEPLOY_VPS.md).
+# <owner> = your GHCR username/org: the custom images are pushed as
+# ghcr.io/<owner>/<name> by `make images-push` (real image names: gateway,
+# dashboard, woo-mcp, demo-mcp-time, demo-mcp-notes, store-assets, wordpress,
+# wp-cli). CPU requests are sized for the 2 vCPU node (see values-prod.yaml).
 global:
   domain: shop.example.com
   ingressClass: nginx
@@ -26,7 +30,7 @@ ingress:
 
 gateway:
   enabled: true
-  image: { repository: ghcr.io/urumi/shop-gateway, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  image: { repository: ghcr.io/<owner>/gateway, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
   replicas: 1
   sessionCookieSecure: true
   # k3s pod CIDR. Safe because only ingress-nginx can reach the gateway (the
@@ -35,63 +39,63 @@ gateway:
   trustedProxies: "10.42.0.0/16"
   corsAllowOrigins: "https://dashboard.shop.example.com"
   resources:
-    requests: { cpu: 250m, memory: 256Mi }
+    requests: { cpu: 100m, memory: 256Mi }
     limits: { cpu: 1000m, memory: 768Mi }
 
 dashboard:
   enabled: true
-  image: { repository: ghcr.io/urumi/shop-dashboard, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  image: { repository: ghcr.io/<owner>/dashboard, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: 200m, memory: 128Mi }
 
 wooMcp:
   enabled: true
-  image: { repository: ghcr.io/urumi/shop-woo-mcp, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  image: { repository: ghcr.io/<owner>/woo-mcp, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { cpu: 300m, memory: 256Mi }
 
 demoTime:
   enabled: true
-  image: { repository: ghcr.io/urumi/shop-demo-time, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  image: { repository: ghcr.io/<owner>/demo-mcp-time, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 200m, memory: 256Mi }
 
 demoNotes:
   enabled: true
-  image: { repository: ghcr.io/urumi/shop-demo-notes, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  image: { repository: ghcr.io/<owner>/demo-mcp-notes, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 200m, memory: 256Mi }
 
 storeAssets:
-  image: { repository: ghcr.io/urumi/shop-store-assets, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  image: { repository: ghcr.io/<owner>/store-assets, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
 
 wordpress:
   replicaCount: 1
-  image: { repository: ghcr.io/urumi/shop-wordpress, tag: "6.6-php8.2-apache-hardened", pullPolicy: IfNotPresent }
+  image: { repository: ghcr.io/<owner>/wordpress, tag: "6.6-php8.2-apache-hardened", pullPolicy: IfNotPresent }
   persistence: { size: 10Gi }
   resources:
-    requests: { cpu: 300m, memory: 384Mi }
+    requests: { cpu: 150m, memory: 384Mi }
     limits: { cpu: 1000m, memory: 1Gi }
 
 mariadb:
   storage: { size: 20Gi }
   resources:
-    requests: { cpu: 300m, memory: 512Mi }
+    requests: { cpu: 100m, memory: 512Mi }
     limits: { cpu: 1000m, memory: 1Gi }
 
 postgres:
   storage: { size: 10Gi }
   resources:
-    requests: { cpu: 300m, memory: 512Mi }
+    requests: { cpu: 100m, memory: 512Mi }
     limits: { cpu: 1000m, memory: 1Gi }
 
 wpSetup:
   enabled: true
-  image: { repository: ghcr.io/urumi/shop-wp-cli, tag: "cli-php8.2-hardened", pullPolicy: IfNotPresent }
+  image: { repository: ghcr.io/<owner>/wp-cli, tag: "cli-php8.2-hardened", pullPolicy: IfNotPresent }
   resources:
     requests: { memory: 128Mi }
     limits: { cpu: 300m, memory: 512Mi }
