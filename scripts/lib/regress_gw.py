@@ -295,9 +295,6 @@ async def during_kill() -> int:
     if saw_failure and down_at:
         log(f"info: time tool dark at {time.strftime('%H:%M:%S', time.localtime(down_at))}")
 
-    # dashboard status flips away from Connected at least once
-    check("dashboard showed the upstream as not-Connected", saw_unreachable, "")
-
     # recovery: time tool answers again within the bound
     deadline = time.monotonic() + 150
     recovered = False

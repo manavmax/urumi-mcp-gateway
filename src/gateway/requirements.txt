@@ -17,3 +17,4 @@ pydantic-settings==2.*
 # F3 image uploads: Pillow decodes/re-encodes user images (PNG/JPEG/WEBP) to strip
 # EXIF/GPS metadata and polyglot payloads and to enforce pixel-count bomb caps.
 Pillow==11.*
+prometheus-client==0.23.*

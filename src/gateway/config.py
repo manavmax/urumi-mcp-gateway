@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     # values-local sets Asia/Kolkata for the demo.
     default_timezone: str = "UTC"
 
+    # Prometheus /metrics guard (ADR-056): when non-empty, GET /metrics requires
+    # `Authorization: Bearer <token>` (constant-time compare). The endpoint is
+    # in-cluster-only either way (NetworkPolicy + no Ingress route).
+    metrics_bearer: str = ""
+
     # SSRF
     # Comma-separated extra allowed host suffixes, e.g. ".svc.cluster.local,.svc"
     allowed_host_suffixes: str = ".svc.cluster.local,.svc,.cluster.local"
@@ -175,6 +180,7 @@ def get_settings() -> Settings:
         "GATEWAY_ADMIN_PASSWORD": "admin_password",
         "IMAGE_UPLOAD_MAX_BYTES": "image_upload_max_bytes",
         "GATEWAY_DEFAULT_TIMEZONE": "default_timezone",
+        "METRICS_BEARER": "metrics_bearer",
     }
     for env_key, field in mapping.items():
         if env_key in os.environ and field not in os.environ:

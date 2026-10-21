@@ -36,6 +36,17 @@ PROTOCOL_VERSION = "2025-03-26"
 SERVER_INFO = {"name": "urumi-gateway", "version": "1.0.0"}
 
 
+def _record_metrics(slug: str, name: str, outcome: str, duration_ms: int) -> None:
+    """Mirror one audited tool call into the Prometheus counters/histograms
+    (Phase 1). Fails safe inside gw_mcp.metrics."""
+    from gw_mcp.metrics import observe_tool_call
+
+    observe_tool_call(slug, name, outcome, duration_ms)
+
+PROTOCOL_VERSION = "2025-03-26"
+SERVER_INFO = {"name": "urumi-gateway", "version": "1.0.0"}
+
+
 def _jsonrpc_error(id_: Any, code: int, message: str) -> dict:
     return {"jsonrpc": "2.0", "id": id_, "error": {"code": code, "message": message}}
 
@@ -93,6 +104,9 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
     # Rate limit (simple in-memory per-key sliding window)
     # Use global dict; ok for single replica dev; for multi-replica would need Redis.
     if not _check_rate_limit(str(api_key_id)):
+        from gw_mcp.metrics import inc_rate_limited
+
+        inc_rate_limited("key")
         return JSONResponse(_jsonrpc_error(payload.get("id"), -32000, "rate limit exceeded (60/min)"), status_code=429)
 
     method = payload.get("method")
@@ -163,6 +177,7 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 error_code="permission_denied",
                 client_ip=client_ip,
             )
+            _record_metrics(name.split("__")[0] if "__" in name else "unknown", name, "permission_denied", 0)
             # identical to the unknown-tool error (no existence leak)
             return JSONResponse(_jsonrpc_error(msg_id, -32602, f"unknown tool: {name}"), status_code=400)
 
@@ -186,6 +201,12 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
             # schema rejections) from the audit trail, so classify it here.
             upstream_error_code = _upstream_error_code(result)
             tool_validation = _is_tool_validation_error(result)
+            outcome = (
+                "validation_error"
+                if tool_validation
+                else ("success" if upstream_error_code is None else "upstream_error")
+            )
+            error_code = "validation_error" if tool_validation else upstream_error_code
             await log_audit(
                 user_id=user.id,
                 api_key_id=api_key_id,
@@ -195,14 +216,11 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 tool_upstream_name=upstream,
                 request_id=request_id,
                 duration_ms=duration_ms,
-                outcome=(
-                    "validation_error"
-                    if tool_validation
-                    else ("success" if upstream_error_code is None else "upstream_error")
-                ),
-                error_code="validation_error" if tool_validation else upstream_error_code,
+                outcome=outcome,
+                error_code=error_code,
                 client_ip=client_ip,
             )
+            _record_metrics(slug, name, outcome, duration_ms)
             # MCP spec: tools/call success is result.content + isError
             return JSONResponse(_jsonrpc_result(msg_id, result))
         except TimeoutError as exc:
@@ -220,6 +238,7 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 error_code="timeout",
                 client_ip=client_ip,
             )
+            _record_metrics(slug, name, "timeout", duration_ms)
             return JSONResponse(_jsonrpc_error(msg_id, -32000, str(exc)), status_code=504)
         except RuntimeError as exc:
             msg = str(exc)
@@ -227,6 +246,9 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
             outcome = "circuit_open" if is_circuit else "upstream_error"
             status = 503 if is_circuit else 502
             duration_ms = int((time.monotonic() - start) * 1000)
+            # the SAFE classified reason (gw_mcp.categorize) rides on the router's
+            # UpstreamCallError; the raw exception text is never stored
+            category = getattr(exc, "category", None)
             await log_audit(
                 user_id=user.id,
                 api_key_id=api_key_id,
@@ -237,9 +259,10 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 request_id=request_id,
                 duration_ms=duration_ms,
                 outcome=outcome,
-                error_code=outcome,
+                error_code=category or outcome,
                 client_ip=client_ip,
             )
+            _record_metrics(slug, name, outcome, duration_ms)
             return JSONResponse(_jsonrpc_error(msg_id, -32000, msg), status_code=status)
         except ValueError as exc:
             duration_ms = int((time.monotonic() - start) * 1000)
@@ -256,6 +279,7 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 error_code="validation_error",
                 client_ip=client_ip,
             )
+            _record_metrics(slug, name, "validation_error", duration_ms)
             return JSONResponse(_jsonrpc_error(msg_id, -32602, str(exc)), status_code=400)
         except Exception as exc:
             duration_ms = int((time.monotonic() - start) * 1000)
@@ -272,6 +296,7 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
                 error_code="upstream_error",
                 client_ip=client_ip,
             )
+            _record_metrics(slug, name, "upstream_error", duration_ms)
             return JSONResponse(_jsonrpc_error(msg_id, -32000, f"upstream error: {exc}"), status_code=502)
 
     if method == "ping":

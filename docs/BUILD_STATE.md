@@ -8,25 +8,38 @@
 
 ## Current phase
 
-PHASE 0 (gaps and hygiene) — in progress
+PHASE 2 (rate limits per key) — in progress
 
 ## What is done
 
-- Branch `bonus-all` created from main @ 8cf8f73.
-- BUILD_STATE.md / BUILD_LOG.md / EXPLAINER.md scaffolding created.
+- Branch `bonus-all` created from main @ 8cf8f73; BUILD docs scaffolding created.
+- PHASE 0 DONE (tag phase-0-done, commit cf2791b): timezone fallback ADR-054
+  (gateway.defaultTimezone / demoTime.defaultTimezone, Asia/Kolkata in values-local,
+  frozen-clock midnight tests); credential-at-rest verified (ADR-055: Fernet existed,
+  3 new tests + live DB inspection); nginx /.well-known 404; create-llm-secret.sh
+  executable bit; verify-llm Secure-cookie fix; scripts/regress-core.sh created and
+  PASSING (ALL CHECKS PASSED on kind).
+- Images built/imported via `docker --context colima` (kind node lives under colima).
+
+## What is done (phase 1)
+
+- PHASE 1 DONE (ADR-056): failure reasons classified into audit error_code
+  (protocol_error split from invalid_response; chat failures audited now too),
+  Prometheus /metrics (prometheus_client, in-cluster only, optional
+  METRICS_BEARER), GET /api/metrics admin-only audit aggregates, dashboard
+  Metrics page + nav (admin). 8 new tests; suite 335. Live: external /metrics
+  returns the SPA (gateway never reached); /api/metrics returns real 24h
+  aggregates. Gate: regress-core ALL CHECKS PASSED.
 
 ## What is next
 
-- Phase 0a: timezone (chat agent system prompt date/time/tz; dashboard sends IANA tz
-  validated against zoneinfo, fallback gateway.defaultTimezone default Asia/Kolkata in
-  values-local only; "today" resolves in that tz; demo-mcp-time default tz env
-  demoTime.defaultTimezone; frozen-clock midnight IST vs UTC tests).
-- Phase 0b: VERIFY existing Fernet credential-at-rest encryption (do NOT redo): unit test
-  + live DB inspection that credential_encrypted is not plaintext; add test grepping API
-  responses + logs for credential leakage. Migration for existing rows (check alembic).
-- Phase 0c: dashboard nginx /.well-known/* -> 404; chmod +x scripts/create-llm-secret.sh
-  (git update-index --chmod=+x); fix make verify-llm for Secure cookies.
-- Phase 0d: scripts/regress-core.sh (core DoD automation on kind, two users).
+- PHASE 2 rate limits per key: per API key and per user calls/minute from Helm
+  values (rateLimit.perKeyPerMinute default, perUserPerMinute), optional per-key
+  override by admin (api_keys.rate_limit_per_minute column + PATCH /api/keys/{id}
+  or on create), counters in Postgres with ATOMIC upsert (works across replicas),
+  over-limit -> clear MCP error with retry-after seconds + audit outcome
+  rate_limited (needs the audit CHECK constraint extended) + metric increment,
+  chat calls count against the user. Tests incl. concurrency.
 
 ## Commands to resume
 
@@ -45,7 +58,7 @@ cd src/gateway && ../../.venv/bin/python -m pytest tests -q   # unit tests
 
 | Phase | Status | Tag | Gate |
 |---|---|---|---|
-| 0 gaps/hygiene | in progress | - | - |
+| 0 gaps/hygiene | DONE | phase-0-done | REGRESS-CORE ALL CHECKS PASSED |
 | 1 observability | not started | - | - |
 | 2 rate limits | not started | - | - |
 | 3 many tools | not started | - | - |

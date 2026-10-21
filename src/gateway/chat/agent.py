@@ -189,6 +189,18 @@ def _is_write_tool(name: str) -> bool:
     return upstream.split("_", 1)[0].lower() in WRITE_VERBS
 
 
+def _record_call_metrics(exposed_name: str, outcome: str, duration_ms: int) -> None:
+    """Mirror a routed chat tool call into the Prometheus metrics (Phase 1).
+    Fails safe inside gw_mcp.metrics; never breaks the chat loop."""
+    try:
+        from gw_mcp.metrics import observe_tool_call
+
+        slug = exposed_name.split("__", 1)[0] if "__" in exposed_name else "unknown"
+        observe_tool_call(slug, exposed_name, outcome, duration_ms)
+    except Exception:  # pragma: no cover - metrics must never break the turn
+        pass
+
+
 async def _audit_routed_call(
     db: AsyncSession,
     user,
@@ -758,6 +770,7 @@ async def chat_loop(
                 from gw_mcp.router import call_tool_routed
 
                 t0 = _time.monotonic()
+                dur = 0
                 # We need to parse slug__tool already validated
                 result_data = await call_tool_routed(db, name, args)
                 dur = int((_time.monotonic() - t0) * 1000)
@@ -777,6 +790,7 @@ async def chat_loop(
                         tool_error_code = _upstream_error_code(result_data)
                 # audit (shared with the F3 attach helper — same fields, no bytes)
                 await _audit_routed_call(db, user, name, outcome, tool_error_code, dur, str(request_id))
+                _record_call_metrics(name, outcome, dur)
                 result = result_data
             except PermissionError as exc:
                 result = {"error": "permission denied"}
@@ -788,12 +802,23 @@ async def chat_loop(
                 # correct, never an "upstream error" (F2 pass).
                 result = {"error": str(exc)[:800]}
                 outcome = "validation_error"
+                dur = int((_time.monotonic() - t0) * 1000)
+                await _audit_routed_call(db, user, name, outcome, "validation_error", dur, str(request_id))
+                _record_call_metrics(name, outcome, dur)
             except TimeoutError:
                 result = {"error": "upstream timed out"}
                 outcome = "timeout"
+                # failed calls are audited too (same semantics as /mcp)
+                await _audit_routed_call(db, user, name, "timeout", "timeout", dur, str(request_id))
+                _record_call_metrics(name, outcome, dur)
             except Exception as exc:
                 result = {"error": str(exc)[:800]}
                 outcome = "upstream_error"
+                # the SAFE classified reason rides on UpstreamCallError; the raw
+                # exception text is never stored or logged verbatim
+                err_code = getattr(exc, "category", None) or "upstream_error"
+                await _audit_routed_call(db, user, name, outcome, err_code, dur, str(request_id))
+                _record_call_metrics(name, outcome, dur)
 
             messages.append(_build_tool_message(tc.id, tool_marker, name, result))
             yield {"type": "tool_call", "tool": name, "outcome": outcome, "output": result}

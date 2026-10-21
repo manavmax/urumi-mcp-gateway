@@ -258,6 +258,9 @@ async def disable_server_route(
         raise HTTPException(status_code=404, detail="server not found")
     srv.enabled = False
     srv.status = "Disabled"
+    from gw_mcp.metrics import set_upstream_up
+
+    set_upstream_up(srv.slug, False)  # the health loop skips disabled servers
     record_admin_event(db, actor_user_id=user.id, action="server.disable", target_type="server", target_ref=srv.slug)
     await db.commit()
     return _server_out(srv, is_admin=True)

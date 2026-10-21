@@ -70,7 +70,9 @@ def test_category_http_500():
 
 
 def test_category_invalid_json():
-    assert classify(json.JSONDecodeError("Expecting value", "{}", 1)) == "invalid_response"
+    # ADR-056: an unparseable upstream response is a broken MCP protocol
+    # exchange, classified as protocol_error (not the generic invalid_response)
+    assert classify(json.JSONDecodeError("Expecting value", "{}", 1)) == "protocol_error"
 
 
 def test_category_auth_401():

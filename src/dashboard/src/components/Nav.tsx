@@ -21,6 +21,7 @@ const NAV: NavItem[] = [
   { to: "/servers", label: "Servers", icon: "server" },
   { to: "/members", label: "Members and keys", icon: "users" },
   { to: "/audit", label: "Audit", icon: "shield" },
+  { to: "/metrics", label: "Metrics", icon: "pulse" },
   { to: "/chat", label: "Chat", icon: "chat" },
 ];
 

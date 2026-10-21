@@ -17,3 +17,5 @@ Anything security or architecture related to confirm. Newest last.
   regress run (deleted at cleanup, keys belong to a user the cleanup deletes).
   Acceptable ephemeral handling, but confirm you are happy with the pattern
   before it is reused by later phases.
+- 2026-10-21 (ADR-056, /metrics protection): GET /metrics is in-cluster-only (default-deny NetworkPolicy + no Ingress route; proven live) and UNAUTHENTICATED by default; an optional METRICS_BEARER token can be put in the gateway-secrets Secret. Confirm whether you want a token set, and remember a future Prometheus scraper needs its own NetworkPolicy exception (none is rendered today because no Prometheus server is deployed).
+- 2026-10-21 (ADR-056, audit classification): `protocol_error` was split out of `invalid_response` for unparseable upstream JSON-RPC responses, and CHAT tool-call failures (timeout/upstream) are now audited where they previously vanished. Confirm the audit semantics change is what you want shown in demos.

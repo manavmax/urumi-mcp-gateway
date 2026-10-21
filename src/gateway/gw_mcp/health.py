@@ -33,6 +33,8 @@ async def probe_once():
     async with factory() as db:
         res = await db.execute(select(Server).where(Server.enabled.is_(True)))
         servers = list(res.scalars().all())
+        from gw_mcp.metrics import set_upstream_up
+
         for s in servers:
             started = time.monotonic()
             try:
@@ -41,9 +43,11 @@ async def probe_once():
                     timeout=settings.health_timeout_seconds + 2,
                 )
                 record_success(s, latency_ms=int((time.monotonic() - started) * 1000))
+                set_upstream_up(s.slug, s.status == "Connected")
                 logger.debug("health ok %s", s.slug)
             except Exception as exc:
                 record_failure(s, classify(exc), latency_ms=int((time.monotonic() - started) * 1000))
+                set_upstream_up(s.slug, False)
                 logger.warning("health fail %s category=%s", s.slug, s.last_error_category)
         try:
             await db.commit()

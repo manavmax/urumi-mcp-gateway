@@ -2,7 +2,7 @@
 
 Categories (docs/11_OBSERVABILITY.md):
   connection_refused, timeout, dns_failure, tls_error, http_error (with status
-  code), invalid_response, auth_rejected, other.
+  code), protocol_error, invalid_response, auth_rejected, other.
 
 Only the category string is ever stored or returned - never raw exception text, never
 a URL with credentials, never headers or tokens. The human label is derived from the
@@ -24,6 +24,7 @@ CATEGORY_CONNECTION_REFUSED = "connection_refused"
 CATEGORY_DNS_FAILURE = "dns_failure"
 CATEGORY_TLS_ERROR = "tls_error"
 CATEGORY_HTTP_ERROR = "http_error"  # always suffixed with the status code: http_error:502
+CATEGORY_PROTOCOL_ERROR = "protocol_error"  # unparseable/invalid MCP JSON-RPC envelope
 CATEGORY_INVALID_RESPONSE = "invalid_response"
 CATEGORY_AUTH_REJECTED = "auth_rejected"
 CATEGORY_OTHER = "other"
@@ -34,6 +35,7 @@ _CATEGORY_LABELS = {
     CATEGORY_TIMEOUT: "timeout",
     CATEGORY_DNS_FAILURE: "dns failure",
     CATEGORY_TLS_ERROR: "tls error",
+    CATEGORY_PROTOCOL_ERROR: "protocol error",
     CATEGORY_INVALID_RESPONSE: "invalid response",
     CATEGORY_AUTH_REJECTED: "auth rejected",
     CATEGORY_OTHER: "upstream error",
@@ -118,7 +120,15 @@ def classify(exc: BaseException) -> str:
             # deep cause already examined above; a bare ConnectError with no
             # recognizable cause is treated as connection_refused (the common case)
             return CATEGORY_CONNECTION_REFUSED
-        if isinstance(e, (json.JSONDecodeError, ValueError)):
+        if isinstance(e, httpx.ConnectError):
+            # deep cause already examined above; a bare ConnectError with no
+            # recognizable cause is treated as connection_refused (the common case)
+            return CATEGORY_CONNECTION_REFUSED
+        if isinstance(e, json.JSONDecodeError):
+            # an upstream response that is not parseable JSON is a broken
+            # MCP protocol exchange, not just an odd payload
+            return CATEGORY_PROTOCOL_ERROR
+        if isinstance(e, ValueError):
             return CATEGORY_INVALID_RESPONSE
 
     # an exception that made it here with no recognisable cause is "other"

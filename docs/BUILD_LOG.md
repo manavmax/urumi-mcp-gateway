@@ -31,3 +31,17 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
   tools/list admin=13 member=13; storefront order #102 placed (Store API COD) and visible via MCP woo__list_orders; disabled upstream hidden from tools/list AND chat tool load; revoked key -> 401; audit rows attributed (member time row, 4 admin rows); demo-time pod killed: woo+notes stayed 200, dashboard showed Unreachable, time recovered.
 - Full suites after the changes: gateway 327 passed; demo-time 8 passed (5 new default-timezone); woo-mcp 21 passed; ruff clean; helm lint local+prod clean.
 - Environment quirk: the kind node container lives under the colima docker context (default desktop-linux has no containers). Image build/import used `docker --context colima`. Manav should confirm which context is intended -> docs/REVIEW_NEEDED.md.
+
+## 2026-10-21 Phase 1 — observability (ADR-056)
+
+- New tests: `cd src/gateway && ../../.venv/bin/python -m pytest tests/test_metrics_and_classification.py -q` -> `........` (8 passed). Full suite 335 passed (was 327).
+- Live /metrics (in-pod): `GET http://127.0.0.1:8000/metrics` -> 200, exposition carries tool_calls_total / tool_call_duration_seconds / upstream_up / rate_limited_total. External probe: `curl -H "Host: dashboard.127.0.0.1.nip.io" http://localhost/metrics` -> the dashboard SPA HTML (the Ingress has no /metrics route to the gateway; the gateway is never reached).
+- Live /api/metrics (admin session, real audit rows):
+  ```
+  GET /api/metrics -> 200 window: 24
+    time: calls=12 errors=3 rate=25.0 p50=36ms p95=10023ms failures=[{'reason': 'timeout', 'count': 3}]
+    woo: calls=6 errors=0 rate=0.0 p50=101ms p95=156ms failures=[]
+    notes: calls=5 errors=1 rate=20.0 p50=23ms p95=221ms failures=[{'reason': 'permission_denied', 'count': 1}]
+  ```
+- GATE: make lint clean (ruff + helm lint local+prod), make test rc=0 (335/21/8), deployed to kind (gateway+dashboard rebuilt on the colima context), `bash scripts/regress-core.sh` -> `REGRESS-CORE: ALL CHECKS PASSED`.
+- Dashboard: Metrics page built (tsc + vite build clean), admin-only route + nav, reason chips.

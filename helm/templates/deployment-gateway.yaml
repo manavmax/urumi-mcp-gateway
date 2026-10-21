@@ -145,6 +145,13 @@ spec:
             # demo values set Asia/Kolkata.
             - name: GATEWAY_DEFAULT_TIMEZONE
               value: {{ .Values.gateway.defaultTimezone | default "UTC" | quote }}
+            # Prometheus /metrics guard (ADR-056). The value is an OPTIONAL in-cluster
+            # scrape token: when set, GET /metrics demands it. It must never be a
+            # committed value - put it in the gateway-secrets Secret (key
+            # METRICS_BEARER) if you want one; empty leaves the endpoint
+            # unauthenticated but still in-cluster-only.
+            - name: METRICS_BEARER
+              valueFrom: { secretKeyRef: { name: gateway-secrets, key: METRICS_BEARER, optional: true } }
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:

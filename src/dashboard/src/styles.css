@@ -170,6 +170,10 @@ h1 { font-size: 28px; letter-spacing: -.02em; line-height: 1.1; font-weight: 700
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .card-title { font-size: var(--t-lg); font-weight: 650; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
 .src { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); background: var(--surface-2); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+/* Metrics page: classified failure-reason chips (Phase 1) */
+.reasons { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.reason-chip { font-family: var(--font-mono); font-size: 10px; color: var(--text); background: var(--surface-2); border: 1px solid var(--hairline); border-radius: var(--r-pill); padding: 2px 8px; white-space: nowrap; }
+.reason-chip b { font-weight: 750; }
 .link { color: var(--text); font-weight: 650; font-size: var(--t-sm); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
 .link:hover { text-decoration: underline; }
 .account-email { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -26,6 +26,21 @@ logger = logging.getLogger("gateway.router")
 ALLOWED_OUTCOMES = {"success", "upstream_error", "permission_denied", "timeout", "circuit_open", "validation_error"}
 
 
+class UpstreamCallError(RuntimeError):
+    """An upstream tool call failed; carries the SAFE classified reason.
+
+    `category` is a stable token from gw_mcp.categorize (connection_refused,
+    timeout, dns_failure, tls_error, http_error:<code>, protocol_error,
+    invalid_response, auth_rejected, other) - the only thing about the failure
+    that is ever stored (audit error_code) or displayed. The exception MESSAGE
+    may contain exception text, so it must never be stored or logged verbatim.
+    """
+
+    def __init__(self, message: str, category: str):
+        super().__init__(message)
+        self.category = category
+
+
 # ---- MCP wire-shape safety net -----------------------------------------------------
 #
 # The gateway re-serialises upstream CallToolResults into plain JSON dicts. A
@@ -303,5 +318,5 @@ async def call_tool_routed(
         # upstream forever without ever tripping the breaker (found by tests).
         breaker.record_failure(server.id)
         record_failure(server, category, latency_ms=int((time.monotonic() - started) * 1000))
-        logger.warning("proxy_call failed for %s/%s category=%s", slug, upstream, classify(exc))
-        raise RuntimeError(f"Upstream {slug} error: {exc}") from exc
+        logger.warning("proxy_call failed for %s/%s category=%s", slug, upstream, category)
+        raise UpstreamCallError(f"Upstream {slug} error: {exc}", category=category) from exc

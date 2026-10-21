@@ -877,3 +877,44 @@ schema, and every seeded credential is re-applied encrypted at startup.
 makes stored credentials undecryptable for seeded servers ONLY until the next
 gateway start: resync_internal_credentials re-encrypts them from the Secrets.
 Admin-added servers must have their credential re-entered after a key rotation.
+
+## 2026-10-21: Prometheus /metrics + audit failure classification + Metrics page (ADR-056)
+
+**What changed.**
+1. Failure reasons are now CLASSIFIED and stored in the audit `error_code` field:
+   the router raises `UpstreamCallError(category=...)` carrying the stable
+   gw_mcp.categorize token (connection_refused, timeout, dns_failure, tls_error,
+   http_error:<code>, protocol_error, invalid_response, auth_rejected, other),
+   and both /mcp and the chat agent write that token into the audit row (the raw
+   exception text is never stored or logged). `protocol_error` is NEW: an
+   unparseable upstream JSON-RPC response used to be invalid_response. Chat tool
+   calls that FAIL are now audited too (previously only successes/isError rows
+   were; timeouts and upstream errors vanished from the trail) — same semantics
+   as /mcp.
+2. Prometheus /metrics on the gateway (prometheus_client — the one new runtime
+   dependency, added to requirements.txt): tool_calls_total{server,tool,outcome},
+   tool_call_duration_seconds{server} histogram, upstream_up{server} gauge
+   (health loop + disable route), rate_limited_total{scope}. NOT exposed through
+   the Ingress (verified: external /metrics on the dashboard host returns the SPA
+   HTML; the Ingress has no /metrics path to the gateway) and in-cluster-only
+   behind the default-deny NetworkPolicy. Optional METRICS_BEARER guard
+   (gateway-secrets key METRICS_BEARER, empty by default; constant-time compare).
+   Every metrics write fails safe — a metrics problem can never break a tool call.
+3. GET /api/metrics (admin-only; members 403): the dashboard Metrics page
+   aggregates computed from the AUDIT table over the last 24h — per server calls,
+   errors, error rate, p50/p95 latency and top classified failure reasons.
+   Parameterized SQLAlchemy; percentiles from a bounded newest-first sample (same
+   pattern as /api/stats). New Metrics.tsx page + nav item (admin-only path), fleet
+   table language, reason chips.
+
+**Why.** Stand-out item 8: classified failure reasons on the server cards (already
+shipped in the health columns) + in the audit trail, Prometheus metrics on the
+gateway, and a Metrics page that needs NO Prometheus server (computed from audit
+rows) so the demo shows the same numbers the audit table holds.
+
+**Known trade-offs.** tool_calls_total has a `tool` label (bounded by registered
+upstream tools, per the brief). Percentiles use the bounded-sample pattern rather
+than SQL percentile_cont (portable across the sqlite test harness). /metrics is
+unauthenticated by default in-cluster (token optional) — an in-cluster scraper is
+added later by opening a NetworkPolicy exception for it; documented in
+REVIEW_NEEDED.md.

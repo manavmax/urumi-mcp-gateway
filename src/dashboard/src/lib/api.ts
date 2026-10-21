@@ -126,6 +126,17 @@ export type ServerStat = {
   p95_ms: number;
   sparkline: ServerStatSpark[];
 };
+export type FailureReason = { reason: string; count: number };
+export type AuditMetricsRow = {
+  server: string;
+  calls: number;
+  errors: number;
+  error_rate: number | null;
+  p50_ms: number;
+  p95_ms: number;
+  top_failures: FailureReason[];
+};
+export type AuditMetrics = { window_hours: number; servers: AuditMetricsRow[] };
 export type Stats = {
   range: string;
   window_days: number;
@@ -289,6 +300,10 @@ export const api = {
     const q = qs.toString();
     return request<{ events: AdminEventRow[]; total: number; limit: number; offset: number }>(`/api/admin-events${q ? `?${q}` : ""}`);
   },
+
+  // Metrics page: per-server 24h aggregates computed from the audit table
+  // (admin-only server-side; members get 403). No Prometheus server needed.
+  auditMetrics: () => request<AuditMetrics>("/api/metrics"),
 
   // Chat SSE: caller handles the fetch stream. tz = the browser's IANA
   // timezone (FIX PASS F1-8): the server validates it and puts the user's
