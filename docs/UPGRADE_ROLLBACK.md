@@ -48,6 +48,27 @@ helm upgrade --install urumi ./helm -n urumi -f helm/values-prod.yaml \
 - `--wait`: the command returns only when every deployed workload is Ready
   (upgrades only; see above for why the FIRST install runs without it).
 
+## New components (phases 5-7) upgrade notes
+
+- **Provisioner (ADR-060):** ships with the main chart; `helm upgrade` updates
+  its image/env automatically. Its own state lives in the cluster (namespaces +
+  labels), so a provisioner restart needs no data migration. The store chart is
+  BAKED into the provisioner image at /charts/store - rebuild the image when
+  helm/store changes (`make provisioner-image`).
+- **Stores:** the gateway sync loop reconciles in-flight rows on start; stuck
+  Provisioning stores resume, Failed stores need the retry button (the retry
+  resets the per-attempt budget). Store namespaces are NEVER touched by a main
+  release rollback (separate namespaces, helm releases inside them).
+- **Hosted servers (ADR-062):** same story - hosted-<name> namespaces are
+  cluster state; the provisioner image rebuild picks up chart/object changes.
+- **OAuth (ADR-063):** migration 011 adds three tables (additive-only); turning
+  oauth.enabled off leaves the tables (harmless) and API keys keep working.
+- **Flags off -> on:** every new component is inert with its flag false; turning
+  a flag on is a plain `helm upgrade` (the gateway env changes and the pods roll).
+- **Alembic (ADR-061):** migration verification is a post-run DB READ
+  (`SELECT version_num FROM alembic_version` + the new schema object), never the
+  runner's own success log.
+
 ## What upgrades/rollbacks do to state
 
 | resource | on upgrade | on rollback |

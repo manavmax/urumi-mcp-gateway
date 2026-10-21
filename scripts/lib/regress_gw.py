@@ -302,15 +302,20 @@ async def during_kill() -> int:
             rj = call_tool(client, admin_key, "notes__list_notes", {})
             check("notes work while the time pod is down", rj.status_code == 200, f"status={rj.status_code}")
             checked_others = True
-        # and the dashboard status must leave Connected for the time server
-        # (poll EVERY dark iteration: the health loop flips it within its
-        # ~5s interval, so one sample per iteration is what makes this robust)
+        # and the dashboard status must leave Connected for the time server.
+        # Two timing facts make a single sample flaky: (1) the passive mark
+        # commits in the request dependency teardown AFTER the failing response
+        # is sent, and (2) the health loop flips it within its ~5s interval.
+        # So poll the status a few times per dark iteration with small sleeps.
         if not saw_unreachable:
-            row_status = await _status_now()
-            if row_status is not None and row_status != "Connected":
-                saw_unreachable = True
-                log(f"info: dashboard time status during outage: {row_status}")
-        await asyncio.sleep(2)
+            for _ in range(4):
+                row_status = await _status_now()
+                if row_status is not None and row_status != "Connected":
+                    saw_unreachable = True
+                    log(f"info: dashboard time status during outage: {row_status}")
+                    break
+                await asyncio.sleep(0.6)
+        await asyncio.sleep(1.5)
 
     check("time tool went dark during the kill window", saw_failure, "")
     check("other upstreams stayed reachable during the kill window", checked_others, "")

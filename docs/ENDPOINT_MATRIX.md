@@ -47,7 +47,25 @@ Not covered here: load/concurrency, the ingress/TLS layer, browser-side CSRF
 | DELETE | `/api/users/{user_id}` | 401 | 403 | 204 | 401 | 401 | 401 | 401 | required | probe targets a THROWAWAY user; self-delete is 400 (dedicated test) |
 | POST | `/api/chat/completions` | 401 | 200 | 200 | 401 | 401 | 401 | 401 | required | SSE; CSRF added in the F2 pass (dashboard already sent the header) |
 | POST | `/api/keys` | 401 | 201 | 201 | 401 | 401 | 401 | 401 | required | member mints for self; admin may pass user_id |
+| PATCH | `/api/keys/{key_id}` | 401 | 403 | 200 | 401 | 401 | 401 | 401 | required | admin-only per-key rate-limit override (ADR-057) |
+| POST | `/api/chat/uploads` | 401 | 422 | 422 | 401 | 401 | 401 | 401 | n/a:multipart+csrf | F3 chat image upload (multipart, 10/min, owner-bound id); CSRF verified with a real multipart body in test_chat_uploads_router.py (an empty probe 422s before the handler) |
 | DELETE | `/api/keys/{key_id}` | 401 | 200 | 200 | 401 | 401 | 401 | 401 | required | probe revokes member A's OWN key; revoking B's is 403 (IDOR tests) |
+| GET | `/api/metrics` | 401 | 403 | 200 | 401 | 401 | 401 | 401 | n/a:read-only | audit-table aggregates (ADR-056); admin-only |
+| GET | `/api/notifications` | 401 | 200 | 200 | 401 | 401 | 401 | 401 | n/a:read-only | member-scoped notification rows |
+| GET | `/api/stores` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | n/a:read-only | flag-off 403; flag-on: members see their own, admins all (test_stores.py) |
+| POST | `/api/stores` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | required | flag-off 403; flag-on: quotas + slug rules |
+| DELETE | `/api/stores/{store_id}` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | required | flag-off 403; flag-on: owner or admin, 404 foreign (IDOR tests) |
+| POST | `/api/stores/{store_id}/retry` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | required | flag-off 403; flag-on: re-drives a Failed store |
+| GET | `/api/hosted` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | n/a:read-only | flag-off 403; flag-on: env NAMES only, never values |
+| POST | `/api/hosted` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | required | flag-off 403; flag-on: image rules enforced |
+| DELETE | `/api/hosted/{hosted_id}` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | required | flag-off 403; flag-on: cascades the hosted-<name> namespace |
+| GET | `/.well-known/oauth-protected-resource` | 403 | 403 | 403 | 403 | 403 | 403 | 403 | n/a:read-only | flag-off 403; flag-on: RFC 9728 |
+| GET | `/.well-known/oauth-authorization-server` | 403 | 403 | 403 | 403 | 403 | 403 | 403 | n/a:read-only | flag-off 403; flag-on: RFC 8414 |
+| POST | `/oauth/register` | 403 | 403 | 403 | 403 | 403 | 403 | 403 | n/a:public-dcr | flag-off 403; flag-on: RFC 7591 DCR |
+| GET | `/oauth/authorize` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | n/a:read-only | flag-off: session 401 first, then flag 403; flag-on: consent page |
+| POST | `/oauth/authorize` | 401 | 403 | 403 | 401 | 401 | 401 | 401 | required | flag-off: same ordering; flag-on: approve/deny -> 302 |
+| POST | `/oauth/token` | 403 | 403 | 403 | 403 | 403 | 403 | 403 | n/a:bearer-grant | flag-off 403; flag-on: PKCE exchange / refresh |
+| POST | `/oauth/revoke` | 403 | 403 | 403 | 403 | 403 | 403 | 403 | n/a:bearer-grant | flag-off 403; flag-on: RFC 7009 revocation |
 
 Principals: anonymous (no credentials); member/admin = session cookie; deactivated = signed session of an is_active=false user; member key = active Bearer key; revoked/expired = dead Bearer keys. CSRF rows list the server-side behaviour; 'required' means missing or wrong `X-CSRF-Token` is 403. Session routes never accept Bearer keys; /mcp never accepts session cookies.
 
@@ -55,7 +73,11 @@ Principals: anonymous (no credentials); member/admin = session cookie; deactivat
 
 - POST `/api/auth/login` — pre-session: no authenticated state to abuse; wrong-creds are rate-shaped by the admin-event trail
 - POST `/api/auth/logout` — clears only the caller's own cookie; no server state changes
+- POST `/api/chat/uploads` — multipart probe 422s before the handler; CSRF IS enforced and covered with a real multipart body in test_chat_uploads_router.py
 - POST `/mcp` — Bearer-key auth, not cookie auth: a forged cross-site request cannot attach the Authorization header
+- POST `/oauth/register` — RFC 7591 dynamic client registration is unauthenticated by spec; it only mints a client id
+- POST `/oauth/revoke` — RFC 7009 revocation: authenticated by the token itself; 200 even for unknown tokens (no oracle)
+- POST `/oauth/token` — RFC 6749 token grant: authenticated by the code+PKCE verifier / refresh token, not a cookie
 
 ## Hostile input contract (every POST/PUT/PATCH)
 

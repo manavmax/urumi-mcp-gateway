@@ -48,3 +48,22 @@ Anything security or architecture related to confirm. Newest last.
   namespace restriction - a compromised provisioner SA could touch any
   namespace's listed kinds. Confirm this residual is acceptable for the demo
   (it is documented in THREAT_MODEL.md).
+- 2026-10-21 (ADR-062, hosted images): hostedServers.enabled is FALSE in base and
+  prod; the local demo turned it ON. An admin-hosted image is arbitrary code in
+  the cluster (boxed: non-root, read-only rootfs, no SA token, capped resources,
+  gateway-only ingress, DNS-only egress) - confirm the residual in
+  THREAT_MODEL.md "Hosted servers" is acceptable before ever enabling in prod.
+- 2026-10-21 (ADR-063, OAuth prod readiness): oauth.enabled is FALSE in base and
+  prod; the local demo turned it ON with the resource URI riding the DASHBOARD
+  host (http://dashboard.127.0.0.1.nip.io/mcp). Prod should use a dedicated
+  gateway hostname + TLS before enabling; there is no grants-management UI yet
+  (revocation = /oauth/revoke + the oauth_tokens table).
+- 2026-10-21 (stores on the VPS): stores.baseDomain defaults to localhost; prod
+  needs a WILDCARD DNS record + wildcard TLS for <slug>.<baseDomain> before
+  enabling the provisioner there, and stores.maxConcurrent=2 default assumes a
+  bigger node (local runs 1).
+- 2026-10-21 (regress-core kill-window flake): stabilized (poller starts before
+  the pod delete; dashboard status sampled 4x/iteration + at recovery); 5+ green
+  runs. If it flakes again, the remaining race is the pod recovering faster than
+  one health interval - widen the dark window with a slower image or scale the
+  deployment to 0 briefly.

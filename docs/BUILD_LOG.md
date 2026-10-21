@@ -208,3 +208,35 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
 - One live-found fix: the token endpoint must COMMIT the token-family
   revocation even when the grant is REJECTED (refresh reuse) - otherwise the
   revocation was rolled back with the 400 response.
+
+## 2026-10-21 Phase 8 — docs + traceability + gate stabilization
+
+- REQUIREMENTS_CHECKLIST.md: all five former NOT DONE stand-outs closed with
+  live evidence rows (multi-store, OAuth, search_tools/compact, hosted servers,
+  metrics); scaling row updated (Postgres rate limits from phase 2); summary
+  now 56 DONE / 2 PARTIAL (both documented with workarounds) / 0 NOT DONE.
+- README.md: feature-flag table (provisioner/hosted/oauth + stores caps),
+  one-paragraph feature summaries, regress gate, demo script steps 5-8.
+- docs/SYSTEM_DESIGN_AND_TRADEOFFS.md: NEW - the phases 0-8 design + accepted
+  trade-offs (per ADR-054..063) for live defense.
+- docs/EXPLAINER.md: provisioner, hosted servers, OAuth sections complete.
+- docs/THREAT_MODEL.md: hosted-image risk, OAuth redirect/token risks,
+  one-member-versus-another.
+- docs/UPGRADE_ROLLBACK.md: new-components upgrade notes (provisioner image
+  bakes the store chart; store/hosted state is cluster state; migration 011
+  additive; flag-off->on is a plain upgrade; ADR-061 migration verification).
+- Makefile: `deploy` now includes the provisioner image + rollout; new targets
+  `make isolation A=.. B=..`, `make oauth-gate`, `make sdk-oauth`.
+- docs/ENDPOINT_MATRIX.md: regenerated from the table (29 -> 52 routes); the
+  table now covers stores/hosted/oauth (flag-OFF shape, with the flag-ON shape
+  pinned by the dedicated test files), /api/metrics, /api/notifications,
+  PATCH /api/keys/{id}, POST /api/chat/uploads (422-probe note + real-coverage
+  pointer), CSRF-exempt reasons for the OAuth grant endpoints. 20/20 matrix
+  tests pass; the seeded throwaway store/hosted rows fix the 422 probes.
+- REGRESS-CORE gate stabilization: the kill-window poller now STARTS BEFORE
+  the pod delete (was: delete first, then poll - a fast-restarting pod elided
+  the whole dark window) and the dashboard-status check samples 4x per dark
+  iteration + at recovery (the passive mark commits in the request teardown
+  AFTER the failing response is sent - a single sample raced it). 5
+  consecutive ALL CHECKS PASSED runs (previously ~50% flaky).
+- Full suite: gateway 387 passed; ruff clean; helm lint local+prod+store clean.

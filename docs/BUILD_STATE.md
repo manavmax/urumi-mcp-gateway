@@ -8,7 +8,7 @@
 
 ## Current phase
 
-PHASE 8 (docs + traceability) — in progress; PHASE 7 DONE (committed, tag phase-7-done)
+PHASE 8 (docs + traceability) DONE — ALL PHASES COMPLETE (tags phase-0-done .. phase-8-done)
 
 ## What is done
 
@@ -78,13 +78,25 @@ PHASE 8 (docs + traceability) — in progress; PHASE 7 DONE (committed, tag phas
   Gate: make lint, 373 gateway tests, demo-time 8, woo-mcp 21, helm lint
   local+prod+store, regress-core ALL CHECKS PASSED.
 
-## What is next
+## What is next (nothing pending)
 
-- PHASE 8 docs: README (setup, order, client, chat, stores, hosted, oauth,
-  metrics), SYSTEM_DESIGN_AND_TRADEOFFS, REQUIREMENTS_CHECKLIST (every bonus +
-  stand-out with honest status), EXPLAINER complete, DEMO_RUNSHEET additions,
-  helm upgrade notes, Makefile targets.
-- FINAL REPORT: per-phase DONE/PARTIAL/NOT DONE + evidence + manual VPS steps.
+- All phases 0-8 complete. The FINAL REPORT (per-phase status + evidence +
+  manual VPS steps) is in docs/BUILD_STATE.md section "Final report" and was
+  delivered in the session's final response.
+
+## Final report (per-phase)
+
+| Phase | Status | Evidence |
+|---|---|---|
+| 0 | DONE | timezone flow (frozen-clock tests), encrypted upstream creds verified + grep-tests, nginx 404s, chmod +x, regress-core created |
+| 1 | DONE | /metrics in-cluster, classified failure reasons, Metrics page from audit table |
+| 2 | DONE | Postgres rate-limit counters (per-key + per-user), concurrency tests |
+| 3 | DONE | compact mode, 300-tool test, token sizes in BUILD_LOG |
+| 4 | DONE | 2 replicas, shared lockout+limits, PDB, kill-replica proof in BUILD_LOG phase 4 |
+| 5 | DONE | isolation 5/5, recovery, two-store chat (stub LLM), clean teardown |
+| 6 | DONE | time2 host + remove, env secrets never returned |
+| 7 | DONE | OAUTH-FULL-FLOW 15/15 + MCP SDK client OK |
+| 8 | DONE | this file + checklist + matrix + explainer + threat model + upgrade notes
 
 ## Commands to resume
 
@@ -111,7 +123,7 @@ cd src/gateway && ../../.venv/bin/python -m pytest tests -q   # unit tests
 | 5 provisioner | DONE | phase-5-done | REGRESS-CORE ALL CHECKS PASSED + isolation 5/5 + recovery + chat-two-stores |
 | 6 hosted servers | DONE | phase-6-done | regress-core ALL CHECKS PASSED + live time2 add/remove |
 | 7 oauth | DONE | phase-7-done | OAUTH-FULL-FLOW OK (15/15) + SDK client OK + regress-core |
-| 8 docs | not started | - | - |
+| 8 docs | DONE | phase-8-done | checklist 56 DONE / 0 NOT DONE; matrix 20/20; 5x regress-core green |
 
 ## Environment facts
 

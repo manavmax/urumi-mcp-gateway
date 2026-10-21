@@ -186,13 +186,14 @@ provisioner-image:
 # replaces the image bytes under the same tag but existing pods keep running the
 # previous image (their imageID is unchanged) - the stale-dashboard/pod bug.
 # A chart change still needs `make helm-local`; this is the code-change deploy path.
-deploy: gateway-image dashboard-image
-	@echo "== restarting gateway + dashboard so the new builds land =="
-	kubectl rollout restart deployment/urumi-gateway deployment/urumi-dashboard -n $(NAMESPACE)
+deploy: gateway-image dashboard-image provisioner-image
+	@echo "== restarting gateway + dashboard + provisioner so the new builds land =="
+	kubectl rollout restart deployment/urumi-gateway deployment/urumi-dashboard deployment/urumi-provisioner -n $(NAMESPACE)
 	kubectl rollout status deployment/urumi-gateway -n $(NAMESPACE) --timeout=150s
 	kubectl rollout status deployment/urumi-dashboard -n $(NAMESPACE) --timeout=150s
+	kubectl rollout status deployment/urumi-provisioner -n $(NAMESPACE) --timeout=150s
 	@echo "== deploy done; pods on new image =="
-	kubectl get pods -n $(NAMESPACE) -l 'app in (gateway, dashboard)' -o jsonpath='{range .items[*]}{.metadata.name} image={.spec.containers[0].image} imageID={.status.containerStatuses[0].imageID}{"\n"}{end}'
+	kubectl get pods -n $(NAMESPACE) -l 'app in (gateway, dashboard, provisioner)' -o jsonpath='{range .items[*]}{.metadata.name} image={.spec.containers[0].image} imageID={.status.containerStatuses[0].imageID}{"\n"}{end}'
 
 # Verify gateway: handshake, tools/list fan-out (3 servers), tools/call routing, SSRF deny, audit, RBAC
 verify-gateway:
@@ -213,6 +214,22 @@ verify-llm:
 	echo "== gateway pod: $$POD =="; kubectl get pods -n $(NAMESPACE) -l app=gateway; echo ""; \
 	echo "== chat streaming + multi-step tool loop via gateway (requires a real LLM key) =="; \
 	kubectl exec -n $(NAMESPACE) $$POD -c gateway -- python3 -c "$$(cat scripts/verify-llm.py)" 2>&1 || echo "grep the FAILURES line above - LLM verification FAILED"
+
+# Phase 5 (ADR-060): cross-store NetworkPolicy isolation proof (local kind only).
+# Usage: make isolation A=gate-alpha B=gate-bravo
+isolation:
+	bash scripts/lib/phase5_isolation.sh $(A) $(B)
+
+# Phase 7 (ADR-063): the full OAuth flow against the deployed gateway (host-side;
+# 15 checks: metadata, DCR, consent+PKCE, token, /mcp calls, refresh, revocation).
+oauth-gate:
+	bash scripts/phase7-oauth-gate.sh
+
+# Phase 7 (ADR-063): drive the gateway with the MCP Python SDK's OWN OAuth client.
+sdk-oauth:
+	@ADMIN_PASSWORD="$$(make -s gateway-admin-password | sed -n 's/^admin pass: *//p' | head -1)"; \
+	test -n "$$ADMIN_PASSWORD" || { echo "could not read admin password" >&2; exit 2; }; \
+	GATEWAY_ADMIN_PASSWORD="$$ADMIN_PASSWORD" .venv/bin/python scripts/phase7_sdk_oauth_client.py
 
 # Unit tests for the gateway modules (docs/04): password hashing + verify-fails-closed,
 # tool namespacing/routing, timeout isolation + circuit breaker, RBAC/CSRF 403, audit

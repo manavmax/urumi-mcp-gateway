@@ -35,6 +35,10 @@ Evaluation: working core > unfinished bonus; must demo E2E with 2 users (chat + 
 2. Chat as User A: "create product Urumi Tee $29.99" → storefront shows it; hand-place order; "what orders today?" → returns it.
 3. Inspector as User B (gateway URL + other key): `tools/list` shows all 3 servers; same orders question succeeds; one prompt uses 2 servers.
 4. Control: revoke B's key → 401; disable a server → tools vanish; kill woo-mcp pod → others work, dashboard Unreachable; audit shows all calls.
+5. Stores (flags on): Stores page → create "Gate Alpha" → wait Ready → chat "compare today's orders across my stores" → the agent calls `gate-alpha__list_orders` + `gate-bravo__list_orders`; delete one store → namespace, registration and tools all gone.
+6. Hosted servers (flag on): Hosted page → host `urumi/demo-mcp-time:0.1.0` as "time2" → `time2__get_current_time` appears → delete → everything gone.
+7. OAuth (flag on): connect MCP Inspector with OAuth → browser consent page → client gets a token → calls work → revoke → next call 401.
+8. Metrics: dashboard Metrics page → per-server calls, error rate, p50/p95, top failure reasons (from the audit table); `kill woo-mcp` → error rate + failure reason move.
 
 ## Tech Stack (Python)
 
@@ -57,6 +61,35 @@ kubectl port-forward -n urumi svc/urumi-woo-mcp 8000:8000   # then connect to ht
 ```
 
 VPS is the same `helm/` + `helm/values-prod.yaml` (domain, storageClass, TLS). Full stranger-runnable walkthrough: **[docs/DEPLOY_VPS.md](docs/DEPLOY_VPS.md)**. Upgrade and rollback (rehearsed with real output): **docs/UPGRADE_ROLLBACK.md**.
+
+## Feature flags (phases 0-7)
+
+Everything risky is OFF by default (`helm/values.yaml`); only `helm/values-local.yaml` turns it on:
+
+| Flag | Default | What it gates |
+|---|---|---|
+| `provisioner.enabled` | false | the provisioner Deployment (stores + hosted servers) |
+| `hostedServers.enabled` | false | admin adds MCP servers by container image |
+| `oauth.enabled` | false | OAuth 2.1 for `/mcp` (API keys keep working) |
+| `stores.*` | per-store caps | maxPerUser / globalMax / maxConcurrent (1 locally: 2-core node) |
+| compact tool mode | opt-in per client | `X-Gateway-Mode: compact` header (chat auto-switches above `gateway.compactThreshold`) |
+
+With every flag off the core demo path behaves exactly as the phases 0-4 baseline (regress-core gate proves it each phase).
+
+## Stores, hosted servers, OAuth, metrics (one paragraph each)
+
+- **Stores (ADR-060):** dashboard Stores page -> per-user storefronts in their own namespace (`store-<slug>`), tools appear as `<slug>__list_orders`; WooCommerce keys never leave the store namespace. Isolation proven 5/5 cross-store.
+- **Hosted servers (ADR-062):** admin hosts any MCP server BY CONTAINER IMAGE (tag/digest required, `:latest` refused, registry allowlist, no SA token, read-only rootfs, gateway-only ingress); env values live in a cluster Secret and are never returned by any API.
+- **OAuth (ADR-063):** MCP clients get a 401 pointing at `/.well-known/oauth-protected-resource`; dynamic client registration; the browser part reuses the dashboard login + a consent page; opaque 5-minute tokens + rotating refresh tokens mapped to users (same permissions/rate limits/audit as API keys). Test: `bash scripts/phase7-oauth-gate.sh`.
+- **Metrics (ADR-056):** `/metrics` (prometheus_client) in-cluster only, not through Ingress; the dashboard Metrics page computes per-server calls/error-rate/p50/p95 from the audit table (no Prometheus server needed).
+
+## Regression gate (every phase)
+
+```bash
+bash scripts/regress-core.sh    # the core DoD on kind: order visible, tools/list admin+member,
+                                # orders question via MCP, revoke rejected, disable hides tools,
+                                # kill a pod -> others keep working, audit attribution
+```
 
 ## Credentials & LLM wiring (no committed secrets)
 

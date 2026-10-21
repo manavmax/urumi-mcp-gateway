@@ -110,7 +110,38 @@ ROUTE_MATRIX: list[MatrixRow] = [
     MatrixRow("POST", "/api/chat/completions", expected={"anonymous": 401, "deactivated": 401, "member": 200, "admin": 200, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", probe_json={"messages": [{"role": "user", "content": "hi"}]}, note="SSE; CSRF added in the F2 pass (dashboard already sent the header)"),
     # ---- session-scoped member resources ----
     MatrixRow("POST", "/api/keys", expected={"anonymous": 401, "deactivated": 401, "member": 201, "admin": 201, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", probe_json={}, note="member mints for self; admin may pass user_id"),
+    MatrixRow("PATCH", "/api/keys/{key_id}", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 200, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", probe_json={"rate_limit_per_minute": 30}, note="admin-only per-key rate-limit override (ADR-057)"),
+    # 422 here because the generic probe sends no multipart file; the REAL
+    # happy path (200) and CSRF 403 are pinned in test_chat_uploads_router.py
+    MatrixRow("POST", "/api/chat/uploads", expected={"anonymous": 401, "deactivated": 401, "member": 422, "admin": 422, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="n/a:multipart+csrf", note="F3 chat image upload (multipart, 10/min, owner-bound id); CSRF verified with a real multipart body in test_chat_uploads_router.py (an empty probe 422s before the handler)"),
     MatrixRow("DELETE", "/api/keys/{key_id}", expected={"anonymous": 401, "deactivated": 401, "member": 200, "admin": 200, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", note="probe revokes member A's OWN key; revoking B's is 403 (IDOR tests)"),
+    # ---- Phase 1 metrics + notifications ----
+    MatrixRow("GET", "/api/metrics", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 200, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="n/a:read-only", note="audit-table aggregates (ADR-056); admin-only"),
+    MatrixRow("GET", "/api/notifications", expected={"anonymous": 401, "deactivated": 401, "member": 200, "admin": 200, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="n/a:read-only", note="member-scoped notification rows"),
+    # ---- Phase 5 stores (ADR-060): 403 everywhere when the flag is off; the
+    # tests run with it ON (env), so the expectations here are the ON shape ----
+    # flag-OFF shape (the default deployment): stores gated 403; the flag-ON
+    # shape (member 200/201) is pinned by tests/test_stores.py with the flag on
+    MatrixRow("GET", "/api/stores", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="n/a:read-only", note="flag-off 403; flag-on: members see their own, admins all (test_stores.py)"),
+    MatrixRow("POST", "/api/stores", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", probe_json={"display_name": "probe-{rand} store"}, note="flag-off 403; flag-on: quotas + slug rules"),
+    MatrixRow("DELETE", "/api/stores/{store_id}", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", note="flag-off 403; flag-on: owner or admin, 404 foreign (IDOR tests)"),
+    MatrixRow("POST", "/api/stores/{store_id}/retry", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", note="flag-off 403; flag-on: re-drives a Failed store"),
+    # ---- Phase 6 hosted servers (ADR-062): admin-only; flag-gated ----
+    # flag-OFF shape: hosted gated 403; the flag-ON shape (admin 200/201) is
+    # pinned by tests/test_hosted.py with the flag on
+    MatrixRow("GET", "/api/hosted", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="n/a:read-only", note="flag-off 403; flag-on: env NAMES only, never values"),
+    MatrixRow("POST", "/api/hosted", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", probe_json={"name": "probe-{rand}", "image": "ghcr.io/urumi/demo-mcp-time:0.1.0", "port": 8000}, note="flag-off 403; flag-on: image rules enforced"),
+    MatrixRow("DELETE", "/api/hosted/{hosted_id}", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", note="flag-off 403; flag-on: cascades the hosted-<name> namespace"),
+    # ---- Phase 7 OAuth (ADR-063): public discovery + flow endpoints (403 when off) ----
+    # flag-OFF shape: everything oauth is 403; the flag-ON shapes (200/201/302)
+    # are pinned by tests/test_oauth.py and the live gate
+    MatrixRow("GET", "/.well-known/oauth-protected-resource", expected={"anonymous": 403, "deactivated": 403, "member": 403, "admin": 403, "member_key": 403, "revoked_key": 403, "expired_key": 403}, csrf="n/a:read-only", note="flag-off 403; flag-on: RFC 9728"),
+    MatrixRow("GET", "/.well-known/oauth-authorization-server", expected={"anonymous": 403, "deactivated": 403, "member": 403, "admin": 403, "member_key": 403, "revoked_key": 403, "expired_key": 403}, csrf="n/a:read-only", note="flag-off 403; flag-on: RFC 8414"),
+    MatrixRow("POST", "/oauth/register", expected={"anonymous": 403, "deactivated": 403, "member": 403, "admin": 403, "member_key": 403, "revoked_key": 403, "expired_key": 403}, csrf="n/a:public-dcr", probe_json={"redirect_uris": ["http://127.0.0.1:9/callback"]}, note="flag-off 403; flag-on: RFC 7591 DCR"),
+    MatrixRow("GET", "/oauth/authorize", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="n/a:read-only", note="flag-off: session 401 first, then flag 403; flag-on: consent page"),
+    MatrixRow("POST", "/oauth/authorize", expected={"anonymous": 401, "deactivated": 401, "member": 403, "admin": 403, "member_key": 401, "revoked_key": 401, "expired_key": 401}, csrf="required", note="flag-off: same ordering; flag-on: approve/deny -> 302"),
+    MatrixRow("POST", "/oauth/token", expected={"anonymous": 403, "deactivated": 403, "member": 403, "admin": 403, "member_key": 403, "revoked_key": 403, "expired_key": 403}, csrf="n/a:bearer-grant", note="flag-off 403; flag-on: PKCE exchange / refresh"),
+    MatrixRow("POST", "/oauth/revoke", expected={"anonymous": 403, "deactivated": 403, "member": 403, "admin": 403, "member_key": 403, "revoked_key": 403, "expired_key": 403}, csrf="n/a:bearer-grant", note="flag-off 403; flag-on: RFC 7009 revocation"),
 ]
 
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
@@ -120,6 +151,11 @@ CSRF_EXEMPT_MUTATIONS = {
     ("POST", "/api/auth/login"): "pre-session: no authenticated state to abuse; wrong-creds are rate-shaped by the admin-event trail",
     ("POST", "/api/auth/logout"): "clears only the caller's own cookie; no server state changes",
     ("POST", "/mcp"): "Bearer-key auth, not cookie auth: a forged cross-site request cannot attach the Authorization header",
+    # OAuth flow endpoints (ADR-063): no session is involved in these grants
+    ("POST", "/oauth/register"): "RFC 7591 dynamic client registration is unauthenticated by spec; it only mints a client id",
+    ("POST", "/oauth/token"): "RFC 6749 token grant: authenticated by the code+PKCE verifier / refresh token, not a cookie",
+    ("POST", "/oauth/revoke"): "RFC 7009 revocation: authenticated by the token itself; 200 even for unknown tokens (no oracle)",
+    ("POST", "/api/chat/uploads"): "multipart probe 422s before the handler; CSRF IS enforced and covered with a real multipart body in test_chat_uploads_router.py",
 }
 
 
@@ -187,6 +223,15 @@ async def matrix_harness(monkeypatch):
         srv_notes = Server(slug="notes", url="http://notes.invalid:8000/mcp", auth_type="none", timeout_ms=5000)
         srv_throwaway = Server(slug="matrix-throwaway", url="http://throwaway.invalid:8000/mcp", auth_type="none", timeout_ms=5000)
         db.add_all([srv_notes, srv_throwaway])
+        # throwaway store + hosted rows for the path-param probes (phases 5/6)
+        from db.models import HostedServer, Store
+
+        st_throwaway = Store(slug="matrix-throwaway", display_name="Matrix throwaway",
+                             namespace="store-matrix-throwaway", status="Ready",
+                             owner_user_id=admin.id)
+        hs_throwaway = HostedServer(name="matrix-throwaway", image="ghcr.io/urumi/demo-mcp-time:0.1.0",
+                                    port=8000, env_names=[], status="Ready")
+        db.add_all([st_throwaway, hs_throwaway])
         await db.flush()
 
         for i, u in enumerate((admin, member_a, member_b), start=1):
@@ -225,6 +270,8 @@ async def matrix_harness(monkeypatch):
             "member_a_id": str(member_a.id),
             "member_b_id": str(member_b.id),
             "admin_id": str(admin.id),
+            "store_id": str(st_throwaway.id),
+            "hosted_id": str(hs_throwaway.id),
         }
 
     cookie_name = get_settings().session_cookie_name
@@ -259,14 +306,17 @@ def _reset_limiters():
     import routes.mcp as mcp_route
     import routes.servers as servers_route
 
-    mcp_route._rate_buckets.clear()
+    # ADR-057: the limiter moved to Postgres counters; the in-memory buckets
+    # only exist in older builds - guard the reset
+    if hasattr(mcp_route, "_rate_buckets"):
+        mcp_route._rate_buckets.clear()
     if hasattr(servers_route, "_check_buckets"):
         servers_route._check_buckets.clear()
 
 
 def _resolve_path(h, template: str) -> str:
     path = template
-    for key in ("{server_id}", "{key_id}", "{user_id}"):
+    for key in ("{server_id}", "{key_id}", "{user_id}", "{store_id}", "{hosted_id}"):
         if key in path:
             path = path.replace(key, h.ids[key.strip("{}")])
     # every "{rand}" gets a FRESH value so repeated create-probes stay unique

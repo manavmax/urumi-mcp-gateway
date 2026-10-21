@@ -60,9 +60,16 @@ fi
 
 if [[ ${RC} -eq 0 ]]; then
   # ---- 3. kill the demo-time pod while the gateway polls --------------------
+  # START THE POLLER FIRST (background), let it warm up, THEN kill: deleting
+  # first races a fast-restarting pod (the tiny local image returns in ~2s and
+  # the whole dark window can elapse before the poller's first call - observed
+  # flaky in phases 5-8).
   echo "== step 3: killing demo-time pod ${TIME_POD}; others must keep working =="
+  kubectl exec -n "${NAMESPACE}" "${GW_POD}" -c gateway -i -- python3 - < scripts/lib/regress_gw.py during_kill &
+  KILL_POLLER=$!
+  sleep 3
   kubectl delete pod -n "${NAMESPACE}" "${TIME_POD}" --wait=false >/dev/null
-  if ! kubectl exec -n "${NAMESPACE}" "${GW_POD}" -c gateway -i -- python3 - < scripts/lib/regress_gw.py during_kill; then
+  if ! wait "${KILL_POLLER}"; then
     echo "REGRESS-CORE: FAIL (kill-pod window)"; RC=1
   fi
   NEW_TIME_POD="$(kubectl get pods -n "${NAMESPACE}" -l app=demo-time -o jsonpath='{.items[0].metadata.name}')"
