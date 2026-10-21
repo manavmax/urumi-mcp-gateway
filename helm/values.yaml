@@ -353,3 +353,21 @@ stores:
   globalMax: 12
   maxConcurrent: 2
   provisionTimeoutSeconds: 600
+
+hostedServers:
+  # Phase 6 (ADR-062): admin adds an MCP server BY CONTAINER IMAGE. RISKY: the
+  # image runs in the cluster with gateway-only ingress, no SA token, read-only
+  # rootfs and capped resources - but it is still an arbitrary image (see
+  # THREAT_MODEL). Default OFF everywhere; values-local may turn it on.
+  enabled: false
+  # optional comma-separated registry prefixes; empty = any registry
+  allowedRegistries: ""
+  globalMax: 5
+  timeoutSeconds: 300
+  resources:
+    # mandatory requests/limits for every hosted container (the provisioner
+    # refuses an image whose pod would exceed these caps)
+    cpuRequest: 30m
+    memoryRequest: 64Mi
+    cpuLimit: 200m
+    memoryLimit: 256Mi

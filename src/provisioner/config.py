@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     helm_timeout: str = "540s"
     reconcile_interval_seconds: int = 10
     log_level: str = "INFO"
+    # values forwarded by the Helm chart (hostedServers.*)
+    hosted_cpu_request: str = "30m"
+    hosted_memory_request: str = "64Mi"
+    hosted_cpu_limit: str = "200m"
+    hosted_memory_limit: str = "256Mi"
     # store chart image repos/tags: forwarded from the MAIN release's resolved
     # values by the Helm chart (values-local rewrites repos to node-local
     # urumi/...; prod keeps ghcr.io/...), so store pods always run the same

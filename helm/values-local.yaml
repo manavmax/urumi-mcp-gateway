@@ -124,6 +124,11 @@ provisioner:
   image: { repository: urumi/provisioner, tag: "0.1.0", pullPolicy: Never }
   # the wp-setup hook needs up to ~13 min on the loaded 2-core node
   helmTimeout: "1140s"
+hostedServers:
+  # Phase 6 (ADR-062): ON locally only (base+prod stay false). demo-mcp-time is
+  # preloaded in the kind node, so the live test uses it as "time2".
+  enabled: true
+  allowedRegistries: ""
 stores:
   # *.localhost resolves to 127.0.0.1 in modern browsers/curl
   baseDomain: localhost

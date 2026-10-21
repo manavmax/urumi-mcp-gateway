@@ -292,6 +292,19 @@ spec:
               app: woo-mcp
       ports:
         - port: 8000
+    {{- if .Values.hostedServers.enabled }}
+    # Phase 6 (ADR-062): the gateway must reach the hosted MCP servers it
+    # registered (hosted-<name> namespaces, app: hosted-mcp)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              urumi.io/managed-by: provisioner
+          podSelector:
+            matchLabels:
+              app: hosted-mcp
+      ports:
+        - port: 8000
+    {{- end }}
 {{- end }}
 {{- if .Values.gateway.llm.enabled }}
     - to:

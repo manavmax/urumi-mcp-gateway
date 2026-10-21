@@ -283,6 +283,11 @@ def create_app() -> FastAPI:
 
     app.include_router(stores_router)
 
+    # Phase 6 (ADR-062): hosted MCP servers (admin-only, 403 when the flag is off)
+    from hosted.routes import router as hosted_router
+
+    app.include_router(hosted_router)
+
     @app.get("/")
     async def root():
         s = get_settings()

@@ -71,3 +71,50 @@ async def store_state(slug: str) -> dict | None:
     except httpx.HTTPError as exc:
         logger.warning("provisioner unreachable: %s", exc.__class__.__name__)
         return None
+
+
+# ---- Phase 6 (ADR-062): hosted MCP servers ----------------------------------
+
+async def host_server(name: str, image: str, port: int, env: dict[str, str]) -> None:
+    """Ask the provisioner to deploy hosted-<name>. Env VALUES cross this call
+    once (into the provisioner's Secret) and are never logged."""
+    try:
+        async with await _client() as c:
+            r = await c.post("/v1/hosted", json={"name": name, "image": image, "port": port, "env": env or {}})
+        if r.status_code == 202:
+            return
+        detail = ""
+        try:
+            detail = (r.json().get("detail") or "")[:200]
+        except Exception:
+            detail = ""
+        raise ProvisionerError(f"provisioner refused ({r.status_code}): {detail}" if detail
+                               else f"provisioner refused: {r.status_code}")
+    except httpx.HTTPError as exc:
+        logger.warning("provisioner unreachable: %s", exc.__class__.__name__)
+        raise ProvisionerError("provisioner unreachable") from exc
+
+
+async def unhost_server(name: str) -> None:
+    try:
+        async with await _client() as c:
+            r = await c.delete(f"/v1/hosted/{name}")
+        if r.status_code in (202, 200):
+            return
+        raise ProvisionerError(f"provisioner refused: {r.status_code}")
+    except httpx.HTTPError as exc:
+        logger.warning("provisioner unreachable: %s", exc.__class__.__name__)
+        raise ProvisionerError("provisioner unreachable") from exc
+
+
+async def hosted_state(name: str) -> dict | None:
+    try:
+        async with await _client() as c:
+            r = await c.get(f"/v1/hosted/{name}")
+        if r.status_code == 200:
+            body = r.json()
+            return {"phase": body.get("phase", ""), "reason": (body.get("reason") or "")[:300]}
+        return None
+    except httpx.HTTPError as exc:
+        logger.warning("provisioner unreachable: %s", exc.__class__.__name__)
+        return None

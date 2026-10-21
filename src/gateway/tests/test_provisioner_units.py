@@ -166,3 +166,78 @@ def test_store_image_defaults_match_chart():
     assert s.store_image_wordpress_repo == "ghcr.io/urumi/wordpress"
     assert s.store_image_woo_mcp_repo == "ghcr.io/urumi/woo-mcp"
     assert s.store_image_mariadb_repo == "mariadb"
+
+
+# ---- Phase 6 (ADR-062): hosted servers -------------------------------------
+
+def _load_provisioner_hosted():
+    """The provisioner's hosted.py collides with the GATEWAY's hosted package
+    (both named `hosted`): load by path under a unique module name."""
+    import importlib.util
+
+    p = Path(__file__).resolve().parents[2] / "provisioner" / "hosted.py"
+    spec = importlib.util.spec_from_file_location("urumi_provisioner_hosted", p)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_hosted_validate_image_rules():
+    """Tag/digest REQUIRED; :latest and bare names refused; registry paths pass."""
+    hosted = _load_provisioner_hosted()
+
+    assert hosted.validate_image("ghcr.io/urumi/demo-mcp-time:0.1.0")
+    assert hosted.validate_image("urumi/demo-mcp-time:0.1.0")
+    assert hosted.validate_image("r.io/x@sha256:" + "a" * 12)
+    for bad in ("demo-mcp-time:0.1.0", "ghcr.io/x", "ghcr.io/x:latest", "", "x" * 300):
+        with pytest.raises(hosted.HostedImageError):
+            hosted.validate_image(bad)
+
+
+def test_hosted_namespace_naming():
+    hosted = _load_provisioner_hosted()
+
+    assert hosted.hosted_namespace("time2") == "hosted-time2"
+    with pytest.raises(StoreError):
+        hosted.hosted_namespace("Bad_Name")
+
+
+def test_hosted_build_objects_shape(monkeypatch):
+    """The generated objects carry the safety contract: non-root, read-only
+    rootfs, NO SA token, capped resources, gateway-only ingress, DNS-only egress,
+    env via secretKeyRef (values only in the Secret)."""
+    hosted = _load_provisioner_hosted()
+
+    class S:
+        gateway_namespace = "urumi"
+        hosted_cpu_request = "30m"
+        hosted_memory_request = "64Mi"
+        hosted_cpu_limit = "200m"
+        hosted_memory_limit = "256Mi"
+
+    monkeypatch.setattr(hosted, "get_settings", lambda: S(), raising=True)
+    objs = hosted.build_objects("time2", "hosted-time2", "ghcr.io/urumi/demo-mcp-time:0.1.0", 8000,
+                                {"TOKEN": "sekrit"})
+    kinds = [(o["kind"], o["metadata"]["name"]) for o in objs]
+    assert ("NetworkPolicy", "default-deny") in kinds
+    assert ("NetworkPolicy", "allow-gateway") in kinds
+    assert ("Secret", "time2-env") in kinds
+    assert ("Service", "time2") in kinds
+    assert ("Deployment", "time2") in kinds
+    dep = next(o for o in objs if o["kind"] == "Deployment")
+    spec = dep["spec"]["template"]["spec"]
+    assert spec["automountServiceAccountToken"] is False
+    assert spec["containers"][0]["securityContext"]["runAsNonRoot"] is True
+    assert spec["containers"][0]["securityContext"]["readOnlyRootFilesystem"] is True
+    assert spec["containers"][0]["securityContext"]["allowPrivilegeEscalation"] is False
+    res = spec["containers"][0]["resources"]
+    assert res["limits"] == {"cpu": "200m", "memory": "256Mi"}
+    # env values ONLY in the Secret; the Deployment references the keys
+    secret = next(o for o in objs if o["kind"] == "Secret")
+    assert secret["stringData"] == {"TOKEN": "sekrit"}
+    env_ref = spec["containers"][0]["env"][0]
+    assert env_ref["valueFrom"]["secretKeyRef"]["key"] == "TOKEN"
+    # the Deployment spec must not carry the VALUE itself
+    import json as _json
+
+    assert "sekrit" not in _json.dumps(dep)

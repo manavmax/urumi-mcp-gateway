@@ -286,6 +286,30 @@ class Store(Base):
     )
 
 
+class HostedServer(Base):
+    """A hosted MCP server (Phase 6, ADR-062): an admin-chosen container image
+    deployed by the provisioner into hosted-<name>.
+
+    The row is the SPEC + lifecycle: name (slug), image (tag/digest REQUIRED,
+    never :latest), port, and env NAMES ONLY - the secret VALUES live in a K8s
+    Secret in the hosted namespace and are never persisted gateway-side nor
+    returned by any API. status: Hosted(Provisioning)/Ready/Failed/Deleting.
+    On Ready the sync registers an internal upstream Server row (slug = name)."""
+
+    __tablename__ = "hosted_servers"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    image: Mapped[str] = mapped_column(Text, nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False)
+    env_names: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="Provisioning")
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+
 class LoginFailure(Base):
     """Login lockout counters (ADR-044, Postgres since Phase 4 ADR-059).
 

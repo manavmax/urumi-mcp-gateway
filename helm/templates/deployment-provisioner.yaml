@@ -79,6 +79,17 @@ spec:
               value: {{ .Values.mariadb.image.repository | quote }}
             - name: STORE_IMAGE_MARIADB_TAG
               value: {{ .Values.mariadb.image.tag | quote }}
+            {{- if .Values.hostedServers.enabled }}
+            # Phase 6 (ADR-062): hosted container resource caps (mandatory)
+            - name: HOSTED_CPU_REQUEST
+              value: {{ .Values.hostedServers.resources.cpuRequest | quote }}
+            - name: HOSTED_MEMORY_REQUEST
+              value: {{ .Values.hostedServers.resources.memoryRequest | quote }}
+            - name: HOSTED_CPU_LIMIT
+              value: {{ .Values.hostedServers.resources.cpuLimit | quote }}
+            - name: HOSTED_MEMORY_LIMIT
+              value: {{ .Values.hostedServers.resources.memoryLimit | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.provisioner.resources | nindent 12 }}
           livenessProbe:

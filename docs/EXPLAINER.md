@@ -74,3 +74,27 @@ the gateway removes the row + registration when the namespace is gone.
 hook) and the laptop node is small: timeouts are generous, provisioning is
 sequential locally, and a timeout marks the store Failed with a safe reason and
 a one-click retry (idempotent helm + kept PVCs make retries cheap).
+
+## 2026-10-21: hosted MCP servers (ADR-062)
+
+**What it does.** An admin pastes a container image (tag or digest required)
+plus a port and optional env vars; the provisioner deploys it into its own
+hosted-<name> namespace as an MCP server and the gateway registers it as an
+internal upstream, so its tools appear as <name>__* like every other upstream.
+
+**Why this approach.** The phase-5 provisioner already owns managed namespaces;
+hosting is the same pattern minus helm (four plain objects applied idempotently
+via the K8s API). The container is boxed in: non-root, read-only rootfs, no SA
+token, capped resources, default-deny network with gateway-only ingress and
+DNS-only egress. Env VALUES live in a cluster Secret; the gateway stores only
+the names.
+
+**Request flow.** Dashboard form -> gateway (admin-only + image rules) ->
+provisioner POST /v1/hosted (applies namespace + objects) -> the gateway's sync
+sees the Deployment Available -> registers the upstream -> tools appear.
+Deletion reverses it and cascades via the namespace delete.
+
+**Main failure mode.** A bad image (crashes, wrong port, no MCP endpoint) just
+never becomes Ready; the row fails after the budget with a safe reason and the
+namespace can be deleted. The blast radius of a deliberately malicious image is
+documented in THREAT_MODEL (hosted servers section).

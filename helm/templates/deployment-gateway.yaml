@@ -170,6 +170,16 @@ spec:
               value: {{ .Values.stores.maxPerUser | default 2 | quote }}
             - name: STORES_GLOBAL_MAX
               value: {{ .Values.stores.globalMax | default 12 | quote }}
+            {{- if .Values.hostedServers.enabled }}
+            # Phase 6 (ADR-062): hosted MCP servers (admin-only). Only inside the
+            # provisioner-enabled block: no provisioner means nothing can host.
+            - name: HOSTED_ENABLED
+              value: "true"
+            - name: HOSTED_REGISTRY_ALLOWLIST
+              value: {{ .Values.hostedServers.allowedRegistries | default "" | quote }}
+            - name: HOSTED_GLOBAL_MAX
+              value: {{ .Values.hostedServers.globalMax | default 5 | quote }}
+            {{- end }}
             {{- end }}
             # Timezone fallback (ADR-054): the chat system prompt stamps this zone when
             # the browser sends no valid IANA timezone. Base default is UTC; the local

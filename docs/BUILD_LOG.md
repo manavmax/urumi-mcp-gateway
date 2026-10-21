@@ -141,3 +141,31 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
   int coercion; fullnameOverride for deterministic <slug>-* names; image repos
   forwarded from the main release; provisioner memory 768Mi; values-local
   maxConcurrent=1 + lighter main-store requests (2-core node).
+
+## 2026-10-21 Phase 6 — hosted MCP servers (ADR-062)
+
+- Tests: gateway 380 passed (test_hosted.py: disabled-flag 403, admin-only,
+  image rules incl. allowlist + :latest, name rules, env values NEVER echoed,
+  sync register/remove, provision timeout); provisioner units +3 (validate_image,
+  namespace naming, build_objects safety contract: non-root/read-only/no-SA-token/
+  capped resources/gateway-only ingress/secret-only env values). ruff + helm lint
+  (local, prod, store) clean.
+- Deploy: DOCKER_CONTEXT=colima make gateway-image && make provisioner-image;
+  helm upgrade --no-hooks; alembic -> 010_hosted_servers (verified by DB read,
+  the ADR-061 lesson).
+- LIVE time2 (demo-mcp-time image, env DEMO_TOKEN -> hosted Secret):
+  ```
+  POST /api/hosted {name: time2, image: urumi/demo-mcp-time:0.1.0, port: 8000}
+    -> 201 {status: Provisioning, env_names: [DEMO_TOKEN]}   (value NOT echoed)
+  provisioner applied hosted-time2: Deployment+Service+Secret+NetworkPolicies
+  sync -> Ready; internal upstream http://time2.hosted-time2.svc:8000/mcp
+  tools/list -> time2__get_current_time, time2__convert_time
+  tools/call time2__get_current_time -> 200 {"now_utc": "2026-10-21T19:31:43..."}
+  DELETE /api/hosted/<id> -> namespace gone, registration removed, tools gone
+  ```
+- Two live-found fixes: gateway EGRESS needed a hosted-servers rule (namespace
+  label urumi.io/managed-by=provisioner + app: hosted-mcp; ADR-045 default-deny
+  blocks new upstream classes by design) and the upstream URL must end in /mcp
+  (a pathless URL POSTs to / -> 405; the sync now self-heals Ready rows).
+- GATE: make lint; gateway 380 + demo-time 8 + woo-mcp 21; helm lint local+prod
+  + store; `bash scripts/regress-core.sh` -> REGRESS-CORE: ALL CHECKS PASSED.

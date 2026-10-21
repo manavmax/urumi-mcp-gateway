@@ -8,7 +8,7 @@
 
 ## Current phase
 
-PHASE 6 (hosted MCP servers) — next; PHASE 5 DONE (not yet tagged)
+PHASE 7 (OAuth on the gateway) — next; PHASE 6 DONE (committed, tag phase-6-done)
 
 ## What is done
 
@@ -80,12 +80,14 @@ PHASE 6 (hosted MCP servers) — next; PHASE 5 DONE (not yet tagged)
 
 ## What is next
 
-- PHASE 6 hosted MCP servers (stand-out 5): admin adds a server by container
-  image in the dashboard (tag/digest required, registry allowlist, port, env
-  vars with secret values), the provisioner (same RBAC pattern) deploys
-  Deployment+Service+Secret+NetworkPolicy with resource caps, auto-registers in
-  the gateway; test with demo-mcp-time as "time2" then remove cleanly. Flag
-  hostedServers.enabled default false.
+- PHASE 7 OAuth on the gateway (stand-out 3): MCP authorization spec minimal
+  correct form behind oauth.enabled: RFC 9728 resource metadata, RFC 8414
+  server metadata, RFC 7591 dynamic client registration, authorization code +
+  PKCE S256, resource indicator binding (RFC 8707), short-lived opaque tokens +
+  hashed refresh tokens, revocable, mapped to users; dashboard nginx routes
+  /.well-known/oauth-*; scripted full-flow test; THREAT_MODEL entry.
+- PHASE 8 docs: README, SYSTEM_DESIGN_AND_TRADEOFFS, REQUIREMENTS_CHECKLIST,
+  EXPLAINER completion, DEMO_RUNSHEET, Makefile targets.
 
 ## Commands to resume
 
@@ -110,7 +112,7 @@ cd src/gateway && ../../.venv/bin/python -m pytest tests -q   # unit tests
 | 3 many tools | DONE | phase-3-done | REGRESS-CORE ALL CHECKS PASSED |
 | 4 scaling | DONE | phase-4-done | REGRESS-CORE ALL CHECKS PASSED |
 | 5 provisioner | DONE | phase-5-done | REGRESS-CORE ALL CHECKS PASSED + isolation 5/5 + recovery + chat-two-stores |
-| 6 hosted servers | not started | - | - |
+| 6 hosted servers | DONE | phase-6-done | regress-core ALL CHECKS PASSED + live time2 add/remove |
 | 7 oauth | not started | - | - |
 | 8 docs | not started | - | - |
 

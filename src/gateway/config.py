@@ -127,6 +127,14 @@ class Settings(BaseSettings):
     stores_global_max: int = 12
     stores_sync_interval_seconds: int = 5
 
+    # Phase 6 (ADR-062): hosted MCP servers. hosted_enabled mirrors the
+    # hostedServers.enabled Helm flag (default false); the allowlist is a
+    # comma-separated registry prefix list (empty = any registry allowed).
+    hosted_enabled: bool = False
+    hosted_registry_allowlist: str = ""
+    hosted_global_max: int = 5
+    hosted_timeout_seconds: int = 300
+
     # F3 chat image uploads: 5 MB byte cap (env-tunable), 15 minute upload TTL.
     image_upload_max_bytes: int = 5 * 1024 * 1024
     chat_upload_ttl_seconds: int = 15 * 60
@@ -205,6 +213,9 @@ def get_settings() -> Settings:
         "METRICS_BEARER": "metrics_bearer",
         "COMPACT_THRESHOLD": "compact_threshold",
         "STORES_ENABLED": "stores_enabled",
+        "HOSTED_ENABLED": "hosted_enabled",
+        "HOSTED_REGISTRY_ALLOWLIST": "hosted_registry_allowlist",
+        "HOSTED_GLOBAL_MAX": "hosted_global_max",
         "PROVISIONER_URL": "provisioner_url",
         "PROVISIONER_TOKEN": "provisioner_token",
         "STORES_BASE_DOMAIN": "stores_base_domain",

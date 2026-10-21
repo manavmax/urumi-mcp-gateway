@@ -63,6 +63,38 @@ class K8sClient:
         content type below is merge-patch, and an array body 415s."""
         return await self._client.patch(path, json=body, headers={"Content-Type": "application/merge-patch+json"})
 
+    # ---- generic object apply (Phase 6: hosted servers) --------------------
+    # Apply = create if missing, replace-if-changed otherwise. Only used for the
+    # four hosted-server kinds inside hosted-<name> namespaces the provisioner
+    # itself created (require_managed checked by callers).
+
+    async def apply_object(self, api_version: str, kind: str, ns: str, body: dict) -> None:
+        """Create-or-replace a namespaced object by kind path. Only the kinds
+        the hosted-server flow needs. Idempotent: an identical existing object
+        is a no-op; a changed one is replaced (objects are provisioner-owned).
+        Returns nothing; raises StoreError with a status-only reason (the body
+        may contain a Secret - never in the message)."""
+        paths = {
+            ("v1", "Secret"): "/api/v1/namespaces/{ns}/secrets/{name}",
+            ("v1", "Service"): "/api/v1/namespaces/{ns}/services/{name}",
+            ("v1", "ConfigMap"): "/api/v1/namespaces/{ns}/configmaps/{name}",
+            ("apps/v1", "Deployment"): "/apis/apps/v1/namespaces/{ns}/deployments/{name}",
+            ("networking.k8s.io/v1", "NetworkPolicy"): "/apis/networking.k8s.io/v1/namespaces/{ns}/networkpolicies/{name}",
+        }
+        template = paths.get((api_version, kind))
+        if template is None:
+            raise StoreError(f"unsupported kind {kind}")
+        name = body["metadata"]["name"]
+        path = template.format(ns=quote(ns), name=quote(name))
+        r = await self._client.get(path)
+        if r.status_code == 200:
+            # replace: the provisioner owns these objects wholesale
+            r = await self._client.put(path, json=body)
+        else:
+            r = await self._client.post(template.format(ns=quote(ns), name="").rsplit("/", 1)[0], json=body)
+        if r.status_code not in (200, 201, 409):
+            raise StoreError(f"{kind} apply failed: {r.status_code} (details not logged)")
+
     # ---- namespaces -------------------------------------------------------
 
     async def namespace_exists(self, ns: str) -> bool:
@@ -87,6 +119,18 @@ class K8sClient:
         """Create (idempotently) the store namespace WITH the managed labels."""
         validate_slug(slug)
         ns = store_namespace(slug)
+        return await self._create_managed_namespace(ns, slug, "store")
+
+    async def create_hosted_namespace(self, name: str) -> dict:
+        """Create (idempotently) the hosted-<name> namespace WITH the managed
+        labels (Phase 6, ADR-062). Same adoption resistance as stores."""
+        validate_slug(name)
+        ns = f"hosted-{name}"
+        return await self._create_managed_namespace(ns, name, "hosted")
+
+    async def _create_managed_namespace(self, ns: str, slug: str, kind: str) -> dict:
+        """Create (idempotently) a managed namespace. The slug label carries the
+        store/hosted name so reconcile can map namespace -> entity."""
         existing = await self.get_namespace(ns)
         if existing is not None:
             # only continue when it is one of ours

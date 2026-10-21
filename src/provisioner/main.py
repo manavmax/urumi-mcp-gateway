@@ -130,3 +130,55 @@ async def delete_store(slug: str):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     logger.info("deprovisioning accepted for %s", slug)
     return {"phase": "deleting", "slug": slug}
+
+
+# ---- Phase 6 (ADR-062): hosted MCP servers ----------------------------------
+
+class HostedRequest(BaseModel):
+    name: str
+    image: str
+    port: int
+    env: dict[str, str] | None = None
+
+
+class HostedDeleteRequest(BaseModel):
+    name: str
+
+
+def _hosted_tasks():
+    if getattr(app.state, "hosted", None) is None:
+        from hosted import HostedTasks
+
+        app.state.hosted = HostedTasks(app.state.k8s)
+    return app.state.hosted
+
+
+@app.post("/v1/hosted", status_code=202)
+async def host_server(body: HostedRequest, request: Request):
+    """Create (or idempotently re-apply) hosted-<name> with the four objects.
+    202 = applied; readiness is derived from the Deployment."""
+    tasks = _hosted_tasks()
+    try:
+        await tasks.host(body.name, body.image, body.port, body.env or {})
+    except StoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("hosted server %s accepted", body.name)
+    return {"phase": "provisioning", "name": body.name}
+
+
+@app.get("/v1/hosted/{name}")
+async def hosted_status(name: str):
+    try:
+        state = await _hosted_tasks().state(name)
+    except StoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return state
+
+
+@app.delete("/v1/hosted/{name}", status_code=202)
+async def unhost_server(name: str):
+    try:
+        await _hosted_tasks().unhost(name)
+    except StoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"phase": "deleting", "name": name}

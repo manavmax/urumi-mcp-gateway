@@ -150,6 +150,18 @@ export type StoreRow = {
   owner_user_id?: string;
   owner_email?: string | null;
 };
+export type HostedRow = {
+  id: string;
+  name: string;
+  image: string;
+  port: number;
+  env_names: string[];
+  status: "Provisioning" | "Ready" | "Failed" | "Deleting";
+  failure_reason: string | null;
+  url: string | null;
+  created_at: string;
+  updated_at: string;
+};
 export type Stats = {
   range: string;
   window_days: number;
@@ -335,6 +347,14 @@ export const api = {
     request<{ id: string; status: string }>(`/api/stores/${id}`, { method: "DELETE", csrf: true }),
   retryStore: (id: string) =>
     request<{ id: string; status: string }>(`/api/stores/${id}/retry`, { method: "POST", csrf: true }),
+
+  // Hosted servers (Phase 6): admin adds an MCP server BY CONTAINER IMAGE.
+  // env values are sent once and NEVER returned (only env_names come back).
+  listHosted: () => request<{ hosted: HostedRow[] }>("/api/hosted"),
+  createHosted: (data: { name: string; image: string; port: number; env?: Record<string, string> }) =>
+    request<HostedRow>("/api/hosted", { method: "POST", body: JSON.stringify(data), csrf: true }),
+  deleteHosted: (id: string) =>
+    request<{ id: string; status: string }>(`/api/hosted/${id}`, { method: "DELETE", csrf: true }),
 
   // Chat SSE: caller handles the fetch stream. tz = the browser's IANA
   // timezone (FIX PASS F1-8): the server validates it and puts the user's

@@ -109,4 +109,107 @@ async def sync_loop() -> None:
             await sync_once()
         except Exception as exc:
             logger.warning("store sync pass failed: %s", exc)
+        try:
+            if settings.hosted_enabled:
+                await sync_hosted_once()
+        except Exception as exc:
+            logger.warning("hosted sync pass failed: %s", exc)
         await sleep(settings.stores_sync_interval_seconds)
+
+
+# ---- Phase 6 (ADR-062): hosted server sync ----------------------------------
+
+async def register_hosted_upstream(db, hosted) -> None:
+    """Idempotent: register the hosted server's MCP endpoint as an INTERNAL
+    upstream (slug = name, URL http://<name>.hosted-<name>.svc:<port>)."""
+    existing = (await db.execute(select(Server).where(Server.slug == hosted.name))).scalars().first()
+    url = f"http://{hosted.name}.hosted-{hosted.name}.svc:{hosted.port}/mcp"
+    if existing:
+        if existing.url != url:
+            existing.url = url
+        existing.enabled = True
+        existing.internal = True
+        return
+    db.add(Server(
+        slug=hosted.name,
+        url=url,
+        auth_type="none",
+        timeout_ms=5000,
+        enabled=True,
+        internal=True,
+        status="Unknown",
+    ))
+    logger.info("registered internal upstream for hosted %s at %s", hosted.name, url)
+
+
+async def remove_hosted_upstream(db, hosted) -> None:
+    existing = (await db.execute(select(Server).where(Server.slug == hosted.name))).scalars().first()
+    if existing:
+        if not existing.internal:
+            logger.warning("hosted %s slug collides with a non-internal server; not removing", hosted.name)
+            return
+        await db.delete(existing)
+        logger.info("removed internal upstream for hosted %s", hosted.name)
+
+
+async def sync_hosted_once() -> None:
+    """Advance HostedServer rows like the store sync does:
+    Provisioning -> Ready (register upstream) / Failed (safe reason);
+    Deleting -> namespace gone -> remove upstream + row."""
+    from config import get_settings
+
+    settings = get_settings()
+    from db.models import HostedServer
+    from db.session import get_session_factory
+
+    from stores.client import hosted_state
+
+    def _age_seconds(created_at) -> float:
+        if created_at is None:
+            return 0.0
+        from datetime import UTC, datetime
+
+        dt = created_at if created_at.tzinfo else created_at.replace(tzinfo=UTC)
+        return (datetime.now(UTC) - dt).total_seconds()
+
+    factory = get_session_factory()
+    async with factory() as db:
+        in_flight = (
+            await db.execute(select(HostedServer).where(HostedServer.status.in_(("Provisioning", "Deleting", "Ready"))))
+        ).scalars().all()
+        for hosted in in_flight:
+            if hosted.status == "Ready":
+                # self-heal: re-assert the upstream registration (a URL pattern
+                # fix or a missed transition must not strand a stale row)
+                await register_hosted_upstream(db, hosted)
+                continue
+            state = await hosted_state(hosted.name)
+            if state is None:
+                continue  # provisioner unreachable: retry next pass
+            phase = state.get("phase")
+            reason = state.get("reason") or ""
+            if hosted.status == "Provisioning":
+                if phase == "ready":
+                    await register_hosted_upstream(db, hosted)
+                    hosted.status = "Ready"
+                    hosted.failure_reason = None
+                    logger.info("hosted %s is Ready", hosted.name)
+                elif phase == "gone":
+                    # a Provisioning hosted server whose namespace vanished:
+                    # either the budget expired on the provisioner side or the
+                    # apply never landed - mark Failed with the budget reason
+                    if _age_seconds(hosted.created_at) > settings.hosted_timeout_seconds:
+                        hosted.status = "Failed"
+                        hosted.failure_reason = reason or f"not ready after {settings.hosted_timeout_seconds}s"
+                        logger.warning("hosted %s failed: %s", hosted.name, hosted.failure_reason)
+                    # else: the apply may still be in flight (or queued) - wait
+                elif phase == "provisioning":
+                    if _age_seconds(hosted.created_at) > settings.hosted_timeout_seconds:
+                        hosted.status = "Failed"
+                        hosted.failure_reason = f"not ready after {settings.hosted_timeout_seconds}s"
+                        logger.warning("hosted %s failed: %s", hosted.name, hosted.failure_reason)
+            elif hosted.status == "Deleting" and phase == "gone":
+                await remove_hosted_upstream(db, hosted)
+                await db.delete(hosted)
+                logger.info("hosted %s teardown complete; row removed", hosted.name)
+        await db.commit()

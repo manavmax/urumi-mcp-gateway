@@ -1125,3 +1125,35 @@ mitigation, THREAT_MODEL documents the residual). Store provisioning is slow on
 a laptop (wp-setup ~5-13 min); budgets are generous locally (1200s). The store
 chart is a manual port of the main chart's store components - drift is
 possible; the images are forwarded so they always match.
+
+## 2026-10-21: hosted MCP servers (ADR-062)
+
+**What changed.** Admin adds an MCP server BY CONTAINER IMAGE (dashboard
+"Hosted servers" page). The provisioner deploys a dedicated namespace
+hosted-<name> via plain K8s API objects (no helm needed for four resources):
+Deployment (non-root uid 1000, read-only root filesystem, NO service-account
+token, tmp emptyDir, mandatory requests/limits capped by Helm values, TCP
+probes on the admin port), Service, env Secret (values; the gateway persists
+only NAMES and no API ever returns them), and NetworkPolicies (default-deny;
+ingress ONLY from gateway pods; egress DNS only). Image rules: a tag or digest
+is REQUIRED, :latest refused, plus an optional registry prefix allowlist
+(hostedServers.allowedRegistries, empty = any). On Ready the gateway's sync
+registers an INTERNAL upstream (slug = name, URL http://<name>.hosted-<name>.svc:
+<port>/mcp) so tools appear as <name>__* and permissions/rate-limits/audit work
+unchanged. Removal deletes the namespace and the registration. Flag
+hostedServers.enabled defaults FALSE (true only in values-local).
+
+**Why.** Reuses the phase-5 pattern (provisioner owns the cluster; the gateway
+enforces roles; state derived from the cluster). Applies are idempotent and
+fast, so no async task machinery was needed - the objects are the state.
+
+**Live proof (BUILD_LOG phase 6):** demo-mcp-time hosted as "time2" -> Ready,
+tools time2__get_current_time/convert_time discovered, MCP tools/call 200 with
+real time data; delete -> namespace gone, registration removed, tools gone.
+
+**Two lessons (both fixed live):** (1) the gateway EGRESS allowlist (ADR-045)
+blocks new upstream classes by design - hosted servers needed their own
+namespace-labeled egress rule, exactly like the store woo-mcp rule; (2) the
+upstream URL must carry the /mcp PATH - a pathless URL POSTs to / (405). The
+sync now re-asserts the registration for Ready rows (self-heal) so URL-pattern
+fixes propagate without manual DB surgery.
