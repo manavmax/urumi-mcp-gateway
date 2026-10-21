@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     # the limit holds across replicas.
     rate_limit_user_per_minute: int = 240
 
+    # Phase 3 (ADR-058): when the chat agent's allowed tool list is LONGER than
+    # this, it automatically exposes only the two compact meta tools
+    # (gateway.compactThreshold). 0 disables the automatic switch.
+    compact_threshold: int = 40
+
     # F3 chat image uploads: 5 MB byte cap (env-tunable), 15 minute upload TTL.
     image_upload_max_bytes: int = 5 * 1024 * 1024
     chat_upload_ttl_seconds: int = 15 * 60
@@ -185,6 +190,7 @@ def get_settings() -> Settings:
         "IMAGE_UPLOAD_MAX_BYTES": "image_upload_max_bytes",
         "GATEWAY_DEFAULT_TIMEZONE": "default_timezone",
         "METRICS_BEARER": "metrics_bearer",
+        "COMPACT_THRESHOLD": "compact_threshold",
     }
     for env_key, field in mapping.items():
         if env_key in os.environ and field not in os.environ:

@@ -64,3 +64,20 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
   ```
 - Gate: make lint clean, suites green, `bash scripts/regress-core.sh` -> ALL CHECKS PASSED (one initial gate failure was a race between the regress audit check and the 1s audit-queue flush — fixed by polling up to 10s in the regress script; the check is now deterministic).
 - Dashboard: admin per-key limit editor on the Members page (Set/clear), rate_limited outcome chip.
+
+## 2026-10-21 Phase 3 — compact mode (ADR-058)
+
+- Tests: `cd src/gateway && ../../.venv/bin/python -m pytest tests/test_compact_mode.py -q` -> 11 passed. Suite: 353 passed. make lint clean, helm lint local+prod clean.
+- 300 synthetic tools / 10 fake upstreams (unit, seeded catalogue):
+  `TOOLS-LIST SIZE: full=300 tools / 168950 bytes; compact=2 tools / 1087 bytes; ratio=0.006`
+- LIVE on kind (real gateway, real key):
+  ```
+  LIVE tools/list: full=13 tools / 6949 bytes; compact=2 tools / 1087 bytes
+  compact tool names: ['gateway__search_tools', 'gateway__call_tool']
+  search orders -> ['woo__list_orders']
+  call_tool time__get_current_time -> 200 (payload: now_local 07:11:45+05:30, timezone Asia/Kolkata)
+  default mode meta call -> 400 Unknown server slug 'gateway' for tool 'gateway__search_tools'
+  meta audit rows (gateway ops): [('gateway__search_tools', 'success'), ...]
+  last audit row (real tool): time__get_current_time
+  ```
+- Gate: `bash scripts/regress-core.sh` -> REGRESS-CORE: ALL CHECKS PASSED.

@@ -518,6 +518,15 @@ async def chat_loop(
 
     allowed_tools = await _get_allowed_tools(db, user)
     openai_tools = _to_openai_tools(allowed_tools)
+    # ADR-058: above the configured tool count (gateway.compactThreshold, 0 =
+    # never) the agent exposes ONLY the two compact meta tools; the loop then
+    # routes gateway__call_tool to the real tool through the same permission /
+    # rate-limit / routing / audit code, audited under the REAL tool name.
+    use_compact = settings.compact_threshold > 0 and len(allowed_tools) > settings.compact_threshold
+    if use_compact:
+        from gw_mcp.compact import COMPACT_TOOLS
+
+        openai_tools = _to_openai_tools(COMPACT_TOOLS)
     # F3: expose the attach helper ONLY when the user may actually call
     # woo__add_product_image. The filtered list is the first gate; the live deny
     # core is the second (so even a mis-filtered list cannot offer the helper to
@@ -738,6 +747,46 @@ async def chat_loop(
                     # turn-died caveat, not the helper shell
                     writes_done.append("woo__add_product_image")
                 continue
+
+            # ---- ADR-058 compact mode: the model sees only the meta tools ----
+            if use_compact and name == "gateway__search_tools":
+                from gw_mcp.compact import search_result_content, search_tools
+
+                query = str(args.get("query") or "")
+                try:
+                    limit = int(args.get("limit") or 20)
+                except (TypeError, ValueError):
+                    limit = 20
+                matches = search_tools(allowed_tools, query, limit)
+                result = search_result_content(matches, query)
+                # audit as the gateway operation it is (slug gateway, no upstream)
+                await _audit_routed_call(db, user, "gateway__search_tools", "success", None, 0, str(request_id))
+                _record_call_metrics("gateway__search_tools", "success", 0)
+                messages.append(_build_tool_message(tc.id, tool_marker, name, result))
+                yield {"type": "tool_call", "tool": name, "outcome": "success", "output": result}
+                continue
+            if use_compact and name == "gateway__call_tool":
+                from gw_mcp.compact import is_meta_tool
+
+                inner_name = args.get("name")
+                inner_args = args.get("arguments")
+                if not isinstance(inner_name, str) or not inner_name or is_meta_tool(inner_name):
+                    result = {"error": "gateway__call_tool needs the full name of a real tool"}
+                    messages.append(_build_tool_message(tc.id, tool_marker, name, result))
+                    yield {"type": "tool_call", "tool": name, "outcome": "validation_error", "output": result}
+                    continue
+                if inner_args is None:
+                    inner_args = {}
+                if not isinstance(inner_args, dict):
+                    result = {"error": f"arguments for {inner_name} must be a JSON object"}
+                    messages.append(_build_tool_message(tc.id, tool_marker, name, result))
+                    yield {"type": "tool_call", "tool": name, "outcome": "validation_error", "output": result}
+                    continue
+                # unwrap: everything below (permission, rate limit, routing,
+                # audit, metrics) now runs with the REAL tool name
+                name = inner_name
+                args = inner_args
+            # -------------------------------------------------------------------
 
             # Validate against allowed set
             allowed_names = {t["name"] for t in allowed_tools}

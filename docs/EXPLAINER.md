@@ -32,3 +32,9 @@ What: per-key and per-user calls/minute limits enforced with one atomic Postgres
 Why: the limit must hold across replicas (Phase 4 runs 2), and Postgres is already the shared store — no new infrastructure.
 Main failure mode: fixed minute windows let a straddling burst double briefly; a DB outage fails OPEN (calls allowed, warning logged) rather than bricking the gateway.
 Request flow: /mcp or chat tool call -> consume_and_check (own short session, atomic upsert, both counters) -> over limit: 429 + Retry-After + audit rate_limited + metric; allowed: routing proceeds.
+
+## gw_mcp/compact.py (Phase 3)
+What: compact mode for clients with many tools - tools/list serves gateway__search_tools (keyword ranking over the RBAC-filtered catalogue) and gateway__call_tool (invoke a real tool by full name); the chat agent auto-switches above gateway.compactThreshold.
+Why: 300 tools cost ~169 KB of tools/list JSON; two meta tools cost ~1 KB, and every real call still goes through the unchanged permission/routing/audit core.
+Main failure mode: one extra LLM round-trip per tool call; meta-in-meta and malformed names are rejected as validation errors; default mode ignores the meta names entirely.
+Request flow: X-Gateway-Mode/query selects mode -> tools/list meta defs -> search ranks the cached RBAC-filtered catalogue -> call_tool unwraps to the real name -> assert_call_allowed -> call_tool_routed -> audit row carries the REAL tool name.

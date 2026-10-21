@@ -165,6 +165,7 @@ def fake_settings(chain: list[str] | None = None, max_models_per_turn: int | Non
         openai_base_url = None
         openai_model = models[0]
         openai_models = ",".join(models[1:])
+        compact_threshold = 0  # ADR-058: auto-compact off in the shared harness
 
         def model_chain(self):
             return list(models)

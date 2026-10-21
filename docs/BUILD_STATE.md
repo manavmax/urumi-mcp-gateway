@@ -8,7 +8,7 @@
 
 ## Current phase
 
-PHASE 3 (many tools / compact mode) — in progress
+PHASE 4 (scaling, 2 replicas) — in progress
 
 ## What is done
 
@@ -41,16 +41,24 @@ PHASE 3 (many tools / compact mode) — in progress
   -> 3x200 then 429 Retry-After 26s; audit row rate_limited_key.
   Gate: regress-core ALL CHECKS PASSED (audit check now polls for the async flush).
 
+## What is done (phase 3)
+
+- PHASE 3 DONE (ADR-058): compact mode (X-Gateway-Mode / ?mode=compact) with
+  gateway__search_tools (keyword ranking, RBAC-filtered) and
+  gateway__call_tool (same permission/routing/audit path, REAL tool name in
+  audit); chat agent auto-switches above gateway.compactThreshold (default 40,
+  0=never); default mode unchanged (meta names fall through to unknown-slug).
+  11 new tests; suite 353. Sizes: full 300 tools = 168,950 B vs compact 2 tools
+  = 1,087 B. Live verified + regress-core ALL CHECKS PASSED.
+
 ## What is next
 
-- PHASE 3 many tools: compact mode selected by X-Gateway-Mode: compact or
-  ?mode=compact on /mcp; tools/list returns two meta tools
-  gateway__search_tools(query, limit) (keyword ranking over name+description,
-  respects role permissions) and gateway__call_tool(name, arguments) routed
-  through the SAME permission/rate-limit/timeout/audit code with the real tool
-  name in audit; chat agent auto-switches above gateway.compactThreshold;
-  test with 300 synthetic tools across 10 fake upstreams; token-size comparison
-  in BUILD_LOG.
+- PHASE 4 scaling: gateway with 2 replicas (values gateway.replicas, 1 in prod
+  default, 2 in local); stateless streamable HTTP / sticky sessions decision
+  documented; migrations run once (advisory lock or pre-upgrade Job); login
+  lockout + rate limits shared via Postgres (DONE in phase 2); PDB + soft
+  anti-affinity; prove on kind: session survives a replica delete, audit no
+  dupes/gaps, chat works. Record evidence.
 
 ## Commands to resume
 

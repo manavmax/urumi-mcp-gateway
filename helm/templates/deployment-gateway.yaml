@@ -146,6 +146,10 @@ spec:
               value: {{ .Values.gateway.rateLimit.perKeyPerMinute | default 60 | quote }}
             - name: RATE_LIMIT_USER_PER_MINUTE
               value: {{ .Values.gateway.rateLimit.perUserPerMinute | default 240 | quote }}
+            # Phase 3 (ADR-058): chat agent auto-switches to compact mode above
+            # this many allowed tools (0 = never).
+            - name: COMPACT_THRESHOLD
+              value: {{ .Values.gateway.compactThreshold | default 40 | quote }}
             # Timezone fallback (ADR-054): the chat system prompt stamps this zone when
             # the browser sends no valid IANA timezone. Base default is UTC; the local
             # demo values set Asia/Kolkata.

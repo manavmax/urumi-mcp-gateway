@@ -170,6 +170,9 @@ gateway:
   rateLimit:
     perKeyPerMinute: 60
     perUserPerMinute: 240
+  # Phase 3 (ADR-058): the chat agent switches to compact mode (two meta tools)
+  # when the allowed tool list is longer than this. 0 disables the switch.
+  compactThreshold: 40
   # Deployment progressDeadlineSeconds (default 300). With --atomic a bad upgrade
   # surfaces at the deadline (the pod never becomes Ready, the Deployment flips to
   # ProgressDeadlineExceeded and helm fails + rolls back), so a deliberate bad

@@ -22,6 +22,15 @@ from db.session import get_db
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from gw_mcp.aggregator import fanout_list_tools, list_cached_tools, split_exposed
+from gw_mcp.compact import (
+    CALL_TOOL_NAME,
+    COMPACT_TOOLS,
+    SEARCH_TOOL_NAME,
+    compact_mode_selected,
+    is_meta_tool,
+    search_result_content,
+    search_tools,
+)
 from gw_mcp.permissions import assert_call_allowed
 from gw_mcp.router import call_tool_routed
 from sqlalchemy import select
@@ -140,6 +149,12 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
     client_ip = request.client.host if request.client else None
     request_id = uuid.uuid4()
 
+    # Phase 3 (ADR-058): compact mode is selected by the client (header or query
+    # param) and changes ONLY tools/list (two meta tools) and tools/call of the
+    # meta tools. Default mode is byte-for-byte unchanged.
+
+    compact = compact_mode_selected(request.headers.get("x-gateway-mode"), request.query_params.get("mode"))
+
     # notifications/initialized has no id and expects 202
     if method == "notifications/initialized":
         return Response(status_code=202)
@@ -162,6 +177,11 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
         servers = list(servers_res.scalars().all())
         if not servers:
             return JSONResponse(_jsonrpc_result(msg_id, {"tools": []}))
+        # Phase 3 (ADR-058): compact mode serves two meta tools instead of the
+        # full catalogue - clients then search + call by name. The list still
+        # respects the caller's role permissions when searching.
+        if compact:
+            return JSONResponse(_jsonrpc_result(msg_id, {"tools": [dict(t) for t in COMPACT_TOOLS]}))
         # Try fan-out with timeout 8s; on failure fall back to cached tools
         try:
             tools, warnings = await fanout_list_tools(db, servers, timeout_seconds=8)
@@ -182,6 +202,66 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
         arguments = params.get("arguments") or {}
         if not name:
             return JSONResponse(_jsonrpc_error(msg_id, -32602, "missing tool name"), status_code=400)
+
+        # ---- Phase 3 (ADR-058): the compact-mode meta tools ------------------
+        # Both are handled here so the DEFAULT tools/call path stays untouched;
+        # in default mode the meta names are NOT special (they fall through to
+        # the unknown-slug validation error, exactly as before).
+        if compact and is_meta_tool(name):
+            if name == SEARCH_TOOL_NAME:
+                # Search the RBAC-filtered catalogue (the same filter the full
+                # tools/list applies). The search itself is audited as a
+                # gateway operation; no upstream is contacted.
+                query = str(arguments.get("query") or "")
+                try:
+                    limit = int(arguments.get("limit") or 20)
+                except (TypeError, ValueError):
+                    limit = 20
+                servers_res = await db.execute(select(Server).where(Server.enabled.is_(True)))
+                servers = list(servers_res.scalars().all())
+                tools = await list_cached_tools(db, [s.id for s in servers])
+                tools = await _filter_tools_by_rbac(db, user, tools)
+                matches = search_tools(tools, query, limit)
+                result = search_result_content(matches, query)
+                await log_audit(
+                    user_id=user.id,
+                    api_key_id=api_key_id,
+                    server_id=None,
+                    server_slug="gateway",
+                    tool_exposed_name=SEARCH_TOOL_NAME,
+                    tool_upstream_name=SEARCH_TOOL_NAME,
+                    request_id=request_id,
+                    duration_ms=0,
+                    outcome="success",
+                    error_code=None,
+                    client_ip=client_ip,
+                )
+                _record_metrics("gateway", SEARCH_TOOL_NAME, "success", 0)
+                return JSONResponse(_jsonrpc_result(msg_id, result))
+            if name == CALL_TOOL_NAME:
+                # Unwrap the real tool call; then it flows through the SAME
+                # permission / routing / timeout / audit code as a direct call,
+                # and the audit row carries the REAL tool name.
+                inner_name = arguments.get("name")
+                inner_args = arguments.get("arguments")
+                if not isinstance(inner_name, str) or not inner_name:
+                    return JSONResponse(
+                        _jsonrpc_error(msg_id, -32602, f"{CALL_TOOL_NAME} needs a tool name"), status_code=400
+                    )
+                if is_meta_tool(inner_name):
+                    return JSONResponse(
+                        _jsonrpc_error(msg_id, -32602, "meta tools cannot call meta tools"), status_code=400
+                    )
+                if inner_args is None:
+                    inner_args = {}
+                if not isinstance(inner_args, dict):
+                    return JSONResponse(
+                        _jsonrpc_error(msg_id, -32602, f"arguments for {inner_name} must be a JSON object"), status_code=400
+                    )
+                name = inner_name
+                arguments = inner_args
+        # ---------------------------------------------------------------------
+
         # RBAC check: deny rules for the caller's role (members). Admins always allowed.
         # This is the ONE enforcement point for /mcp calls; the chat agent uses the same
         # core (gw_mcp.permissions.assert_call_allowed). A denied call is rejected BEFORE

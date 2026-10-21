@@ -954,3 +954,37 @@ acceptable for a gateway demo and it makes Retry-After exact. Every /mcp call an
 every chat tool call now costs one extra DB round-trip (the atomic upsert);
 measured at ~1-2 ms locally. The limiter fails open (documented residual in
 THREAT_MODEL terms: a DB outage disables rate limiting rather than the gateway).
+
+## 2026-10-21: compact mode for many tools (ADR-058)
+
+**What changed.** A client opts into compact mode per request with the
+`X-Gateway-Mode: compact` header or `?mode=compact` on /mcp (no flag; opt-in per
+client as the brief requires):
+- tools/list returns ONLY two meta tools: `gateway__search_tools(query, limit?)`
+  (keyword ranking over name+description across the RBAC-filtered catalogue:
+  10 exact name / 8 name-prefix / 5 word-in-name / 3 word-in-description /
+  1 substring; blank query = catalogue listing; limit default 20 max 50) and
+  `gateway__call_tool(name, arguments)`.
+- `gateway__call_tool` unwraps to the real tool and then flows through the SAME
+  permission check, routing, timeout and audit code - the audit row and metrics
+  carry the REAL tool name; the meta shell is invisible in the trail.
+- The chat agent auto-switches above `gateway.compactThreshold` (env
+  COMPACT_THRESHOLD, default 40; 0 = never): it sends only the meta tools and
+  routes gateway__call_tool through the same path (permission, per-user rate
+  limit consumed on the INNER call, audit with the real name; the search op is
+  audited as server_slug=gateway).
+- Default mode is unchanged: meta names are NOT special there (they fall through
+  to the unknown-slug validation error, verified by test).
+
+**Why.** Stand-out 4: with hundreds of tools the full tools/list drowns the
+model's context (300 synthetic tools = 168,950 bytes; the two meta tools =
+1,087 bytes, 0.6%). Two boring meta tools beat prompt engineering: no schema
+bloat, any MCP client works without protocol changes, and permission/audit
+semantics stay identical.
+
+**Known trade-offs.** The model pays an extra round-trip per tool call (search,
+then call). Meta tools cannot call meta tools (one level only). Rate limiting is
+per HTTP request for /mcp (the meta call is one request - one consumption);
+the chat loop consumes the per-user counter on the inner call as before. The
+ranking is deliberately simple: name hits dominate description hits; no
+embeddings, no new dependency.

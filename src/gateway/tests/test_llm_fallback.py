@@ -364,6 +364,7 @@ class _FakeSettings:
     openai_base_url = None
     openai_model = "gemini-a"
     openai_models = "gemini-a,gemini-b"
+    compact_threshold = 0  # ADR-058: auto-compact off unless a test opts in
 
     def model_chain(self):
         return ["gemini-a", "gemini-b"]

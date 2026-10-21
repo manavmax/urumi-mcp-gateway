@@ -248,6 +248,7 @@ async def test_chat_tool_calls_count_against_user_budget(monkeypatch):
         openai_model = "fake-model-a"
         openai_models = ""
         rate_limit_user_per_minute = 1
+        compact_threshold = 0  # ADR-058: auto-compact off in this test
 
         def model_chain(self):
             return ["fake-model-a"]
