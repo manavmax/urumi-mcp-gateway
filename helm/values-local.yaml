@@ -4,6 +4,9 @@ gateway:
   # ADR-054: the demo's "today" resolves in India Standard Time when the browser
   # sends no valid timezone.
   defaultTimezone: Asia/Kolkata
+  # Phase 4 (ADR-059): 2 replicas locally to prove multi-replica behaviour
+  # (stateless gateway; PDB minAvailable 1 renders automatically).
+  replicas: 2
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }

@@ -38,3 +38,9 @@ What: compact mode for clients with many tools - tools/list serves gateway__sear
 Why: 300 tools cost ~169 KB of tools/list JSON; two meta tools cost ~1 KB, and every real call still goes through the unchanged permission/routing/audit core.
 Main failure mode: one extra LLM round-trip per tool call; meta-in-meta and malformed names are rejected as validation errors; default mode ignores the meta names entirely.
 Request flow: X-Gateway-Mode/query selects mode -> tools/list meta defs -> search ranks the cached RBAC-filtered catalogue -> call_tool unwraps to the real name -> assert_call_allowed -> call_tool_routed -> audit row carries the REAL tool name.
+
+## Multi-replica gateway (Phase 4)
+What: gateway.replicas (1 prod, 2 local) + PDB (minAvailable 1, only with 2+) + soft anti-affinity; login lockout moved into the login_failures Postgres table; alembic upgrades serialized by a Postgres advisory xact lock.
+Why: the gateway is stateless (signed cookies, stateless JSON-RPC /mcp, DB-backed tool cache, Postgres rate limits), so replicas are interchangeable - no sticky sessions needed.
+Main failure mode: per-replica LLM cooldowns (a cooldown on replica A does not apply to replica B) and the Recreate rollout strategy; the gateway's own egress policy blocks in-pod probes to its Service VIP (use the ingress).
+Request flow: any replica serves any request; failed logins append login_failures rows shared by all replicas; on startup each pod takes the migration advisory lock, waits if another pod is mid-upgrade, then no-ops at head.

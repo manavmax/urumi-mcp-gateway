@@ -251,6 +251,25 @@ class RateLimitCounter(Base):
     __table_args__ = (Index("ix_rate_limit_window", "window_start"),)
 
 
+class LoginFailure(Base):
+    """Login lockout counters (ADR-044, Postgres since Phase 4 ADR-059).
+
+    One row per failed login attempt, keyed by (kind, key): kind is 'user' (the
+    attempted email) or 'ip'. Rows age out after the window; the lockout check
+    counts rows in the window. Sharing the table across replicas removes the
+    old attempts x replicas residual. Never stores passwords - only the key.
+    """
+
+    __tablename__ = "login_failures"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    key: Mapped[str] = mapped_column(Text, nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (Index("ix_login_failures_key_ts", "kind", "key", "ts"),)
+
+
 class ChatUpload(Base):
     """Ephemeral chat image upload (F3, ADR-035).
 

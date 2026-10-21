@@ -180,6 +180,13 @@ async def lifespan(app: FastAPI):
                     await purge_old_counters()
                 except Exception as exc:
                     logger.warning("rate limit purge failed: %s", exc)
+                # ADR-059: sweep expired login-lockout failure rows (window x2 keep)
+                try:
+                    from auth.login_throttle import purge_old_failures
+
+                    await purge_old_failures()
+                except Exception as exc:
+                    logger.warning("login failure purge failed: %s", exc)
 
         upload_purge_task = asyncio.create_task(upload_purge_loop())
         app.state.upload_purge_task = upload_purge_task

@@ -32,6 +32,13 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 def do_run_migrations(connection):
+    # Phase 4 (ADR-059): with 2+ gateway replicas starting together, two
+    # concurrent `alembic upgrade head` runs can race the same DDL. A Postgres
+    # ADVISORY XACT LOCK serializes them: the second replica waits for the
+    # first pod's migration transaction to commit, then re-runs (a no-op at
+    # head). The lock is released automatically at transaction end.
+    if connection.dialect.name == "postgresql":
+        connection.exec_driver_sql("SELECT pg_advisory_xact_lock(715273)")
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()

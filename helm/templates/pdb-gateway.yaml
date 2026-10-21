@@ -1,0 +1,20 @@
+{{- if and .Values.gateway.enabled (gt (int (.Values.gateway.replicas | default 1)) 1) }}
+# Phase 4 (ADR-059): with 2+ gateway replicas a node drain must never take the
+# whole gateway down. minAvailable 1 keeps one replica serving through any
+# voluntary disruption (single-node kind never schedules drains, so this is
+# inert locally but correct for the VPS).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "urumi.fullname" . }}-gateway
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: gateway
+    app.kubernetes.io/component: gateway
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gateway
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

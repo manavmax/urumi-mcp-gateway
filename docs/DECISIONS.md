@@ -988,3 +988,46 @@ per HTTP request for /mcp (the meta call is one request - one consumption);
 the chat loop consumes the per-user counter on the inner call as before. The
 ranking is deliberately simple: name hits dominate description hits; no
 embeddings, no new dependency.
+
+## 2026-10-21: two gateway replicas, shared lockout, safe migrations (ADR-059)
+
+**What changed.** The gateway now runs safely with more than one replica
+(`gateway.replicas`; 1 in values.yaml/values-prod, 2 in values-local; PDB
+minAvailable 1 renders only when replicas > 1; soft podAntiAffinity preferred):
+- Statelessness is the design: dashboard sessions are signed cookies (no server
+  session store), /mcp is stateless JSON-RPC-over-POST (no server-side MCP
+  session), the tool catalogue is the DB-backed tools table, rate limits and the
+  login lockout live in Postgres. No sticky sessions needed - documented rather
+  than engineered around.
+- Login lockout moved from process memory to the `login_failures` table
+  (migration 008): one row per failed login per (kind='user'|'ip', key); the
+  lockout counts rows in the window; every helper opens its OWN short session so
+  a failure row survives the 401 that rolls the request session back. The old
+  attempts x replicas residual is gone (proven by a two-app-instance test over
+  one DB). Expired rows are swept by the background loop.
+- Alembic migrations now take a Postgres ADVISORY XACT LOCK inside env.py
+  (pg_advisory_xact_lock(715273)) so two replicas starting together serialize
+  the upgrade: the second waits, then no-ops at head. Both pods started cleanly
+  in the live run.
+- Phase 2's Postgres rate limits were already replica-safe by construction.
+
+**Why.** Stand-out 7a: the gateway must run with 2 replicas - stateless HTTP (no
+sticky sessions; the Streamable HTTP transport holds no gateway-side session
+state, so any replica can serve any request), migrations run once, and the
+login lockout + rate limits shared through Postgres.
+
+**Evidence (kind).** 2 replicas: one MCP session (same key, 25 sequential calls
+through the ingress) survived the deletion of one replica - 25/25 OK, zero
+failed calls; audit for the window: 25 rows, 0 duplicate request_ids, 25
+successes (no gaps); make verify-llm ALL PASS against 2 replicas; regress-core
+ALL CHECKS PASSED. NOTE: the replica probe runs from the HOST via the ingress
+because the gateway's own default-deny EGRESS policy (correctly) forbids
+in-pod calls to its own Service VIP - a policy quirk worth knowing, not a bug.
+
+**Known trade-offs.** The audit writer is per-replica (each pod flushes its own
+queue) - correctness unchanged, at-least-once per call. The chat MODEL_COOLDOWNS
+fallback state stays per-replica (a cooldown taken on one replica does not
+apply to the other; bounded by each replica's own fallback). Recreate rollout
+strategy is kept (mutable image tags), so upgrades briefly take the gateway
+down - unchanged single-replica behaviour for prod (1 replica unless Manav
+raises it).

@@ -8,7 +8,7 @@
 
 ## Current phase
 
-PHASE 4 (scaling, 2 replicas) — in progress
+PHASE 5 (provisioner + multi-store) — in progress
 
 ## What is done
 
@@ -51,14 +51,30 @@ PHASE 4 (scaling, 2 replicas) — in progress
   11 new tests; suite 353. Sizes: full 300 tools = 168,950 B vs compact 2 tools
   = 1,087 B. Live verified + regress-core ALL CHECKS PASSED.
 
+## What is done (phase 4)
+
+- PHASE 4 DONE (ADR-059): gateway.replicas (1 prod, 2 local), PDB when 2+,
+  soft anti-affinity, stateless (documented), login lockout in Postgres
+  (migration 008 login_failures; two-app-instance test proves sharing),
+  alembic advisory lock serializes concurrent pod migrations. Evidence: 2/2
+  replicas, probe 25/25 calls survived a replica delete, audit 25 rows/0 dupes/
+  no gaps, verify-llm FAILURES: none, regress-core ALL CHECKS PASSED.
+  Quirk noted: in-pod -> gateway Service VIP is blocked by the gateway's own
+  egress allowlist (expected; probes use the ingress).
+
 ## What is next
 
-- PHASE 4 scaling: gateway with 2 replicas (values gateway.replicas, 1 in prod
-  default, 2 in local); stateless streamable HTTP / sticky sessions decision
-  documented; migrations run once (advisory lock or pre-upgrade Job); login
-  lockout + rate limits shared via Postgres (DONE in phase 2); PDB + soft
-  anti-affinity; prove on kind: session survives a replica delete, audit no
-  dupes/gaps, chat works. Record evidence.
+- PHASE 5 provisioner + multi-store: separate provisioner Deployment/image/SA
+  with least-privilege RBAC (namespaces + the store chart kinds, gated by the
+  urumi.io/managed-by=provisioner label enforced in code), reachable only from
+  the gateway (NetworkPolicy + shared internal secret), stores table +
+  Dashboard Stores page (create/delete, polling, per-user + global maxima,
+  maxConcurrent), helm/store chart per store in namespace store-<slug>,
+  per-store NetworkPolicies (isolation proof script), auto MCP registration
+  with <slug>__ tool names, clean teardown + idempotent create + reconcile
+  loop + provisioning timeout. Values flag provisioner.enabled (false in base
+  and prod, true only local). Final scripted test: two stores, chat compares
+  today's orders across both (stub LLM), delete one, verify everything gone.
 
 ## Commands to resume
 

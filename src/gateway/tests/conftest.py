@@ -144,14 +144,10 @@ def reset_cooldowns():
 
 @pytest.fixture(autouse=True)
 def reset_login_throttle():
-    # ADR-044: the login lockout counter is module-level in-memory state, exactly like
-    # a restarted gateway's cold counter. Without this reset, failures from one test
-    # (and its single testclient IP) leak into every later test's login.
-    from auth import login_throttle
-
-    login_throttle.reset_all()
+    # ADR-059: the login lockout lives in the login_failures TABLE, and every
+    # test harness gets a fresh sqlite engine, so there is no module state to
+    # reset anymore. The fixture stays as the seam if a future counter needs it.
     yield
-    login_throttle.reset_all()
 
 
 def fake_settings(chain: list[str] | None = None, max_models_per_turn: int | None = None):

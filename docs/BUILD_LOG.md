@@ -81,3 +81,18 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
   last audit row (real tool): time__get_current_time
   ```
 - Gate: `bash scripts/regress-core.sh` -> REGRESS-CORE: ALL CHECKS PASSED.
+
+## 2026-10-21 Phase 4 — scaling to 2 replicas (ADR-059)
+
+- Migration 008 ran on BOTH replicas at the same time (advisory lock): both logged `alembic upgrade head done`; `kubectl get deployment urumi-gateway` -> `2/2`; `kubectl get pdb` -> `urumi-gateway MIN AVAILABLE 1`.
+- Replica-deletion probe (host -> ingress -> Service, same key, 25 calls, one replica deleted mid-loop):
+  ```
+  victim deleted
+  SUMMARY ok=25 fail=0
+  AUDIT rows=25 successes=25 dupes=0 expected_successes=25
+  AUDIT OK: no duplicates, no gaps
+  ```
+- Chat with 2 replicas: `make verify-llm` -> `=== FAILURES: none ===` (multi-step tool loop, MCP create, SSE, wrong-key error path).
+- Login lockout shared: tests/test_login_throttle.py::test_lockout_is_shared_across_replicas (two app instances over one DB: the lockout crossed via replica A is enforced by replica B).
+- Gate: make lint clean, make test rc=0 (354 gateway tests), helm lint local+prod clean, values-prod renders replicas: 1 and NO PDB, `bash scripts/regress-core.sh` -> ALL CHECKS PASSED (against 2 replicas).
+- Quirk found: in-pod connections to the gateway Service VIP are blocked by the gateway's own default-deny EGRESS allowlist (kindnet DOES enforce NetworkPolicy here); probes run through the ingress instead.

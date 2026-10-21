@@ -35,7 +35,11 @@ spec:
   # Fails the rollout (and with --atomic triggers the rollback) when no progress for
   # this long; value default 300 so a rehearsed bad upgrade + rollback lands in ~6m.
   progressDeadlineSeconds: {{ .Values.gateway.progressDeadlineSeconds | default 300 }}
-  replicas: 1
+  # Phase 4 (ADR-059): the gateway is stateless (signed cookie sessions, Postgres
+  # rate limits/lockout, DB-backed tool cache), so it scales horizontally.
+  # values-local runs 2 replicas to prove it; values-prod stays at 1 unless
+  # Manav raises it.
+  replicas: {{ .Values.gateway.replicas | default 1 }}
   selector:
     matchLabels:
       app: gateway
@@ -184,4 +188,16 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+      # Phase 4 (ADR-059): SOFT anti-affinity - prefer spreading gateway
+      # replicas across nodes; a single-node cluster (kind) simply ignores it.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: gateway
+                    app.kubernetes.io/instance: {{ .Release.Name }}
+                topologyKey: kubernetes.io/hostname
 {{- end }}

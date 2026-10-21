@@ -167,6 +167,11 @@ gateway:
   # windows) so they hold across replicas. perKeyPerMinute is the default for
   # every API key (an admin can override ONE key from the dashboard);
   # perUserPerMinute spans every key AND the chat agent's tool calls.
+  # Phase 4 (ADR-059): gateway replicas. The gateway is stateless (signed
+  # cookie sessions; rate limits, login lockout and the tool cache live in
+  # Postgres), so this scales horizontally. Base/prod default 1; values-local
+  # runs 2 to prove multi-replica behaviour.
+  replicas: 1
   rateLimit:
     perKeyPerMinute: 60
     perUserPerMinute: 240
