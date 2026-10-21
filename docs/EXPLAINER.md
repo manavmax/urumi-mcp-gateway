@@ -98,3 +98,26 @@ Deletion reverses it and cascades via the namespace delete.
 never becomes Ready; the row fails after the budget with a safe reason and the
 namespace can be deleted. The blast radius of a deliberately malicious image is
 documented in THREAT_MODEL (hosted servers section).
+
+## 2026-10-21: OAuth on the gateway (ADR-063)
+
+**What it does.** An MCP client that arrives with no token gets a 401 whose
+WWW-Authenticate header points at the gateway's OAuth metadata; it then
+discovers the endpoints, registers itself, and sends YOUR BROWSER to a consent
+page (you are already logged into the dashboard). Approving gives the client a
+short-lived token that acts AS YOU on /mcp - same permissions, same rate
+limits, same audit trail as an API key.
+
+**Why this approach.** The MCP spec mandates OAuth 2.1 for HTTP; the demo
+keeps API keys working in parallel (zero change to the core path - everything
+is behind oauth.enabled, default false). Opaque tokens + server-side state are
+the boring choice: immediate revocation, no JWT libraries, no key management.
+
+**Request flow.** 401 pointer -> RFC 9728/8414 discovery -> dynamic client
+registration -> authorize (dashboard session + consent + PKCE S256) -> code ->
+token (5-min access, 7-day rotating refresh) -> Bearer call on /mcp mapped to
+the user. Refresh reuse revokes the whole token family (theft detection).
+
+**Main failure mode.** A client that does not implement OAuth cannot connect
+(API keys remain the fallback); a stuck consent flow just times out and can be
+retried. Token state is three small Postgres tables.

@@ -169,3 +169,42 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
   (a pathless URL POSTs to / -> 405; the sync now self-heals Ready rows).
 - GATE: make lint; gateway 380 + demo-time 8 + woo-mcp 21; helm lint local+prod
   + store; `bash scripts/regress-core.sh` -> REGRESS-CORE: ALL CHECKS PASSED.
+
+## 2026-10-21 Phase 7 — OAuth on the gateway (ADR-063)
+
+- Tests: gateway 387 passed (test_oauth.py 7: PKCE S256-only, code replay,
+  redirect exact-match, refresh rotation + family reuse revocation, resource
+  binding, revocation endpoint, hashes-at-rest); ruff + helm lint clean;
+  migration 011_oauth applied (verified by DB read).
+- LIVE gate: `bash scripts/phase7-oauth-gate.sh` -> 15/15 PASS:
+  ```
+  PASS unauthenticated /mcp is 401
+  PASS WWW-Authenticate points at the RFC 9728 metadata
+  PASS protected-resource metadata served
+  PASS authorization-server metadata served
+  PASS PKCE S256 only
+  PASS dynamic client registration (RFC 7591)
+  PASS dashboard login (browser session reuse)
+  PASS consent page renders
+  PASS consent approve -> 302 with code
+  PASS code + state returned to the client
+  PASS token exchange (PKCE verified)
+  PASS tools/list via OAuth bearer token [tools=29]
+  PASS tools/call via OAuth bearer token (audited under the user)
+  PASS refresh grants new tokens (rotation) / rotated
+  PASS revoke accepted / family revocation kills the access token too
+  OAUTH-FULL-FLOW: OK
+  ```
+- SDK CLIENT: `.venv/bin/python scripts/phase7_sdk_oauth_client.py` (the MCP
+  Python SDK's OAuthClientProvider over streamablehttp_client):
+  ```
+  SDK initialize serverInfo: urumi-gateway 1.0.0
+  SDK tools via OAuth: 29
+  SDK tools/call: {"now_utc":"2026-10-21T20:49:02...", "timezone":"Asia/Kolkata"...}
+  SDK-OAUTH-CLIENT: OK
+  ```
+- GATE: regress-core (run after the phase 6 deploy, unchanged by phase 7 flags)
+  -> REGRESS-CORE: ALL CHECKS PASSED; 387 gateway tests.
+- One live-found fix: the token endpoint must COMMIT the token-family
+  revocation even when the grant is REJECTED (refresh reuse) - otherwise the
+  revocation was rolled back with the 400 response.

@@ -129,6 +129,14 @@ hostedServers:
   # preloaded in the kind node, so the live test uses it as "time2".
   enabled: true
   allowedRegistries: ""
+
+oauth:
+  # Phase 7 (ADR-063): ON locally for the scripted full-flow test (prod stays
+  # false until Manav reviews THREAT_MODEL). The MCP clients reach the gateway
+  # through the DASHBOARD host (the ingress routes /mcp and /oauth there), so
+  # the public base URL and the bound resource URI use that host.
+  enabled: true
+  publicBaseUrl: "http://dashboard.127.0.0.1.nip.io"
 stores:
   # *.localhost resolves to 127.0.0.1 in modern browsers/curl
   baseDomain: localhost

@@ -135,6 +135,14 @@ class Settings(BaseSettings):
     hosted_global_max: int = 5
     hosted_timeout_seconds: int = 300
 
+    # Phase 7 (ADR-063): OAuth for the MCP endpoint (oauth.enabled default
+    # false; API keys keep working). public_base_url is what the outside world
+    # uses to reach this gateway (metadata URLs are built from it).
+    oauth_enabled: bool = False
+    public_base_url: str = "http://gateway.127.0.0.1.nip.io"
+    oauth_resource_uri: str = ""
+    oauth_issuer: str = ""
+
     # F3 chat image uploads: 5 MB byte cap (env-tunable), 15 minute upload TTL.
     image_upload_max_bytes: int = 5 * 1024 * 1024
     chat_upload_ttl_seconds: int = 15 * 60
@@ -213,6 +221,10 @@ def get_settings() -> Settings:
         "METRICS_BEARER": "metrics_bearer",
         "COMPACT_THRESHOLD": "compact_threshold",
         "STORES_ENABLED": "stores_enabled",
+        "OAUTH_ENABLED": "oauth_enabled",
+        "PUBLIC_BASE_URL": "public_base_url",
+        "OAUTH_RESOURCE_URI": "oauth_resource_uri",
+        "OAUTH_ISSUER": "oauth_issuer",
         "HOSTED_ENABLED": "hosted_enabled",
         "HOSTED_REGISTRY_ALLOWLIST": "hosted_registry_allowlist",
         "HOSTED_GLOBAL_MAX": "hosted_global_max",

@@ -48,6 +48,31 @@ spec:
                 name: {{ include "urumi.fullname" . }}-gateway
                 port:
                   number: {{ .Values.gateway.port | default 8000 }}
+          {{- if .Values.oauth.enabled }}
+          # Phase 7 (ADR-063): OAuth discovery + endpoints go to the GATEWAY
+          # (the dashboard's nginx 404s /.well-known/* by design)
+          - path: /.well-known/oauth-protected-resource
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "urumi.fullname" . }}-gateway
+                port:
+                  number: {{ .Values.gateway.port | default 8000 }}
+          - path: /.well-known/oauth-authorization-server
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "urumi.fullname" . }}-gateway
+                port:
+                  number: {{ .Values.gateway.port | default 8000 }}
+          - path: /oauth
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "urumi.fullname" . }}-gateway
+                port:
+                  number: {{ .Values.gateway.port | default 8000 }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:

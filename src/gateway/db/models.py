@@ -310,6 +310,73 @@ class HostedServer(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
 
 
+class OauthClient(Base):
+    """A dynamically registered OAuth client (RFC 7591, Phase 7 ADR-063).
+
+    Minimal public-client registry: client_id (opaque random), redirect_uris
+    (EXACT strings - authorization requests must match one exactly),
+    token_endpoint_auth_method 'none' (public clients only; the MCP SDK
+    registers public clients), client_name, and the rotating client_secret
+    hash for confidential clients (optional; public is the default)."""
+
+    __tablename__ = "oauth_clients"
+
+    client_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    client_secret_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    redirect_uris: Mapped[list] = mapped_column(JSONB, nullable=False)
+    client_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    token_endpoint_auth_method: Mapped[str] = mapped_column(Text, nullable=False, default="none")
+    grant_types: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    scope: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    user_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class OauthCode(Base):
+    """A single-use authorization code (10-minute TTL) with its PKCE challenge.
+
+    code_hash: only the SHA-256 of the code is stored (a leaked DB row cannot
+    be replayed). challenge_method MUST be S256. resource is the RFC 8707
+    resource indicator bound into the issued tokens' aud claim."""
+
+    __tablename__ = "oauth_codes"
+
+    code_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    client_id: Mapped[str] = mapped_column(Text, ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    scope: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    resource: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    challenge: Mapped[str] = mapped_column(Text, nullable=False)
+    challenge_method: Mapped[str] = mapped_column(Text, nullable=False, default="S256")
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    consumed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class OauthToken(Base):
+    """An issued token pair: short-lived opaque access token + refresh token.
+
+    Both are stored ONLY as SHA-256 hashes. kind: 'access' | 'refresh'. A
+    refresh token rotates: using it marks the old row rotated_to the new one;
+    reuse of a rotated token revokes the whole family (token thieves detected).
+    Revocation: revoked=True kills the row (and its family for refreshes)."""
+
+    __tablename__ = "oauth_tokens"
+
+    token_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    client_id: Mapped[str] = mapped_column(Text, ForeignKey("oauth_clients.client_id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    scope: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    resource: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rotated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    family: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, default=uuid.uuid4)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
 class LoginFailure(Base):
     """Login lockout counters (ADR-044, Postgres since Phase 4 ADR-059).
 

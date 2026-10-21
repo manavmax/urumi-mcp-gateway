@@ -63,6 +63,18 @@ def _jsonrpc_result(id_: Any, result: dict) -> dict:
     return {"jsonrpc": "2.0", "id": id_, "result": result}
 
 
+def _oauth_401_headers() -> dict:
+    """RFC 9728 pointer for unauthenticated MCP clients (Phase 7, ADR-063).
+    Only when OAuth is enabled; plain API-key 401s keep the bare shape."""
+    from config import get_settings
+
+    if not get_settings().oauth_enabled:
+        return {}
+    from oauth.core import www_authenticate_header
+
+    return {"WWW-Authenticate": www_authenticate_header()}
+
+
 @router.get("/mcp")
 async def mcp_get(request: Request):
     # GET /mcp with SSE is optional; we support JSON-RPC via POST only.
@@ -97,27 +109,64 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
         return JSONResponse(_jsonrpc_error(None, -32700, "parse error"), status_code=400)
 
     # Require auth for all methods except we still want 401 shape
+    from auth.rate_limit import effective_key_limit
+
     user = None
     api_key_id = None
+    key_limit = None  # None = the default per-key limit (OAuth bearer calls)
     if not token:
-        return JSONResponse(_jsonrpc_error(payload.get("id"), -32000, "missing bearer token"), status_code=401)
+        # Phase 7 (ADR-063): unauthenticated 401s carry WWW-Authenticate
+        # pointing MCP clients at the protected-resource metadata (RFC 9728)
+        return JSONResponse(
+            _jsonrpc_error(payload.get("id"), -32000, "missing bearer token"),
+            status_code=401,
+            headers=_oauth_401_headers(),
+        )
     res = await verify_api_key(db, token)
-    if not res:
-        return JSONResponse(_jsonrpc_error(payload.get("id"), -32000, "invalid or revoked key"), status_code=401)
-    user, key_row = res
-    api_key_id = key_row.id
+    if res:
+        user, key_row = res
+        api_key_id = key_row.id
+        key_limit = effective_key_limit(key_row)
+    else:
+        # not an API key: when OAuth is on, try an OAuth access token (uat_...)
+        from config import get_settings as _gs
+
+        if token.startswith("uat_") and _gs().oauth_enabled:
+            from oauth.core import OauthError, authenticate_bearer
+
+            try:
+                res2 = await authenticate_bearer(db, token)
+            except OauthError:
+                res2 = None
+            if res2:
+                user, _tok = res2
+            else:
+                return JSONResponse(
+                    _jsonrpc_error(payload.get("id"), -32000, "invalid or expired access token"),
+                    status_code=401,
+                    headers=_oauth_401_headers(),
+                )
+        else:
+            return JSONResponse(
+                _jsonrpc_error(payload.get("id"), -32000, "invalid or revoked key"),
+                status_code=401,
+                headers=_oauth_401_headers(),
+            )
     request.state.current_user = user
     request.state.api_key_id = api_key_id
 
     # Rate limits (ADR-057): per KEY (override or default) and per USER, counters
     # in Postgres so they hold across replicas. Chat tool calls count against
     # the same user budget inside the chat agent.
-    from auth.rate_limit import consume_and_check, effective_key_limit
+    from auth.rate_limit import consume_and_check
 
     allowed, limit_scope, retry_after = await consume_and_check(
         user_id=user.id,
         api_key_id=api_key_id,
-        key_limit=effective_key_limit(key_row),
+        # OAuth bearer calls carry no API key: key_limit stays None (the
+        # default per-key limit applies) and the per-USER counter is what
+        # actually bounds them (ADR-057 + ADR-063)
+        key_limit=key_limit,
     )
     if not allowed:
         from gw_mcp.metrics import inc_rate_limited

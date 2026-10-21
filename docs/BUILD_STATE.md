@@ -8,7 +8,7 @@
 
 ## Current phase
 
-PHASE 7 (OAuth on the gateway) — next; PHASE 6 DONE (committed, tag phase-6-done)
+PHASE 8 (docs + traceability) — in progress; PHASE 7 DONE (committed, tag phase-7-done)
 
 ## What is done
 
@@ -80,14 +80,11 @@ PHASE 7 (OAuth on the gateway) — next; PHASE 6 DONE (committed, tag phase-6-do
 
 ## What is next
 
-- PHASE 7 OAuth on the gateway (stand-out 3): MCP authorization spec minimal
-  correct form behind oauth.enabled: RFC 9728 resource metadata, RFC 8414
-  server metadata, RFC 7591 dynamic client registration, authorization code +
-  PKCE S256, resource indicator binding (RFC 8707), short-lived opaque tokens +
-  hashed refresh tokens, revocable, mapped to users; dashboard nginx routes
-  /.well-known/oauth-*; scripted full-flow test; THREAT_MODEL entry.
-- PHASE 8 docs: README, SYSTEM_DESIGN_AND_TRADEOFFS, REQUIREMENTS_CHECKLIST,
-  EXPLAINER completion, DEMO_RUNSHEET, Makefile targets.
+- PHASE 8 docs: README (setup, order, client, chat, stores, hosted, oauth,
+  metrics), SYSTEM_DESIGN_AND_TRADEOFFS, REQUIREMENTS_CHECKLIST (every bonus +
+  stand-out with honest status), EXPLAINER complete, DEMO_RUNSHEET additions,
+  helm upgrade notes, Makefile targets.
+- FINAL REPORT: per-phase DONE/PARTIAL/NOT DONE + evidence + manual VPS steps.
 
 ## Commands to resume
 
@@ -113,7 +110,7 @@ cd src/gateway && ../../.venv/bin/python -m pytest tests -q   # unit tests
 | 4 scaling | DONE | phase-4-done | REGRESS-CORE ALL CHECKS PASSED |
 | 5 provisioner | DONE | phase-5-done | REGRESS-CORE ALL CHECKS PASSED + isolation 5/5 + recovery + chat-two-stores |
 | 6 hosted servers | DONE | phase-6-done | regress-core ALL CHECKS PASSED + live time2 add/remove |
-| 7 oauth | not started | - | - |
+| 7 oauth | DONE | phase-7-done | OAUTH-FULL-FLOW OK (15/15) + SDK client OK + regress-core |
 | 8 docs | not started | - | - |
 
 ## Environment facts

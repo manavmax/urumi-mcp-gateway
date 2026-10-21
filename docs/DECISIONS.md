@@ -1157,3 +1157,46 @@ namespace-labeled egress rule, exactly like the store woo-mcp rule; (2) the
 upstream URL must carry the /mcp PATH - a pathless URL POSTs to / (405). The
 sync now re-asserts the registration for Ready rows (self-heal) so URL-pattern
 fixes propagate without manual DB surgery.
+
+## 2026-10-21: OAuth on the gateway (ADR-063)
+
+**What changed.** The MCP endpoint accepts OAuth 2.1 bearer tokens alongside
+API keys (which keep working unchanged). Minimal-correct spec implementation
+behind oauth.enabled (default FALSE everywhere; true only in values-local for
+the live gate):
+- RFC 9728 protected-resource metadata + RFC 8414 AS metadata (ingress routes
+  /.well-known/oauth-* to the gateway; the dashboard nginx keeps 404ing them)
+- RFC 7591 dynamic client registration: public clients only
+  (token_endpoint_auth_method=none), redirect_uris stored as EXACT strings
+- authorization code flow, PKCE S256 ONLY (plain refused, wrong verifier
+  refused), single-use 10-minute codes stored as SHA-256 hashes
+- RFC 8707 resource indicator binding: authorize requires resource == the
+  canonical <public_base>/mcp; tokens carry it; /mcp refuses foreign-resource
+  tokens
+- opaque access tokens (5 min) + refresh tokens (7 days, ROTATING); reuse of a
+  rotated refresh token revokes the WHOLE family (stolen-token detection);
+  /oauth/revoke (RFC 7009 shape) revokes a token or its family
+- the BROWSER part reuses the dashboard login (session) + a consent page;
+  approving POSTs back with CSRF protection
+- every unauthenticated /mcp 401 carries WWW-Authenticate pointing at the
+  resource metadata so MCP clients self-discover the flow
+- tokens map to a gateway USER: the /mcp path treats them exactly like API
+  keys (permissions, per-USER rate limits - OAuth calls carry no API key so
+  the default key budget applies - and audit rows attribute to the user)
+
+**Why.** The MCP spec requires OAuth for HTTP transports; the demo keeps API
+keys as the simple path. Opaque tokens (not JWTs) keep revocation immediate
+and the implementation boring. Refresh rotation + family revocation covers
+token theft; hashes at rest cover DB leakage.
+
+**Live proof:** scripts/phase7-oauth-gate.sh (15/15 PASS: 401 pointer, both
+metadata docs, DCR, consent, PKCE exchange, /mcp tools/list 29 + tools/call,
+refresh rotation, family revocation) AND scripts/phase7_sdk_oauth_client.py
+(the MCP Python SDK's OWN OAuthClientProvider: initialize + 29 tools + a tool
+call with zero manual token handling) -> SDK-OAUTH-CLIENT: OK.
+
+**Known trade-offs (see THREAT_MODEL):** no client secrets (public clients
+only - fine for MCP's localhost clients); consent revocation UI is a follow-up
+(tokens can be revoked via /oauth/revoke and the DB today); the resource URI
+is the DASHBOARD host (MCP clients reach the gateway through the dashboard
+ingress) - prod should use a dedicated gateway host.

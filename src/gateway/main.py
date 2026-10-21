@@ -288,6 +288,11 @@ def create_app() -> FastAPI:
 
     app.include_router(hosted_router)
 
+    # Phase 7 (ADR-063): OAuth for the MCP endpoint (403 everywhere when off)
+    from oauth.routes import router as oauth_router
+
+    app.include_router(oauth_router)
+
     @app.get("/")
     async def root():
         s = get_settings()

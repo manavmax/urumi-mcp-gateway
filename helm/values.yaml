@@ -354,6 +354,15 @@ stores:
   maxConcurrent: 2
   provisionTimeoutSeconds: 600
 
+oauth:
+  # Phase 7 (ADR-063): MCP authorization (OAuth 2.1, minimal correct). Default
+  # OFF everywhere; values-local turns it on for the scripted full-flow test.
+  enabled: false
+  # what the OUTSIDE world uses to reach this gateway (metadata URLs)
+  publicBaseUrl: ""  # defaults to the dashboard ingress host
+  resourceUri: ""    # defaults to <publicBaseUrl>/mcp
+  issuer: ""         # defaults to publicBaseUrl
+
 hostedServers:
   # Phase 6 (ADR-062): admin adds an MCP server BY CONTAINER IMAGE. RISKY: the
   # image runs in the cluster with gateway-only ingress, no SA token, read-only
