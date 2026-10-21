@@ -173,6 +173,13 @@ async def lifespan(app: FastAPI):
                         await db.commit()
                 except Exception as exc:
                     logger.warning("chat upload purge failed: %s", exc)
+                # ADR-057: sweep expired rate-limit minute windows (5-minute keep)
+                try:
+                    from auth.rate_limit import purge_old_counters
+
+                    await purge_old_counters()
+                except Exception as exc:
+                    logger.warning("rate limit purge failed: %s", exc)
 
         upload_purge_task = asyncio.create_task(upload_purge_loop())
         app.state.upload_purge_task = upload_purge_task

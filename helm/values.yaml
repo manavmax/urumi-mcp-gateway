@@ -163,6 +163,13 @@ gateway:
   # no valid IANA timezone. Empty = code default UTC. Local demo values set
   # Asia/Kolkata; values-prod can too (unset = UTC).
   defaultTimezone: ""
+  # Phase 2 (ADR-057): calls/minute limits enforced in Postgres (atomic minute
+  # windows) so they hold across replicas. perKeyPerMinute is the default for
+  # every API key (an admin can override ONE key from the dashboard);
+  # perUserPerMinute spans every key AND the chat agent's tool calls.
+  rateLimit:
+    perKeyPerMinute: 60
+    perUserPerMinute: 240
   # Deployment progressDeadlineSeconds (default 300). With --atomic a bad upgrade
   # surfaces at the deadline (the pod never becomes Ready, the Deployment flips to
   # ProgressDeadlineExceeded and helm fails + rolls back), so a deliberate bad

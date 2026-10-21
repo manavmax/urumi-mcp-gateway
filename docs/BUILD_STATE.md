@@ -8,7 +8,7 @@
 
 ## Current phase
 
-PHASE 2 (rate limits per key) — in progress
+PHASE 3 (many tools / compact mode) — in progress
 
 ## What is done
 
@@ -31,15 +31,26 @@ PHASE 2 (rate limits per key) — in progress
   returns the SPA (gateway never reached); /api/metrics returns real 24h
   aggregates. Gate: regress-core ALL CHECKS PASSED.
 
+## What is done (phase 2)
+
+- PHASE 2 DONE (ADR-057): Postgres-backed per-key + per-user rate limits
+  (atomic minute-window upserts, migration 007), admin per-key override
+  (PATCH /api/keys/{id} + Members page editor), 429 + Retry-After +
+  audit outcome rate_limited + metric, chat tool calls count against the user,
+  fail-open on counter failure. 7 new tests; suite 342. Live proof: override 3/min
+  -> 3x200 then 429 Retry-After 26s; audit row rate_limited_key.
+  Gate: regress-core ALL CHECKS PASSED (audit check now polls for the async flush).
+
 ## What is next
 
-- PHASE 2 rate limits per key: per API key and per user calls/minute from Helm
-  values (rateLimit.perKeyPerMinute default, perUserPerMinute), optional per-key
-  override by admin (api_keys.rate_limit_per_minute column + PATCH /api/keys/{id}
-  or on create), counters in Postgres with ATOMIC upsert (works across replicas),
-  over-limit -> clear MCP error with retry-after seconds + audit outcome
-  rate_limited (needs the audit CHECK constraint extended) + metric increment,
-  chat calls count against the user. Tests incl. concurrency.
+- PHASE 3 many tools: compact mode selected by X-Gateway-Mode: compact or
+  ?mode=compact on /mcp; tools/list returns two meta tools
+  gateway__search_tools(query, limit) (keyword ranking over name+description,
+  respects role permissions) and gateway__call_tool(name, arguments) routed
+  through the SAME permission/rate-limit/timeout/audit code with the real tool
+  name in audit; chat agent auto-switches above gateway.compactThreshold;
+  test with 300 synthetic tools across 10 fake upstreams; token-size comparison
+  in BUILD_LOG.
 
 ## Commands to resume
 

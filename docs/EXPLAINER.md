@@ -26,3 +26,9 @@ What: the router wraps upstream failures in UpstreamCallError carrying the safe 
 Why: "what broke" must be answerable from the audit trail (timeout vs connection refused vs http 503 vs auth rejected) without ever storing raw exception text.
 Main failure mode: a new transport error shape falls back to `other` until categorize learns it; protocol_error split from invalid_response changes one historical label.
 Request flow: proxy_call raises -> classify(exc) -> UpstreamCallError(category) -> route audit + metrics carry the token -> Metrics page groups it.
+
+## auth/rate_limit.py (Phase 2)
+What: per-key and per-user calls/minute limits enforced with one atomic Postgres upsert per call (rate_limit_counters: scope + minute + count); admin per-key overrides via PATCH /api/keys/{id}.
+Why: the limit must hold across replicas (Phase 4 runs 2), and Postgres is already the shared store — no new infrastructure.
+Main failure mode: fixed minute windows let a straddling burst double briefly; a DB outage fails OPEN (calls allowed, warning logged) rather than bricking the gateway.
+Request flow: /mcp or chat tool call -> consume_and_check (own short session, atomic upsert, both counters) -> over limit: 429 + Retry-After + audit rate_limited + metric; allowed: routing proceeds.

@@ -183,10 +183,56 @@ async def list_keys(request: Request, db: AsyncSession = Depends(get_db), user=D
                 "last4": r.last4,
                 "revoked_at": r.revoked_at.isoformat() if r.revoked_at else None,
                 "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+                "rate_limit_per_minute": r.rate_limit_per_minute,
                 "created_at": r.created_at.isoformat(),
             }
             for r in rows
         ]
+    }
+
+
+class KeyLimitUpdate(BaseModel):
+    """Admin per-key rate limit override (ADR-057). null clears back to the
+    gateway default; an int must be 1..10000 (a limit of 0 would brick a key
+    with one toggle)."""
+    rate_limit_per_minute: int | None = Field(default=None, ge=1, le=10000)
+
+
+@router.patch("/api/keys/{key_id}", status_code=200)
+async def update_key_limit(
+    key_id: uuid.UUID,
+    body: KeyLimitUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_admin),
+):
+    """Admin-only per-key rate limit override. The override is the ONLY mutable
+    key field: revocation stays the DELETE endpoint, and nothing here can touch
+    credential material. Admin event records the new limit (not a secret)."""
+    verify_csrf(request)
+    res = await db.execute(select(ApiKey).where(ApiKey.id == key_id))
+    row = res.scalars().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="key not found")
+    row.rate_limit_per_minute = body.rate_limit_per_minute
+    record_admin_event(
+        db,
+        actor_user_id=user.id,
+        action="key.update",
+        target_type="key",
+        target_ref=key_ref(row.prefix, row.last4),
+        details={
+            "owner_user_id": str(row.user_id),
+            "key_id": str(row.id),
+            "rate_limit_per_minute": body.rate_limit_per_minute,
+        },
+    )
+    await db.commit()
+    return {
+        "id": str(row.id),
+        "prefix": row.prefix,
+        "last4": row.last4,
+        "rate_limit_per_minute": row.rate_limit_per_minute,
     }
 
 

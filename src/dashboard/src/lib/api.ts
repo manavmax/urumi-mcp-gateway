@@ -163,6 +163,7 @@ export type ApiKeyRow = {
   last4: string;
   revoked_at: string | null;
   expires_at: string | null;
+  rate_limit_per_minute: number | null;
   created_at: string;
 };
 
@@ -245,6 +246,13 @@ export const api = {
       csrf: true,
     }),
   revokeKey: (id: string) => request<{ revoked: boolean }>(`/api/keys/${id}`, { method: "DELETE", csrf: true }),
+  // Admin per-key rate limit override (ADR-057): null clears back to the default.
+  updateKeyLimit: (id: string, perMinute: number | null) =>
+    request<{ id: string; rate_limit_per_minute: number | null }>(`/api/keys/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ rate_limit_per_minute: perMinute }),
+      csrf: true,
+    }),
 
   listTools: () => request<{ tools: Tool[]; warnings: string[] }>("/api/tools"),
 

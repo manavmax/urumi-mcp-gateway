@@ -29,6 +29,7 @@ export default function Members() {
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [emailById, setEmailById] = useState<Record<string, string>>({});
   const [err, setErr] = useState("");
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, string | undefined>>({});
   const [loading, setLoading] = useState(true);
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -81,6 +82,26 @@ export default function Members() {
   async function revokeKey(id: string) {
     await api.revokeKey(id);
     await load();
+  }
+
+  /* Admin per-key rate limit override (ADR-057): save a number, or clear back
+     to the gateway default with an empty field. The row shows "default" when
+     no override is set. */
+  async function saveKeyLimit(id: string, value: string) {
+    setErr("");
+    const trimmed = value.trim();
+    const perMinute = trimmed === "" ? null : Number.parseInt(trimmed, 10);
+    if (perMinute !== null && (!Number.isFinite(perMinute) || perMinute < 1 || perMinute > 10000)) {
+      setErr("Rate limit must be between 1 and 10000 calls per minute, or empty for the default.");
+      return;
+    }
+    try {
+      await api.updateKeyLimit(id, perMinute);
+      setLimitDrafts((d) => ({ ...d, [id]: undefined }));
+      await load();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function createKey() {
@@ -277,7 +298,7 @@ export default function Members() {
             <thead>
               <tr>
                 {isAdmin && <th>Owner</th>}
-                <th>Prefix</th><th>Last4</th><th>Created</th><th>Expires</th><th>Status</th><th>Actions</th>
+                <th>Prefix</th><th>Last4</th><th>Created</th><th>Expires</th><th>Status</th><th>Limit/min</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -293,6 +314,34 @@ export default function Members() {
                       <span className="chip chip-neutral"><Icon name="pause" />Revoked</span>
                     ) : (
                       <span className="chip chip-ok"><Icon name="check-circle" />Active</span>
+                    )}
+                  </td>
+                  <td data-label="Limit per minute">
+                    {isAdmin && !k.revoked_at ? (
+                      <span className="limit-edit">
+                        <input
+                          type="number"
+                          min={1}
+                          max={10000}
+                          aria-label={`Rate limit per minute for key …${k.last4}`}
+                          placeholder="default"
+                          value={limitDrafts[k.id] ?? (k.rate_limit_per_minute !== null && k.rate_limit_per_minute !== undefined ? String(k.rate_limit_per_minute) : "")}
+                          onChange={(e) => setLimitDrafts((d) => ({ ...d, [k.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void saveKeyLimit(k.id, limitDrafts[k.id] ?? "");
+                          }}
+                        />
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          type="button"
+                          disabled={(limitDrafts[k.id] ?? "") === (k.rate_limit_per_minute !== null && k.rate_limit_per_minute !== undefined ? String(k.rate_limit_per_minute) : "")}
+                          onClick={() => void saveKeyLimit(k.id, limitDrafts[k.id] ?? "")}
+                        >
+                          Set
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="small muted">{k.rate_limit_per_minute ?? "default"}</span>
                     )}
                   </td>
                   <td data-label="Actions">

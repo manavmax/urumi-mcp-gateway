@@ -918,3 +918,39 @@ than SQL percentile_cont (portable across the sqlite test harness). /metrics is
 unauthenticated by default in-cluster (token optional) — an in-cluster scraper is
 added later by opening a NetworkPolicy exception for it; documented in
 REVIEW_NEEDED.md.
+
+## 2026-10-21: per-key and per-user rate limits in Postgres (ADR-057)
+
+**What changed.** The /mcp in-memory per-key limiter is REPLACED by a Postgres-backed
+limiter that holds across replicas:
+- New `rate_limit_counters` table (migration 007): one row per (scope, minute),
+  scope = `key:<api_key_id>` | `user:<user_id>`. Consumption is ONE atomic
+  `INSERT ... ON CONFLICT DO UPDATE count = count + 1 RETURNING count`
+  (sqlite dialect variant keeps the unit-test harness working). The limiter opens
+  its OWN short session so it never interleaves with a request transaction; expired
+  windows are swept by the background purge loop (5-minute keep).
+- Limits: per key `gateway.rateLimit.perKeyPerMinute` (default 60) with an optional
+  per-key ADMIN override (`api_keys.rate_limit_per_minute`, NULL = default;
+  `PATCH /api/keys/{id}`, admin + CSRF, 1..10000, null clears; member 403; recorded
+  in the admin trail as key.update), and per user
+  `gateway.rateLimit.perUserPerMinute` (default 240) spanning EVERY key of the user
+  AND the chat agent's tool calls (the chat loop consumes the same user counter on
+  every routed tool call and streams a rate_limited tool event instead of routing).
+- Rejection: HTTP 429 + `Retry-After: <seconds to minute end>` + JSON-RPC -32000
+  naming the scope ("rate limit exceeded (key|user limit), retry after N seconds");
+  audit row outcome `rate_limited` (CHECK constraint extended, migration 007) with
+  error_code `rate_limited_key|rate_limited_user`; metric rate_limited_total{scope}.
+- Fail-open: a broken counter (DB down) logs a warning and ALLOWS the call — a
+  false 429 against an honest caller is worse than an availability bug.
+
+**Why.** Stand-out 7b: rate limits must survive multiple replicas (Phase 4 needs
+them shared), be per key AND per user, overridable per key by an admin, and the
+chat agent must count against the user. Postgres is already the shared store —
+no Redis, no new dependency.
+
+**Known trade-offs.** The window is the wall-clock minute (fixed windows, not
+sliding): a burst can straddle a boundary and get 2x the limit for a moment —
+acceptable for a gateway demo and it makes Retry-After exact. Every /mcp call and
+every chat tool call now costs one extra DB round-trip (the atomic upsert);
+measured at ~1-2 ms locally. The limiter fails open (documented residual in
+THREAT_MODEL terms: a DB outage disables rate limiting rather than the gateway).

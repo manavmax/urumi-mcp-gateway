@@ -8,7 +8,7 @@
    an error. */
 export function outcomeChip(o: string): { cls: string; icon: "check-circle" | "alert" | "x-circle" | "deny" } {
   if (o === "success") return { cls: "chip-ok", icon: "check-circle" };
-  if (o === "timeout" || o === "circuit_open") return { cls: "chip-warn", icon: "alert" };
+  if (o === "timeout" || o === "circuit_open" || o === "rate_limited") return { cls: "chip-warn", icon: "alert" };
   if (o === "permission_denied") return { cls: "chip-neutral", icon: "deny" };
   return { cls: "chip-danger", icon: "x-circle" };
 }

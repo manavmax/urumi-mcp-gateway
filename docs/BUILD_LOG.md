@@ -45,3 +45,22 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
   ```
 - GATE: make lint clean (ruff + helm lint local+prod), make test rc=0 (335/21/8), deployed to kind (gateway+dashboard rebuilt on the colima context), `bash scripts/regress-core.sh` -> `REGRESS-CORE: ALL CHECKS PASSED`.
 - Dashboard: Metrics page built (tsc + vite build clean), admin-only route + nav, reason chips.
+
+## 2026-10-21 Phase 2 — rate limits per key (ADR-057)
+
+- Tests: `cd src/gateway && ../../.venv/bin/python -m pytest tests/test_rate_limits.py -q` -> 7 passed (atomicity under 50 concurrent consumers, per-key default, admin override + validation + permissions, per-user spans keys, chat counts against user, fail-open). Suite: 342 passed.
+- Migration ran live on the gateway pod start:
+  ```
+  Running upgrade 006_chat_uploads -> 007_rate_limits, rate limits per key/user (Phase 2, ADR-057)
+  rate_limit_counters columns: ['scope', 'window_start', 'count']
+  api_keys.rate_limit_per_minute present: True
+  ck_audit_outcome: CHECK ((outcome = ANY (ARRAY['success','upstream_error','permission_denied','timeout','circu...
+  ```
+- Live end-to-end proof (temp admin key, override 3/min):
+  ```
+  override set: 3 calls/min
+  call statuses: [(200, None), (200, None), (200, None), (429, '26')]
+  audit rows with outcome=rate_limited: [('rate_limited', 'rate_limited_key', 1)]
+  ```
+- Gate: make lint clean, suites green, `bash scripts/regress-core.sh` -> ALL CHECKS PASSED (one initial gate failure was a race between the regress audit check and the 1s audit-queue flush — fixed by polling up to 10s in the regress script; the check is now deterministic).
+- Dashboard: admin per-key limit editor on the Members page (Set/clear), rate_limited outcome chip.

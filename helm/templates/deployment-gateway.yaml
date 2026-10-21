@@ -140,6 +140,12 @@ spec:
             # (values-prod sets the https dashboard origin).
             - name: CORS_ALLOW_ORIGINS
               value: {{ .Values.gateway.corsAllowOrigins | default "" | quote }}
+            # Phase 2 (ADR-057): per-key and per-user calls/minute, enforced via
+            # Postgres minute-window counters (work across replicas).
+            - name: RATE_LIMIT_PER_MINUTE
+              value: {{ .Values.gateway.rateLimit.perKeyPerMinute | default 60 | quote }}
+            - name: RATE_LIMIT_USER_PER_MINUTE
+              value: {{ .Values.gateway.rateLimit.perUserPerMinute | default 240 | quote }}
             # Timezone fallback (ADR-054): the chat system prompt stamps this zone when
             # the browser sends no valid IANA timezone. Base default is UTC; the local
             # demo values set Asia/Kolkata.

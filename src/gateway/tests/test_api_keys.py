@@ -20,7 +20,8 @@ from db.models import ApiKey, User
 from tests.conftest import FakeResult
 
 # every column an ApiKey row may have - and none of them can hold the raw key
-SAFE_KEY_COLUMNS = {"id", "user_id", "prefix", "sha256", "last4", "revoked_at", "expires_at", "created_at"}
+# (rate_limit_per_minute is the ADR-057 admin override: a small int, not a secret)
+SAFE_KEY_COLUMNS = {"id", "user_id", "prefix", "sha256", "last4", "revoked_at", "expires_at", "rate_limit_per_minute", "created_at"}
 
 
 def now():

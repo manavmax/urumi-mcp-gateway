@@ -17,7 +17,6 @@ import uuid
 from typing import Any
 
 from audit.queue import log_audit
-from config import get_settings
 from db.models import Server
 from db.session import get_db
 from fastapi import APIRouter, Depends, Request, Response
@@ -101,13 +100,40 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
     request.state.current_user = user
     request.state.api_key_id = api_key_id
 
-    # Rate limit (simple in-memory per-key sliding window)
-    # Use global dict; ok for single replica dev; for multi-replica would need Redis.
-    if not _check_rate_limit(str(api_key_id)):
+    # Rate limits (ADR-057): per KEY (override or default) and per USER, counters
+    # in Postgres so they hold across replicas. Chat tool calls count against
+    # the same user budget inside the chat agent.
+    from auth.rate_limit import consume_and_check, effective_key_limit
+
+    allowed, limit_scope, retry_after = await consume_and_check(
+        user_id=user.id,
+        api_key_id=api_key_id,
+        key_limit=effective_key_limit(key_row),
+    )
+    if not allowed:
         from gw_mcp.metrics import inc_rate_limited
 
-        inc_rate_limited("key")
-        return JSONResponse(_jsonrpc_error(payload.get("id"), -32000, "rate limit exceeded (60/min)"), status_code=429)
+        inc_rate_limited(limit_scope)
+        request_id = uuid.uuid4()
+        client_ip = request.client.host if request.client else None
+        await log_audit(
+            user_id=user.id,
+            api_key_id=api_key_id,
+            server_id=None,
+            server_slug="unknown",
+            tool_exposed_name=payload.get("params", {}).get("name", "unknown") if isinstance(payload.get("params"), dict) else "unknown",
+            tool_upstream_name="unknown",
+            request_id=request_id,
+            duration_ms=0,
+            outcome="rate_limited",
+            error_code=f"rate_limited_{limit_scope}",
+            client_ip=client_ip,
+        )
+        return JSONResponse(
+            _jsonrpc_error(payload.get("id"), -32000, f"rate limit exceeded ({limit_scope} limit), retry after {retry_after} seconds"),
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+        )
 
     method = payload.get("method")
     msg_id = payload.get("id")
@@ -360,25 +386,3 @@ async def _filter_tools_by_rbac(db, user, tools: list[dict]) -> list[dict]:
     from gw_mcp.permissions import filter_tools_for_user
 
     return await filter_tools_for_user(db, user, tools)
-
-
-# ---- simple in-memory rate limiter ----
-
-_rate_buckets: dict[str, list[float]] = {}
-
-
-def _check_rate_limit(key: str) -> bool:
-    import time as _t
-
-    now = _t.monotonic()
-    window = 60.0
-    limit = get_settings().rate_limit_per_minute
-    bucket = _rate_buckets.get(key, [])
-    # prune old
-    bucket = [t for t in bucket if now - t < window]
-    if len(bucket) >= limit:
-        _rate_buckets[key] = bucket
-        return False
-    bucket.append(now)
-    _rate_buckets[key] = bucket
-    return True

@@ -152,10 +152,17 @@ async def test_timeout_audits_timeout_reason(harness, monkeypatch):
 @pytest.mark.asyncio
 async def test_rate_limited_call_increments_metric(harness, monkeypatch):
     client, raw_key, _captured, _db = harness
-    # exhaust the in-memory limiter for this key
-    monkeypatch.setattr(mcp_route, "_check_rate_limit", lambda _key: False)
+    # drive the new Postgres limiter's rejection path directly
+    import auth.rate_limit as rl
+
+    async def over_limit(**_kwargs):
+        return False, "key", 42
+
+    monkeypatch.setattr(rl, "consume_and_check", over_limit)
     r = await _post_call(client, raw_key, "notes__list_notes", {})
     assert r.status_code == 429
+    assert r.headers.get("retry-after") == "42"
+    assert "retry after 42" in r.json()["error"]["message"]
     limited = [s for m in gw_metrics.RATE_LIMITED.collect() for s in m.samples if s.name == "rate_limited_total" and s.labels.get("scope") == "key"]
     assert limited and limited[0].value >= 1.0
 

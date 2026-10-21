@@ -104,6 +104,10 @@ class Settings(BaseSettings):
 
     # rate limit
     rate_limit_per_minute: int = 60
+    # Phase 2 (ADR-057): per-USER calls/minute across every key AND the chat
+    # agent's tool calls. Counters are in Postgres (rate_limit_counters), so
+    # the limit holds across replicas.
+    rate_limit_user_per_minute: int = 240
 
     # F3 chat image uploads: 5 MB byte cap (env-tunable), 15 minute upload TTL.
     image_upload_max_bytes: int = 5 * 1024 * 1024

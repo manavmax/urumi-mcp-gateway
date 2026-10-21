@@ -217,24 +217,32 @@ async def phase1(order_id: str) -> int:
     check("revoked key rejected on next call", r.status_code == 401, f"status={r.status_code}")
 
     # --- audit rows under the right users ---
+    # The audit writer is an async queue (batch flush ~1s), so the member's row
+    # can land a moment after the call: poll for it instead of racing the flush.
     from db.models import AuditLog
     from db.models import User as U
     from db.session import get_session_factory
     from sqlalchemy import select
 
     factory = get_session_factory()
-    async with factory() as db:
-        member = (await db.execute(select(U).where(U.email == member_email))).scalars().one()
-        rows = (await db.execute(
-            select(AuditLog).where(AuditLog.user_id == member.id, AuditLog.tool_exposed_name == "time__get_current_time")
-        )).scalars().all()
-        check("audit row for member's time call attributed to the member", len(rows) >= 1,
-              f"rows={len(rows)} outcome={[r.outcome for r in rows]}")
-        admin_user = (await db.execute(select(U).where(U.email == ADMIN_EMAIL))).scalars().one()
-        rows = (await db.execute(
-            select(AuditLog).where(AuditLog.user_id == admin_user.id, AuditLog.tool_exposed_name == "woo__list_products")
-        )).scalars().all()
-        check("audit rows exist for the admin user's calls", len(rows) >= 1, f"rows={len(rows)}")
+    member_rows: list = []
+    admin_rows: list = []
+    for _attempt in range(10):
+        async with factory() as db:
+            member = (await db.execute(select(U).where(U.email == member_email))).scalars().one()
+            member_rows = (await db.execute(
+                select(AuditLog).where(AuditLog.user_id == member.id, AuditLog.tool_exposed_name == "time__get_current_time")
+            )).scalars().all()
+            admin_user = (await db.execute(select(U).where(U.email == ADMIN_EMAIL))).scalars().one()
+            admin_rows = (await db.execute(
+                select(AuditLog).where(AuditLog.user_id == admin_user.id, AuditLog.tool_exposed_name == "woo__list_products")
+            )).scalars().all()
+        if member_rows and admin_rows:
+            break
+        await asyncio.sleep(1)
+    check("audit row for member's time call attributed to the member", len(member_rows) >= 1,
+          f"rows={len(member_rows)} outcome={[r.outcome for r in member_rows]}")
+    check("audit rows exist for the admin user's calls", len(admin_rows) >= 1, f"rows={len(admin_rows)}")
 
     _save_state({
         "member_id": member_id,

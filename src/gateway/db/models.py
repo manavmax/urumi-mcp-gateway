@@ -62,6 +62,10 @@ class ApiKey(Base):
     last4: Mapped[str] = mapped_column(Text, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Phase 2 (ADR-057): optional per-key rate limit override (calls/minute).
+    # NULL = the gateway default (gateway.rateLimit.perKeyPerMinute). Admin-set
+    # through PATCH /api/keys/{id}; never any credential material.
+    rate_limit_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 
     user: Mapped[User] = relationship(back_populates="api_keys")
@@ -140,7 +144,7 @@ class AuditLog(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "outcome IN ('success','upstream_error','permission_denied','timeout','circuit_open','validation_error')",
+            "outcome IN ('success','upstream_error','permission_denied','timeout','circuit_open','validation_error','rate_limited')",
             name="ck_audit_outcome",
         ),
         Index("ix_audit_ts", "ts"),
@@ -225,6 +229,26 @@ class AdminEvent(Base):
         Index("ix_admin_events_action_ts", "action", "ts"),
         Index("ix_admin_events_actor_ts", "actor_user_id", "ts"),
     )
+
+
+class RateLimitCounter(Base):
+    """Atomic minute-window rate counters (Phase 2, ADR-057).
+
+    One row per (scope, minute) where scope is 'key:<api_key_id>' or
+    'user:<user_id>'. Consumption is a single INSERT ... ON CONFLICT DO UPDATE
+    count = count + 1 RETURNING count, so the increment is atomic across any
+    number of gateway replicas (the counter state lives in Postgres, not
+    process memory). Rows older than a couple of minutes are swept by the
+    background purge loop. No secrets, no payload - only counts.
+    """
+
+    __tablename__ = "rate_limit_counters"
+
+    scope: Mapped[str] = mapped_column(Text, primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (Index("ix_rate_limit_window", "window_start"),)
 
 
 class ChatUpload(Base):

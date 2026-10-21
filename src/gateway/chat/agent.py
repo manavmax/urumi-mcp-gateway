@@ -771,6 +771,19 @@ async def chat_loop(
 
                 t0 = _time.monotonic()
                 dur = 0
+                # ADR-057: chat tool calls count against the per-USER budget
+                # (same Postgres counter the /mcp path uses).
+                from auth.rate_limit import consume_and_check
+
+                allowed, limit_scope, retry_after = await consume_and_check(user_id=user.id)
+                if not allowed:
+                    result = {"error": f"rate limit exceeded ({limit_scope} limit), retry after {retry_after} seconds"}
+                    outcome = "rate_limited"
+                    await _audit_routed_call(db, user, name, outcome, f"rate_limited_{limit_scope}", 0, str(request_id))
+                    _record_call_metrics(name, outcome, 0)
+                    messages.append(_build_tool_message(tc.id, tool_marker, name, result))
+                    yield {"type": "tool_call", "tool": name, "outcome": outcome, "output": result}
+                    continue
                 # We need to parse slug__tool already validated
                 result_data = await call_tool_routed(db, name, args)
                 dur = int((_time.monotonic() - t0) * 1000)
