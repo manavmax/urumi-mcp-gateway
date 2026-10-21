@@ -154,6 +154,23 @@ spec:
             # this many allowed tools (0 = never).
             - name: COMPACT_THRESHOLD
               value: {{ .Values.gateway.compactThreshold | default 40 | quote }}
+            {{- if .Values.provisioner.enabled }}
+            # Phase 5 (ADR-060): the gateway calls the provisioner with this shared
+            # token (Secret provisioner-token) and projects store status to the
+            # Stores page. All of it inert when provisioner.enabled is false.
+            - name: STORES_ENABLED
+              value: "true"
+            - name: PROVISIONER_URL
+              value: "http://{{ include "urumi.fullname" . }}-provisioner:{{ .Values.provisioner.port }}"
+            - name: PROVISIONER_TOKEN
+              valueFrom: { secretKeyRef: { name: provisioner-token, key: token } }
+            - name: STORES_BASE_DOMAIN
+              value: {{ .Values.stores.baseDomain | quote }}
+            - name: STORES_MAX_PER_USER
+              value: {{ .Values.stores.maxPerUser | default 2 | quote }}
+            - name: STORES_GLOBAL_MAX
+              value: {{ .Values.stores.globalMax | default 12 | quote }}
+            {{- end }}
             # Timezone fallback (ADR-054): the chat system prompt stamps this zone when
             # the browser sends no valid IANA timezone. Base default is UTC; the local
             # demo values set Asia/Kolkata.

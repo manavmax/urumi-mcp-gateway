@@ -1,0 +1,181 @@
+{{- if .Values.provisioner.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "urumi.fullname" . }}-provisioner
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: provisioner
+    app.kubernetes.io/component: provisioner
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: provisioner
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: provisioner
+        app.kubernetes.io/name: {{ include "urumi.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        tier: private
+    spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-provisioner
+      automountServiceAccountToken: true
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
+      {{- include "urumi.podSecurityContext" (dict "root" $ "workload" "provisioner") | nindent 6 }}
+      containers:
+        - name: provisioner
+          image: "{{ .Values.provisioner.image.repository }}:{{ .Values.provisioner.image.tag }}"
+          imagePullPolicy: {{ .Values.provisioner.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.provisioner.port }}
+              name: http
+          env:
+            - name: SHARED_TOKEN
+              valueFrom: { secretKeyRef: { name: provisioner-token, key: token } }
+            - name: GATEWAY_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: BASE_DOMAIN
+              value: {{ .Values.stores.baseDomain | quote }}
+            - name: INGRESS_CLASS
+              value: {{ .Values.global.ingressClass | quote }}
+            - name: STORAGE_CLASS
+              value: {{ .Values.global.storageClass | quote }}
+            - name: NODE_CIDR
+              value: {{ .Values.global.nodeCIDR | quote }}
+            - name: MAX_CONCURRENT
+              value: {{ .Values.stores.maxConcurrent | default 2 | quote }}
+            - name: PROVISION_TIMEOUT_SECONDS
+              value: {{ .Values.stores.provisionTimeoutSeconds | default 600 | quote }}
+            - name: HELM_TIMEOUT
+              value: {{ .Values.provisioner.helmTimeout | default "540s" | quote }}
+            - name: RECONCILE_INTERVAL_SECONDS
+              value: {{ .Values.provisioner.reconcileIntervalSeconds | default 10 | quote }}
+            {{- /* The store chart MUST use the SAME images the main release uses
+                   (values-local rewrites repos to node-local urumi/...; prod keeps
+                   ghcr.io/...). Forward the resolved repos so the provisioner's
+                   --set flags match whatever values file was used. */}}
+            - name: STORE_IMAGE_WORDPRESS_REPO
+              value: {{ .Values.wordpress.image.repository | quote }}
+            - name: STORE_IMAGE_WORDPRESS_TAG
+              value: {{ .Values.wordpress.image.tag | quote }}
+            - name: STORE_IMAGE_WOO_MCP_REPO
+              value: {{ .Values.wooMcp.image.repository | quote }}
+            - name: STORE_IMAGE_WOO_MCP_TAG
+              value: {{ .Values.wooMcp.image.tag | quote }}
+            - name: STORE_IMAGE_WP_CLI_REPO
+              value: {{ .Values.wpSetup.image.repository | quote }}
+            - name: STORE_IMAGE_WP_CLI_TAG
+              value: {{ .Values.wpSetup.image.tag | quote }}
+            - name: STORE_IMAGE_ASSETS_REPO
+              value: {{ .Values.storeAssets.image.repository | quote }}
+            - name: STORE_IMAGE_ASSETS_TAG
+              value: {{ .Values.storeAssets.image.tag | quote }}
+            - name: STORE_IMAGE_MARIADB_REPO
+              value: {{ .Values.mariadb.image.repository | quote }}
+            - name: STORE_IMAGE_MARIADB_TAG
+              value: {{ .Values.mariadb.image.tag | quote }}
+          resources:
+            {{- toYaml .Values.provisioner.resources | nindent 12 }}
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "provisioner") | nindent 12 }}
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-provisioner
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: provisioner
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.provisioner.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: provisioner
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+{{- /* The provisioner answers ONLY the gateway pods (namespace + app label)
+       on its port - the NetworkPolicy half of the two-sided guard; the shared
+       token is the other half. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-gateway-to-provisioner
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: provisioner
+spec:
+  podSelector:
+    matchLabels:
+      app: provisioner
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - port: {{ .Values.provisioner.port }}
+  egress:
+    # the K8s API (namespace + helm work), DNS for in-cluster names, and nothing
+    # else: not even the internet
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              component: kube-apiserver
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.global.nodeCIDR | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+        - { protocol: UDP, port: 9153 }
+        - { protocol: TCP, port: 9153 }
+{{- end }}

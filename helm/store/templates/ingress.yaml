@@ -1,0 +1,32 @@
+{{- if and .Values.ingress.enabled .Values.wordpress.enabled }}
+{{- /* One rule: <slug>.<stores.baseDomain> -> this store's WordPress. The
+       provisioner always sets ingress.hosts.store. TLS only when the main
+       release's global.tlsEnabled is propagated (prod wildcard certificate). */}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "urumi.fullname" . }}
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.global.ingressClass }}
+  {{- if .Values.global.tlsEnabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.hosts.store | quote }}
+      secretName: urumi-store-wildcard
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.hosts.store | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "urumi.fullname" . }}-wordpress
+                port:
+                  number: {{ .Values.wordpress.service.port | default 80 }}
+{{- end }}

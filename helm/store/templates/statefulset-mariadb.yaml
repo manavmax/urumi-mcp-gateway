@@ -1,0 +1,84 @@
+{{- if .Values.mariadb.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "urumi.fullname" . }}-mariadb
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: mariadb
+    app.kubernetes.io/component: mariadb
+spec:
+  serviceName: {{ include "urumi.fullname" . }}-mariadb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: mariadb
+        app.kubernetes.io/name: {{ include "urumi.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        tier: private
+    spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-mariadb
+      automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
+      # Hardening (ADR-043): the official mariadb image supports running the whole
+      # container as the mysql user (uid 999) - its entrypoint skips the root chown
+      # steps and execs mariadbd directly when it is not root. fsGroup 999 makes the
+      # existing (root-initialised) PVC group-writable for that uid.
+      {{- include "urumi.podSecurityContext" (dict "root" $ "workload" "mariadb") | nindent 6 }}
+      containers:
+        - name: mariadb
+          image: "{{ .Values.mariadb.image.repository }}:{{ .Values.mariadb.image.tag }}"
+          imagePullPolicy: {{ .Values.mariadb.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.mariadb.port }}
+              name: mysql
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: mariadb-secret, key: MYSQL_ROOT_PASSWORD } }
+            - name: MARIADB_DATABASE
+              valueFrom: { secretKeyRef: { name: mariadb-secret, key: MYSQL_DATABASE } }
+            - name: MARIADB_USER
+              valueFrom: { secretKeyRef: { name: mariadb-secret, key: MYSQL_USER } }
+            - name: MARIADB_PASSWORD
+              valueFrom: { secretKeyRef: { name: mariadb-secret, key: MYSQL_PASSWORD } }
+          resources:
+            {{- toYaml .Values.mariadb.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+          securityContext:
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "mariadb") | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: mariadb
+          app.kubernetes.io/instance: {{ .Release.Name }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.mariadb.storage.size }}
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+{{- end }}

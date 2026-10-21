@@ -273,6 +273,26 @@ spec:
               app: postgres
       ports:
         - port: {{ .Values.postgres.port }}
+{{- if .Values.provisioner.enabled }}
+    # Phase 5 (ADR-060): the gateway calls the provisioner ...
+    - to:
+        - podSelector:
+            matchLabels:
+              app: provisioner
+      ports:
+        - port: {{ .Values.provisioner.port }}
+    # ... and the stores' woo-mcp upstreams, which live in namespaces labeled
+    # urumi.io/managed-by=provisioner (namespaceSelector on the label)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              urumi.io/managed-by: provisioner
+          podSelector:
+            matchLabels:
+              app: woo-mcp
+      ports:
+        - port: 8000
+{{- end }}
 {{- if .Values.gateway.llm.enabled }}
     - to:
         - ipBlock:

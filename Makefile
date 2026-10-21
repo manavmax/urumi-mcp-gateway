@@ -170,6 +170,17 @@ dashboard-image:
 	@echo "loaded urumi/dashboard:0.1.0 into kind node"
 	@echo "REMINDER: pods are NOT restarted by an import - run 'make deploy' to restart"
 
+# Phase 5 (ADR-060): the provisioner image bakes the store chart. Docker cannot
+# COPY outside the context, so helm/store is staged into src/provisioner/chart
+# for the build (transient; gitignored) and removed afterwards.
+provisioner-image:
+	rm -rf src/provisioner/chart
+	cp -R helm/store src/provisioner/chart
+	docker build -t urumi/provisioner:0.1.0 src/provisioner
+	docker save urumi/provisioner:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	rm -rf src/provisioner/chart
+	@echo "loaded urumi/provisioner:0.1.0 into kind node"
+
 # Rebuild Layer 3 images, import them into the kind node, then RESTART the pods so
 # the new build actually lands. Without the rollout restart, `ctr images import`
 # replaces the image bytes under the same tag but existing pods keep running the

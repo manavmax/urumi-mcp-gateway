@@ -49,6 +49,9 @@ podSecurity:
     # run as a fixed nobody-ish uid 1000 with a read-only root.
     storeAssets: { runAsUser: 33,   runAsGroup: 33,   readOnlyRootFilesystem: true }
     util:        { runAsUser: 1000, runAsGroup: 1000, readOnlyRootFilesystem: true }
+    # provisioner (Phase 5): non-root; /tmp kubeconfig + helm working dir need a
+    # writable root mount, which stays an emptyDir-mounted /tmp only
+    provisioner: { runAsUser: 1000, runAsGroup: 1000, readOnlyRootFilesystem: false }
 
 # --- WordPress + WooCommerce ---
 wordpress:
@@ -319,3 +322,34 @@ wpSetup:
 
 nameOverride: ""
 fullnameOverride: ""
+
+# --- Phase 5: provisioner + multi-store (ADR-060) -----------------------------
+# RISKY FEATURE: default false in base AND prod; values-local flips it on.
+# When false nothing provisioner-related renders, the gateway serves 403 on
+# /api/stores, and the core demo path is exactly as before.
+provisioner:
+  enabled: false
+  image: { repository: ghcr.io/urumi/provisioner, tag: "0.1.0", pullPolicy: IfNotPresent }
+  port: 9000
+  # helm --timeout per install attempt (waits for the wp-setup hook); must
+  # stay below stores.provisionTimeoutSeconds
+  helmTimeout: "540s"
+  resources:
+    # helm is a Go binary and each install/uninstall fork spikes ~100-200MB;
+    # TWO concurrent stores provisioning (stores.maxConcurrent=2) OOM-killed a
+    # 512Mi container, so the limit is generous while the request stays small
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 768Mi }
+  # The shared internal token is generated into the provisioner-token Secret on
+  # install (randAlphaNum 48) and consumed by BOTH the provisioner and the
+  # gateway. NEVER a committed value.
+
+stores:
+  # <slug>.<baseDomain> per-store ingress hosts. Local uses *.localhost (browsers
+  # resolve it to 127.0.0.1); PROD REQUIRES a wildcard DNS record + wildcard TLS
+  # (documented in DEPLOY notes).
+  baseDomain: localhost
+  maxPerUser: 2
+  globalMax: 12
+  maxConcurrent: 2
+  provisionTimeoutSeconds: 600

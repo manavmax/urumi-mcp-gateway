@@ -114,6 +114,19 @@ class Settings(BaseSettings):
     # (gateway.compactThreshold). 0 disables the automatic switch.
     compact_threshold: int = 40
 
+    # Phase 5 (ADR-060): multi-store provisioning. stores_enabled mirrors the
+    # provisioner.enabled Helm flag (default false): when off, the Stores API
+    # answers 403 and the sync loop never runs - the core demo path is exactly
+    # as before. The token is the provisioner shared secret (Secret
+    # provisioner-token), never printed.
+    stores_enabled: bool = False
+    provisioner_url: str = "http://urumi-provisioner:9000"
+    provisioner_token: str = ""
+    stores_base_domain: str = "localhost"
+    stores_max_per_user: int = 2
+    stores_global_max: int = 12
+    stores_sync_interval_seconds: int = 5
+
     # F3 chat image uploads: 5 MB byte cap (env-tunable), 15 minute upload TTL.
     image_upload_max_bytes: int = 5 * 1024 * 1024
     chat_upload_ttl_seconds: int = 15 * 60
@@ -191,6 +204,13 @@ def get_settings() -> Settings:
         "GATEWAY_DEFAULT_TIMEZONE": "default_timezone",
         "METRICS_BEARER": "metrics_bearer",
         "COMPACT_THRESHOLD": "compact_threshold",
+        "STORES_ENABLED": "stores_enabled",
+        "PROVISIONER_URL": "provisioner_url",
+        "PROVISIONER_TOKEN": "provisioner_token",
+        "STORES_BASE_DOMAIN": "stores_base_domain",
+        "STORES_MAX_PER_USER": "stores_max_per_user",
+        "STORES_GLOBAL_MAX": "stores_global_max",
+        "STORES_SYNC_INTERVAL_SECONDS": "stores_sync_interval_seconds",
     }
     for env_key, field in mapping.items():
         if env_key in os.environ and field not in os.environ:

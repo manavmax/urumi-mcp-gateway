@@ -1031,3 +1031,97 @@ apply to the other; bounded by each replica's own fallback). Recreate rollout
 strategy is kept (mutable image tags), so upgrades briefly take the gateway
 down - unchanged single-replica behaviour for prod (1 replica unless Manav
 raises it).
+
+## 2026-10-21: alembic advisory-lock commit bug fixed (ADR-061)
+
+**What changed.** `alembic/env.py` took the ADR-059 advisory lock
+(`pg_advisory_xact_lock`) BEFORE `context.begin_transaction()`. In SQLAlchemy
+2.0 the SELECT autobegins a transaction; `MigrationContext` then sees the
+connection already in a transaction, records it as an EXTERNAL transaction and
+`begin_transaction()` returns a no-op - nothing ever commits the DDL. The
+open autobegin transaction is rolled back when the connection closes: alembic
+logged "Running upgrade ... 009_stores" and "alembic upgrade head done" while
+the database stayed at 007. Every migration since ADR-059 (008 login_failures,
+009 stores) was silently lost in the live cluster; nothing live caught it
+because login lockout fails open and nothing else read the missing tables.
+The fix takes the advisory lock INSIDE the migration transaction (semantics
+unchanged: still serializes replicas, released at commit) and adds an explicit
+`await connection.commit()` after `run_sync` as belt and braces. Verified live
+on kind: version 007 -> 009 with `login_failures` and `stores` tables present.
+
+**Why.** Phase 5's stores table exposed the bug (`column servers.internal does
+not exist` on first store create). The phase-4 evidence over-claimed: "both
+pods logged alembic upgrade head done" was true and meaningless - the proof
+needed a post-upgrade DB read, which is now part of the live verification.
+
+**Lesson recorded.** Migration verification must read the DATABASE after the
+run (version + a new schema object), not trust the migration runner's own
+success log.
+
+## 2026-10-21: provisioner + multi-store (ADR-060)
+
+**What changed.** A separate provisioner Deployment (own image, own SA,
+least-privilege ClusterRole, NetworkPolicy-restricted to gateway pods plus a
+shared X-Provisioner-Token) owns per-store namespaces + helm releases. The
+gateway enforces roles/quotas (stores table, Stores dashboard page, per-user +
+global maxima, slug rules, internal-upstream lifecycle) and calls the
+provisioner; the provisioner drives `helm upgrade --install <slug> /charts/store`
+into namespace store-<slug> with a bounded-concurrency semaphore, derives
+readiness FROM THE CLUSTER (WordPress AND woo-mcp Deployments Available +
+release deployed), labels namespaces urumi.io/managed-by=provisioner (code-level
+adoption resistance; RBAC cannot filter namespaces by label), and reconciles
+in-flight stores after restarts (deleting label FIRST, then uninstall, so a
+crash mid-teardown resumes DELETING instead of resurrecting the store). Store
+tool names are <slug>__* (internal Server rows, slug == store slug). WooCommerce
+keys live ONLY in the store namespace (the wp-setup hook writes them there; the
+gateway never sees them). Flag provisioner.enabled defaults FALSE (base+prod),
+true only in values-local; stores.maxConcurrent=1 locally (2-core kind node
+cannot fit two simultaneous wp-setup hooks; documented, brief-sanctioned).
+
+**Live proof on kind (all commands + output in BUILD_LOG):** two stores
+provisioned end-to-end (create -> Provisioning -> Ready, woo-mcp Connected,
+<slug>__ tools via MCP tools/list and tools/call), NetworkPolicy isolation
+proven 5/5 (own services reachable, cross-store mariadb+wordpress blocked from
+woo-mcp AND wordpress pods), recovery proven (provisioner force-killed
+mid-provision; reconcile resumed; store reached Ready), chat agent compared
+today's orders across two stores via a STUB LLM with audit rows under the real
+tool names, teardown verified complete (namespace, rows, registrations, tools,
+PVs).
+
+**Hard-won lessons (each verified live):**
+- wp-setup (post-install hook) creates the woo-secrets Secret woo-mcp needs to
+  START, so installs run WITHOUT --wait/--atomic (the main chart's documented
+  gotcha); readiness is cluster-derived (WP AND woo-mcp Available).
+- helm --timeout applies to HOOK jobs even without --wait: wp-setup needs up to
+  ~13 min on the loaded node; helm's 5m default failed post-install hooks that
+  were still succeeding. provisioner.helmTimeout now wires it (1140s local).
+- The advisory-lock SELECT broke alembic commits (ADR-061, fixed).
+- helm --force cannot replace bound PVCs (immutable spec): redrive (release
+  not deployed) uninstalls first (PVCs keep-annotated survive), then
+  reinstalls.
+- The provisioning budget is PER ATTEMPT: a retry resets the namespace
+  created-at clock (otherwise an old clock insta-fails healthy retries).
+- The DELETING label goes on FIRST (a crash mid-teardown must resume deleting,
+  not resurrect the store).
+- A queued task (waiting on the concurrency gate) reports "provisioning", not
+  "gone" (no false Failed while waiting its turn).
+- The store chart needs the wp-setup -> WordPress ingress rule (the main chart
+  allows same-namespace pods; the store copy missed it) and the API-server
+  egress BOTH on the service CIDR (10.96.0.0/12) and the node CIDR (ClusterIP
+  traffic is DNAT-ed to a node IP) - otherwise the hook cannot write
+  woo-secrets and silently degrades.
+- helm renders values.yaml ints >= 1e6 as float64 scientific notation
+  (5.24288e+06): the store chart's IMAGE_MAX_BYTES now goes through `int`.
+- The store chart MUST use the main release's resolved image repos (values-local
+  rewrites repos to node-local urumi/...): the chart forwards them as env and
+  the provisioner --sets them into the store release.
+- The 2-core kind node fits ONE store provisioning at a time next to the full
+  main stack (maxConcurrent=1 locally; smaller per-store requests; the brief
+  sanctions this on a laptop).
+
+**Known trade-offs.** The provisioner holds a cluster-scoped ClusterRole (RBAC
+cannot filter namespaces by label; the code-level managed-label guard is the
+mitigation, THREAT_MODEL documents the residual). Store provisioning is slow on
+a laptop (wp-setup ~5-13 min); budgets are generous locally (1200s). The store
+chart is a manual port of the main chart's store components - drift is
+possible; the images are forwarded so they always match.

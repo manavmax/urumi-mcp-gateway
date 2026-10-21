@@ -61,3 +61,6 @@ design/mockups/png/
 # Logs & tmp
 *.log
 /tmp/
+
+# Phase 5: transient store-chart staging for the provisioner image build
+src/provisioner/chart/

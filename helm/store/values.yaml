@@ -1,0 +1,122 @@
+# One Urumi store (Phase 5, ADR-060). Installed by the provisioner as release
+# <slug> into namespace store-<slug> with `helm upgrade --install <slug>
+# /charts/store -n store-<slug> --set ingress.hosts.store=<slug>.<baseDomain>`.
+# Same structure as the main chart's store components so the two stay in sync;
+# sizes are small because kind runs on a laptop (stores.maxConcurrent=2).
+
+global:
+  # set by the provisioner with --set global.ingressClass / global.storageClass
+  # taken from the MAIN release's values at deploy time.
+  ingressClass: nginx
+  storageClass: standard
+  tlsEnabled: false
+  nodeCIDR: 172.18.0.0/16
+
+imagePullSecrets: []
+
+ingress:
+  enabled: true
+  annotations: {}
+  hosts:
+    # ALWAYS set by the provisioner: <slug>.<stores.baseDomain>
+    store: store.example.invalid
+  tls: []
+
+podSecurity:
+  workloads:
+    wooMcp:    { runAsUser: 1000, runAsGroup: 1000, readOnlyRootFilesystem: true }
+    mariadb:   { runAsUser: 999,  runAsGroup: 999,  readOnlyRootFilesystem: false, fsGroup: 999 }
+    wordpress: { runAsUser: 33,   runAsGroup: 33,   readOnlyRootFilesystem: false, fsGroup: 33 }
+    wpSetup:   { runAsUser: 33,   runAsGroup: 33,   readOnlyRootFilesystem: false, fsGroup: 33 }
+    storeAssets: { runAsUser: 33,  runAsGroup: 33,   readOnlyRootFilesystem: true }
+    util:      { runAsUser: 1000, runAsGroup: 1000, readOnlyRootFilesystem: true }
+
+wordpress:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/urumi/wordpress
+    tag: 6.6-php8.2-apache-hardened
+    pullPolicy: IfNotPresent
+  containerPort: 8080
+  service:
+    port: 80
+  resources:
+    # requests are EXPLICIT and small: the namespace LimitRange would otherwise
+    # default a missing request up to the limit (300m+ scheduled per store and
+    # the 2-core kind node cannot fit two stores)
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: 400m, memory: 384Mi }
+  persistence:
+    enabled: true
+    size: 1Gi
+
+storeAssets:
+  enabled: true
+  image: { repository: ghcr.io/urumi/store-assets, tag: "0.1.0", pullPolicy: IfNotPresent }
+
+mariadb:
+  enabled: true
+  image:
+    repository: mariadb
+    tag: "11.4"
+    pullPolicy: IfNotPresent
+  port: 3306
+  database: wordpress
+  user: wordpress
+  storage:
+    size: 1Gi
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: 400m, memory: 384Mi }
+
+wooMcp:
+  enabled: true
+  image: { repository: ghcr.io/urumi/woo-mcp, tag: "0.1.0", pullPolicy: IfNotPresent }
+  port: 8000
+  imageMaxBytes: 5242880
+  resources:
+    requests: { cpu: 30m, memory: 96Mi }
+    limits: { cpu: 200m, memory: 192Mi }
+
+wpSetup:
+  enabled: true
+  image:
+    repository: ghcr.io/urumi/wp-cli
+    tag: cli-php8.2-hardened
+    pullPolicy: IfNotPresent
+  adminUser: admin
+  existingAdminSecret: ""
+  adminEmail: admin@example.com
+  title: "Urumi Store"
+  wooVersion: "9.4.2"
+  cod:
+    enabled: true
+    title: "Cash on delivery"
+    description: "Pay with cash upon delivery."
+    instructions: "Pay with cash upon delivery."
+  seedForce: "0"
+  resources:
+    # explicit CPU request: without it the pod effectively schedules at its
+    # 300m limit (quota accounting) and cannot fit the node next to the other
+    # store pods
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 300m, memory: 512Mi }
+
+# Per-store namespace guard rails (Phase 5 brief): the ResourceQuota caps what
+# the whole store namespace may take; the LimitRange gives defaults so any
+# future workload lands bounded.
+quota:
+  requestsCpu: "1"
+  requestsMemory: 1Gi
+  limitsCpu: "2"
+  limitsMemory: 2Gi
+  pvcTotal: 4Gi
+  pods: 12
+
+nameOverride: ""
+fullnameOverride: ""
+
+# The namespace the GATEWAY runs in (the store's woo-mcp accepts ingress only
+# from those pods). The provisioner sets this from its own environment.
+gatewayNamespace: urumi

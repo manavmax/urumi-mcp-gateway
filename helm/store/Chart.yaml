@@ -1,0 +1,11 @@
+apiVersion: v2
+name: urumi-store
+description: |
+  One Urumi storefront (WordPress + WooCommerce + MariaDB + woo-mcp), installed
+  by the provisioner ONCE PER STORE into namespace store-<slug> (Phase 5,
+  ADR-060). A trimmed port of the main chart's store components: same images,
+  same hardened shapes, same wp-setup hook - smaller PVCs/quotas for a laptop
+  node, per-store NetworkPolicies, and an Ingress host <slug>.<baseDomain>.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

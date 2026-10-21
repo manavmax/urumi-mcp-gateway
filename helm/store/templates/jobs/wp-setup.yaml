@@ -1,0 +1,884 @@
+{{- if .Values.wpSetup.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "urumi.fullname" . }}-wp-setup
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: wp-setup
+# The ONLY ServiceAccount in the chart that automounts a token (ADR-042): this
+# hook job PROVES an API-server need - it reads the namespace + token to write
+# the generated Woo CK/CS into the woo-secrets Secret through the K8s API (grep
+# the args for "kubernetes.default.svc"; with no token the job degrades to
+# printing a manual kubectl command instead of failing). The Role below grants
+# exactly secrets get/create/patch/update in this namespace, nothing else.
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "urumi.fullname" . }}-wp-setup
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: wp-setup
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "urumi.fullname" . }}-wp-setup
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: wp-setup
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "urumi.fullname" . }}-wp-setup
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "urumi.fullname" . }}-wp-setup
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "urumi.fullname" . }}-wp-setup
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: wp-setup
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: wp-setup
+        app.kubernetes.io/name: {{ include "urumi.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-wp-setup
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
+      # Never => failed pods persist for log inspection (setups are debuggable)
+      restartPolicy: Never
+      # Hardening (ADR-043): the whole job runs as www-data (uid 33) with ALL
+      # capabilities dropped; pod fsGroup 33 makes the shared wp-content PVC
+      # group-writable. The hardened wp-cli image (src/wp-cli) owns /var/www/html
+      # so wp-config.php creation still works without root.
+      {{- include "urumi.podSecurityContext" (dict "root" $ "workload" "wpSetup") | nindent 6 }}
+      initContainers:
+        - name: wait-for-mariadb
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z {{ include "urumi.fullname" . }}-mariadb {{ .Values.mariadb.port }}; do echo waiting for mariadb; sleep 2; done; echo mariadb ready"]
+          securityContext:
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "util") | nindent 12 }}
+        - name: wait-for-wordpress
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for WordPress HTTP (static asset, avoids PHP-fatal deadlock)..."
+              for i in $(seq 1 120); do
+                if wget -qO- http://{{ include "urumi.fullname" . }}-wordpress:{{ .Values.wordpress.service.port | default 80 }}/readme.html >/dev/null 2>&1; then
+                  echo "WordPress HTTP ready"
+                  exit 0
+                fi
+                echo "  retry $i/120..."; sleep 3
+              done
+              echo "WordPress HTTP not ready in time" >&2
+              exit 1
+          securityContext:
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "util") | nindent 12 }}
+      containers:
+        - name: wp-setup
+          image: "{{ .Values.wpSetup.image.repository }}:{{ .Values.wpSetup.image.tag }}"
+          imagePullPolicy: {{ .Values.wpSetup.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # NOTE: image shell is dash => `set -o pipefail` unsupported
+              set -eu
+              WP_PATH=/var/www/html
+              STORE_HOST={{ .Values.ingress.hosts.store | quote }}
+              STORE_URL="http://$STORE_HOST"
+              ADMIN_USER={{ .Values.wpSetup.adminUser | quote }}
+              ADMIN_EMAIL={{ .Values.wpSetup.adminEmail | quote }}
+              RELEASE_NS={{ .Release.Namespace | quote }}
+              FULLNAME={{ include "urumi.fullname" . | quote }}
+              # Pin WP core to the same major.minor as the WordPress image (e.g. 6.6)
+              WP_IMAGE_TAG={{ .Values.wordpress.image.tag | quote }}
+              WP_CORE_VERSION=$(echo "$WP_IMAGE_TAG" | sed 's/-.*//')
+              echo "=== WP setup: STORE_URL=$STORE_URL NS=$RELEASE_NS core=$WP_CORE_VERSION ==="
+              wp --allow-root --version
+
+              # --- Pre-boot safety: drop an incompatible WooCommerce before any wp command ---
+              # (a too-new plugin fatals during WP bootstrap, which also breaks wp-cli boot)
+              WOO_WANT={{ .Values.wpSetup.wooVersion | quote }}
+              WOO_DIR="$WP_PATH/wp-content/plugins/woocommerce"
+              if [ -d "$WOO_DIR" ]; then
+                WOO_HAVE=$(sed -n 's/^ \* Version:[[:space:]]*//p' "$WOO_DIR/woocommerce.php" 2>/dev/null | head -n1 | tr -d '\r')
+                echo "Installed WooCommerce: '${WOO_HAVE:-unknown}' want '$WOO_WANT'"
+                if [ "${WOO_HAVE:-unknown}" != "$WOO_WANT" ]; then
+                  echo "Removing incompatible WooCommerce ${WOO_HAVE:-unknown}..."
+                  rm -rf "$WOO_DIR"
+                fi
+              fi
+
+              # --- Bring up a standalone WP install for CLI to work against ---
+              # wp-content/ (plugins/themes/uploads) is a shared PVC with the WordPress pod,
+              # and the DB is shared too, so install/seed actions here apply to the live site.
+              # Core is BAKED into the image (/var/www/wordpress-core, checksum-verified at
+              # build): copied, never downloaded (prod-readiness: no runtime internet).
+              if ! wp core is-installed --allow-root --path=$WP_PATH 2>/dev/null; then
+                if [ ! -f "$WP_PATH/wp-load.php" ]; then
+                  echo "Copying baked WordPress core ${WP_CORE_VERSION} into $WP_PATH (no download)..."
+                  # cp -a preserves modes/symlinks but emits benign "can't preserve
+                  # ownership" noise on the fsGroup volume (non-root copy; files still
+                  # land owned by www-data). Filter only those exact lines so real
+                  # errors still surface. `cp -a` returns 0 here (ownership warnings
+                  # are non-fatal), so the copy cannot fail the job on noise.
+                  cp -a /var/www/wordpress-core/. "$WP_PATH/" 2> >(grep -v "can't preserve ownership" >&2)
+                fi
+                if [ ! -f "$WP_PATH/wp-config.php" ]; then
+                  echo "Creating wp-config.php..."
+                  wp config create \
+                    --dbname="${WORDPRESS_DB_NAME}" \
+                    --dbuser="${WORDPRESS_DB_USER}" \
+                    --dbpass="${WORDPRESS_DB_PASSWORD}" \
+                    --dbhost="${WORDPRESS_DB_HOST}" \
+                    --allow-root --path=$WP_PATH --skip-check
+                fi
+              fi
+
+              # --- Install WP (retry: DB may still be initializing) ---
+              if ! wp core is-installed --allow-root --path=$WP_PATH 2>/dev/null; then
+                echo "Attempting wp core install..."
+                for i in $(seq 1 30); do
+                  if wp core install --allow-root --path=$WP_PATH \
+                    --url="$STORE_URL" \
+                    --title={{ .Values.wpSetup.title | quote }} \
+                    --admin_user="$ADMIN_USER" \
+                    --admin_password="$WORDPRESS_ADMIN_PASSWORD" \
+                    --admin_email="$ADMIN_EMAIL" 2>&1; then
+                    echo "WP core installed"
+                    break
+                  fi
+                  echo "  install retry $i/30..."
+                  sleep 5
+                done
+              fi
+              wp core is-installed --allow-root --path=$WP_PATH
+              echo "WP installed verified."
+
+              # --- Keep admin credentials in sync with the Secret (source of truth) ---
+              # The password comes from the `wordpress-admin` Secret (or `existingAdminSecret`)
+              # as an env var, so this run can never drift from it the way a values-file
+              # default could. A recycled PVC can still hold an older password, hence the sync.
+              # NOTE: never echo the password, and there is deliberately no `set -x` here.
+              echo "Syncing admin user/password from the chart Secret..."
+              wp user get "$ADMIN_USER" --allow-root --path=$WP_PATH >/dev/null 2>&1 || \
+                wp user create "$ADMIN_USER" "$ADMIN_EMAIL" --role=administrator --user_pass="$WORDPRESS_ADMIN_PASSWORD" --allow-root --path=$WP_PATH
+              wp user update "$ADMIN_USER" --user_pass="$WORDPRESS_ADMIN_PASSWORD" --allow-root --path=$WP_PATH
+              echo "Admin credentials synced (password taken from the Secret, never logged)."
+
+              # --- WooCommerce (pinned version for WP/PHP parity) ---
+              # The pinned zip is BAKED into the image (sha256 verified at build);
+              # installs come from the local zip - wordpress.org is never contacted.
+              echo "Ensuring WooCommerce ${WOO_WANT} (from the baked zip, no download)..."
+              WOO_ZIP=/var/www/woocommerce.zip
+              if ! wp plugin is-installed woocommerce --allow-root --path=$WP_PATH 2>/dev/null; then
+                echo "  installing woocommerce ${WOO_WANT} from baked zip..."
+                wp plugin install "$WOO_ZIP" --activate --force --allow-root --path=$WP_PATH
+              else
+                WOO_ACTIVE=$(wp plugin get woocommerce --allow-root --path=$WP_PATH --field=version 2>/dev/null || echo unknown)
+                if [ "${WOO_ACTIVE:-unknown}" != "$WOO_WANT" ]; then
+                  echo "  wrong WooCommerce ${WOO_ACTIVE:-unknown}: replacing with baked ${WOO_WANT}..."
+                  rm -rf "$WP_PATH/wp-content/plugins/woocommerce"
+                  wp plugin install "$WOO_ZIP" --activate --force --allow-root --path=$WP_PATH
+                else
+                  wp plugin activate woocommerce --allow-root --path=$WP_PATH || true
+                fi
+              fi
+              echo "WooCommerce version:"
+              wp plugin get woocommerce --allow-root --path=$WP_PATH --field=version 2>/dev/null || true
+
+              # --- MU plugin: allow Woo REST Basic auth on plain-HTTP internal calls ---
+              # WooCommerce performs Basic auth only when is_ssl() is true. Cluster-internal
+              # callers (the Woo MCP server, ingress) reach the store over plain HTTP, so for
+              # /wp-json/ requests only we mark the request as SSL. With TLS on the public
+              # Ingress this is equivalent; it never affects storefront URLs.
+              echo "Installing internal REST mu-plugin..."
+              mkdir -p "$WP_PATH/wp-content/mu-plugins"
+              cat > "$WP_PATH/wp-content/mu-plugins/urumi-internal-rest.php" <<'PHP_EOF'
+              <?php
+              /**
+               * Plugin Name: Urumi - Internal REST Basic Auth over HTTP
+               * Description: WooCommerce only performs consumer key/secret Basic auth when
+               *              is_ssl() is true. In-cluster callers reach the store over plain
+               *              HTTP, so mark only /wp-json/ REST requests as SSL. In production
+               *              (TLS via Ingress) this is equivalent and a no-op for storefront.
+               */
+              if ( ! defined( 'ABSPATH' ) ) { exit; }
+              add_action( 'plugins_loaded', function () {
+                  $path = isset( $_SERVER['REQUEST_URI'] ) ? wp_parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH ) : '';
+                  if ( 0 === strpos( (string) $path, '/wp-json/' ) ) {
+                      $_SERVER['HTTPS'] = 'on';
+                      $_SERVER['SERVER_PORT'] = 443;
+                  }
+              }, 0 );
+              PHP_EOF
+              echo "mu-plugin installed."
+
+              echo "Installing product image sideload mu-plugin..."
+              cat > "$WP_PATH/wp-content/mu-plugins/urumi-image-upload.php" <<'PHP_EOF'
+              <?php
+              /**
+               * Plugin Name: Urumi - Product image sideload route
+               * Description: POST /wp-json/urumi/v1/media accepts {filename, image_base64} and
+               *              sideloads the bytes into the media library (media_handle_sideload).
+               *              Auth reuses the EXISTING WooCommerce consumer key/secret Basic pair:
+               *              WooCommerce's REST auth only processes its wc/* namespaces, so this
+               *              route authenticates the Basic pair itself on determine_current_user
+               *              (priority 10, BEFORE WordPress' application-password gate) with the
+               *              exact scheme WooCommerce stores keys under (wc_api_hash of the key,
+               *              hash_equals on the secret), rejects read-only keys for POST, binds
+               *              the request to the key's user, and enforces an upload_files
+               *              capability check. No new credential (docs/DECISIONS.md ADR-035).
+               *              There is deliberately NO delete route (no delete tools, ever).
+               */
+
+              if ( ! defined( 'ABSPATH' ) ) { exit; }
+
+              define( 'URUMI_IMAGE_MAX_BYTES', 5 * 1024 * 1024 ); // mirrors the gateway's 5 MB cap
+
+              add_action( 'rest_api_init', function () {
+                  register_rest_route( 'urumi/v1', '/media', array(
+                      'methods'             => 'POST',
+                      'permission_callback' => 'urumi_media_upload_permission',
+                      'callback'            => 'urumi_media_upload_handler',
+                  ) );
+              } );
+
+              // Authenticate the Woo consumer key BEFORE WP core's application-password gate:
+              // a Basic "ck_..." header is not a WP username, and with the internal-rest
+              // mu-plugin marking REST as HTTPS, WordPress would otherwise try to authenticate
+              // it as an application password and fail the request with invalid_username.
+              add_filter( 'determine_current_user', 'urumi_media_determine_user', 10 );
+
+              function urumi_media_determine_user( $user_id ) {
+                  if ( $user_id || ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
+                      return $user_id;
+                  }
+                  $path = isset( $_SERVER['REQUEST_URI'] ) ? wp_parse_url( $_SERVER['REQUEST_URI'], PHP_URL_PATH ) : '';
+                  if ( 0 !== strpos( (string) $path, '/wp-json/urumi/' ) ) {
+                      return $user_id; // only our routes: ck/cs never authenticates anything else
+                  }
+                  return urumi_media_auth_user_id();
+              }
+
+              function urumi_media_auth_user_id() {
+                  $ck = isset( $_SERVER['PHP_AUTH_USER'] ) ? wp_unslash( $_SERVER['PHP_AUTH_USER'] ) : '';
+                  $cs = isset( $_SERVER['PHP_AUTH_PW'] ) ? wp_unslash( $_SERVER['PHP_AUTH_PW'] ) : '';
+                  if ( '' === $ck && ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+                      // Only ever decode a Basic scheme header (case-insensitive); anything
+                      // else (Bearer, Digest, ...) is ignored, never base64-decoded.
+                      if ( 0 === stripos( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], 'Basic ' ) ) {
+                          $decoded = base64_decode( substr( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], 6 ), true );
+                          if ( false !== $decoded && false !== strpos( $decoded, ':' ) ) {
+                              list( $ck, $cs ) = explode( ':', $decoded, 2 );
+                          }
+                      }
+                  }
+                  if ( '' === $ck || '' === $cs || 0 !== strpos( $ck, 'ck_' ) ) {
+                      return 0;
+                  }
+
+                  global $wpdb;
+                  $row = $wpdb->get_row(
+                      $wpdb->prepare(
+                          "SELECT consumer_secret, permissions, user_id FROM {$wpdb->prefix}woocommerce_api_keys WHERE consumer_key = %s LIMIT 1",
+                          function_exists( 'wc_api_hash' ) ? wc_api_hash( $ck ) : hash_hmac( 'sha256', $ck, 'wc-api' )
+                      )
+                  );
+                  if ( ! $row || ! hash_equals( (string) $row->consumer_secret, $cs ) ) {
+                      return 0;
+                  }
+                  if ( 'write' !== $row->permissions && 'read_write' !== $row->permissions ) {
+                      return 0; // a read-only key must never upload
+                  }
+                  if ( ! $row->user_id ) {
+                      return 0; // a key not bound to a user cannot carry the capability
+                  }
+                  wp_set_current_user( (int) $row->user_id );
+                  return (int) $row->user_id;
+              }
+
+              function urumi_media_upload_permission() {
+                  // Cluster-internal only: ingress-nginx ALWAYS adds X-Forwarded-For and
+                  // X-Real-IP, so a request carrying either proves it came through the
+                  // public Ingress. The woo-mcp in-cluster call adds neither header.
+                  if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) || ! empty( $_SERVER['HTTP_X_REAL_IP'] ) ) {
+                      return new WP_Error( 'urumi_media_ingress', 'forbidden', array( 'status' => 403 ) );
+                  }
+                  // determine_current_user (priority 10) has already authenticated the existing
+                  // woo-secrets Basic pair; the permission callback enforces the capability. A
+                  // read-only key is rejected during auth (it never sets a user), so POST with a
+                  // read-only key cannot pass either.
+                  if ( ! is_user_logged_in() ) {
+                      return new WP_Error( 'urumi_media_auth', 'valid read/write consumer key required', array( 'status' => 401 ) );
+                  }
+                  if ( ! current_user_can( 'upload_files' ) ) {
+                      return new WP_Error( 'urumi_media_forbidden', 'capability denied', array( 'status' => 403 ) );
+                  }
+                  return true;
+              }
+
+              function urumi_media_upload_handler( WP_REST_Request $request ) {
+                  $b64 = (string) $request->get_param( 'image_base64' );
+                  if ( '' === $b64 ) {
+                      return new WP_Error( 'urumi_media_empty', 'image_base64 required', array( 'status' => 400 ) );
+                  }
+                  $bin = base64_decode( $b64, true );
+                  if ( false === $bin || '' === $bin ) {
+                      return new WP_Error( 'urumi_media_invalid', 'image_base64 is not valid base64', array( 'status' => 400 ) );
+                  }
+                  if ( strlen( $bin ) > URUMI_IMAGE_MAX_BYTES ) {
+                      return new WP_Error( 'urumi_media_too_large', 'image exceeds the 5 MB cap', array( 'status' => 413 ) );
+                  }
+
+                  if ( ! function_exists( 'media_handle_sideload' ) ) {
+                      require_once ABSPATH . 'wp-admin/includes/file.php';
+                      require_once ABSPATH . 'wp-admin/includes/image.php';
+                      require_once ABSPATH . 'wp-admin/includes/media.php';
+                  }
+
+                  // Magic bytes only: getimagesize() decodes the real header, ignoring the
+                  // client's claimed type/extension. WordPress' own media handling re-checks
+                  // against the allowed mime types as a second layer (SVG is not an allowed
+                  // upload type by default, so it cannot pass either layer).
+                  $tmp = wp_tempnam( 'urumi-upload' );
+                  if ( ! $tmp ) {
+                      return new WP_Error( 'urumi_media_tmp', 'cannot create temp file', array( 'status' => 500 ) );
+                  }
+                  file_put_contents( $tmp, $bin );
+                  $info = @getimagesize( $tmp );
+                  $mime = is_array( $info ) && ! empty( $info['mime'] ) ? $info['mime'] : '';
+                  if ( ! in_array( $mime, array( 'image/png', 'image/jpeg', 'image/webp' ), true ) ) {
+                      wp_delete_file( $tmp );
+                      return new WP_Error( 'urumi_media_type', 'only png, jpeg and webp are accepted', array( 'status' => 415 ) );
+                  }
+
+                  // Stored name is GENERATED here; the caller's filename is never used as-is.
+                  $ext  = array( 'image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp' )[ $mime ];
+                  $name = sanitize_file_name( 'urumi-' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 8, false ) . '.' . $ext );
+                  $att_id = media_handle_sideload( array( 'name' => $name, 'tmp_name' => $tmp ), 0 );
+                  if ( is_wp_error( $att_id ) ) {
+                      wp_delete_file( $tmp );
+                      // Generic client message; the WP error detail is server-side only.
+                      error_log( 'urumi media sideload failed: ' . $att_id->get_error_message() );
+                      return new WP_Error( 'urumi_media_sideload', 'media sideload failed', array( 'status' => 502 ) );
+                  }
+
+                  return rest_ensure_response(
+                      array(
+                          'id'   => (int) $att_id,
+                          'url'  => wp_get_attachment_url( $att_id ),
+                          'mime' => get_post_field( 'post_mime_type', $att_id ),
+                      )
+                  );
+              }
+              PHP_EOF
+              echo "image mu-plugin installed."
+
+              echo "Installing Woo pages..."
+              wp wc tool run install_pages --user="$ADMIN_USER" --allow-root --path=$WP_PATH || true
+
+              # --- Cash on delivery: write the COMPLETE gateway settings ---
+              # Hand-writing a partial option (only enabled/title/description/instructions)
+              # is NOT a shape WooCommerce ever produces: a Settings > Payments save writes
+              # every field of the gateway form (incl. enable_for_methods/enable_for_virtual),
+              # and WC_Gateway_COD::is_available() reads those keys directly. So we build
+              # the option from the gateway's own form_fields defaults via WC_Payment_Gateways
+              # and override only what we want — byte-identical to an admin save.
+              echo "Enabling Cash on delivery gateway..."
+              cat > /tmp/enable_cod.php <<'PHP_EOF'
+              <?php
+              if ( ! function_exists( 'WC' ) || ! WC()->payment_gateways ) {
+                  fwrite( STDERR, "WooCommerce payment gateways unavailable\n" );
+                  exit( 1 );
+              }
+              $gateways = WC()->payment_gateways->payment_gateways();
+              $gateway  = isset( $gateways['cod'] ) ? $gateways['cod'] : null;
+              if ( ! $gateway ) {
+                  fwrite( STDERR, "COD gateway not registered\n" );
+                  exit( 1 );
+              }
+              $settings = array();
+              foreach ( $gateway->form_fields as $key => $field ) {
+                  $settings[ $key ] = isset( $field['default'] ) ? $field['default'] : '';
+              }
+              $settings['enabled']      = getenv( 'COD_ENABLED' ) === 'no' ? 'no' : 'yes';
+              $settings['title']        = getenv( 'COD_TITLE' ) ?: 'Cash on delivery';
+              $settings['description']  = getenv( 'COD_DESCRIPTION' ) ?: '';
+              $settings['instructions'] = getenv( 'COD_INSTRUCTIONS' ) ?: '';
+              update_option( 'woocommerce_cod_settings', $settings );
+
+              $stored = get_option( 'woocommerce_cod_settings' );
+              if ( ! is_array( $stored ) ) {
+                  fwrite( STDERR, "woocommerce_cod_settings is not an array after write\n" );
+                  exit( 1 );
+              }
+              fwrite( STDOUT, "cod keys: " . implode( ', ', array_keys( $stored ) ) . "\n" );
+              fwrite( STDOUT, "cod enabled: " . ( isset( $stored['enabled'] ) ? $stored['enabled'] : 'MISSING' ) . "\n" );
+              fwrite( STDOUT, "cod enable_for_virtual: " . ( isset( $stored['enable_for_virtual'] ) ? $stored['enable_for_virtual'] : 'MISSING' ) . "\n" );
+              fwrite( STDOUT, "cod enable_for_methods: " . ( isset( $stored['enable_for_methods'] ) ? json_encode( $stored['enable_for_methods'] ) : 'MISSING' ) . "\n" );
+              PHP_EOF
+              wp eval-file /tmp/enable_cod.php --allow-root --path=$WP_PATH
+
+              # Permalinks for REST friendliness
+              echo "Setting permalinks..."
+              wp rewrite structure '/%postname%/' --hard --allow-root --path=$WP_PATH || true
+              wp rewrite flush --hard --allow-root --path=$WP_PATH || true
+
+              # --- Seed products BY SKU from store/products.json (idempotent) ---
+              # products.json is the single source of truth (copied to wp-content/store
+              # by the store-assets initContainer). The PHP helper creates missing
+              # products, attaches the image and sets the category; on a re-run existing
+              # products are never duplicated and admin edits are never overwritten
+              # unless STORE_SEED_FORCE=1. Orders and customers are never touched.
+              echo "Seeding products by SKU from store/products.json..."
+              cat > /tmp/seed_products.php <<'PHP_EOF'
+              <?php
+              if ( ! function_exists( 'WC' ) || ! WC()->product_factory ) {
+                  fwrite( STDERR, "WooCommerce not loaded\n" );
+                  exit( 1 );
+              }
+              require_once ABSPATH . 'wp-admin/includes/file.php';
+              require_once ABSPATH . 'wp-admin/includes/image.php';
+              require_once ABSPATH . 'wp-admin/includes/media.php';
+
+              $data_path = getenv( 'STORE_PRODUCTS' ) ?: WP_CONTENT_DIR . '/store/products.json';
+              $img_dir   = getenv( 'STORE_IMAGES' ) ?: WP_CONTENT_DIR . '/store/images';
+              $force     = getenv( 'STORE_SEED_FORCE' ) === '1';
+              $raw       = file_get_contents( $data_path );
+              $data      = $raw ? json_decode( $raw, true ) : null;
+              if ( ! is_array( $data ) || empty( $data['products'] ) ) {
+                  fwrite( STDERR, "no products in $data_path\n" );
+                  exit( 2 );
+              }
+
+              // Ensure the four category terms exist (Apparel, Home, Accessories, Stationery).
+              $cat_by_name = array();
+              foreach ( ( $data['categories'] ?? array() ) as $c ) {
+                  $name = (string) ( $c['name'] ?? '' );
+                  if ( '' === $name ) { continue; }
+                  $slug = sanitize_title( $name );
+                  $term = term_exists( $slug, 'product_cat' );
+                  if ( ! $term ) {
+                      $term = wp_insert_term( $name, 'product_cat', array( 'slug' => $slug ) );
+                  }
+                  if ( ! is_wp_error( $term ) ) {
+                      $cat_by_name[ $name ] = is_array( $term ) ? (int) $term['term_id'] : (int) $term;
+                  }
+              }
+
+              $attach_image = function ( $pid, $p ) use ( $img_dir ) {
+                  $name = (string) ( $p['image'] ?? ( $p['sku'] . '.png' ) );
+                  $file = $img_dir . '/' . basename( $name );
+                  if ( ! is_file( $file ) ) {
+                      echo "  no image file for " . $p['sku'] . " ($file)\n";
+                      return;
+                  }
+                  $tmp = wp_tempnam( 'urumi-seed' );
+                  if ( ! $tmp || ! copy( $file, $tmp ) ) {
+                      echo "  temp copy failed for " . $p['sku'] . "\n";
+                      return;
+                  }
+                  $att_id = media_handle_sideload( array( 'name' => sanitize_file_name( $name ), 'tmp_name' => $tmp ), 0 );
+                  if ( is_wp_error( $att_id ) ) {
+                      echo "  image sideload failed for " . $p['sku'] . ": " . $att_id->get_error_message() . "\n";
+                      @unlink( $tmp );
+                      return;
+                  }
+                  set_post_thumbnail( $pid, (int) $att_id );
+                  update_post_meta( (int) $att_id, '_wp_attachment_image_alt', (string) ( $p['alt'] ?? $p['name'] ) );
+                  echo "  attached image " . $name . " to " . $p['sku'] . "\n";
+              };
+
+              $created = 0; $kept = 0; $updated = 0; $imaged = 0;
+              foreach ( $data['products'] as $p ) {
+                  $sku    = (string) ( $p['sku'] ?? '' );
+                  $is_new = ! empty( $p['new'] );
+                  if ( '' === $sku ) { continue; }
+
+                  $pid = wc_get_product_id_by_sku( $sku );
+                  if ( $pid ) {
+                      $product = wc_get_product( $pid );
+                      if ( $force ) {
+                          $product->set_name( (string) ( $p['name'] ?? $product->get_name() ) );
+                          $product->set_regular_price( (string) ( $p['price'] ?? $product->get_regular_price() ) );
+                          $product->set_description( (string) ( $p['description'] ?? '' ) );
+                          $product->set_short_description( (string) ( $p['short_description'] ?? '' ) );
+                          $product->set_status( 'publish' );
+                          $product->set_manage_stock( false );
+                          $product->set_stock_status( 'instock' );
+                          $product->set_featured( $is_new );
+                          $product->save();
+                          // Force also re-attaches the catalog image (the previous
+                          // attachment is left as orphan media for the media reset).
+                          $attach_image( $pid, $p );
+                          $imaged++;
+                          // Force sets the category exactly (replaces leftovers like
+                          // Uncategorized from older seeds).
+                          if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
+                              wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', false );
+                          }
+                          $updated++;
+                      } else {
+                          $kept++; // admin edits stay; only missing bits are backfilled below
+                      }
+                      // Non-destructive backfill: image and category when missing.
+                      if ( ! $product->get_image_id() ) {
+                          $attach_image( $pid, $p );
+                          $imaged++;
+                      }
+                      if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
+                          $cats = wp_get_object_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) );
+                          if ( is_wp_error( $cats ) || ! in_array( $cat_by_name[ $p['category'] ], (array) $cats, true ) ) {
+                              // append=true on a plain re-run (never disturbs admin categories);
+                              // below, force replaces the terms exactly.
+                              wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', true );
+                          }
+                      }
+                      continue;
+                  }
+
+                  $product = new WC_Product_Simple();
+                  $product->set_name( (string) ( $p['name'] ?? $sku ) );
+                  $product->set_sku( $sku );
+                  $product->set_regular_price( (string) ( $p['price'] ?? '0' ) );
+                  $product->set_description( (string) ( $p['description'] ?? '' ) );
+                  $product->set_short_description( (string) ( $p['short_description'] ?? '' ) );
+                  $product->set_status( 'publish' );
+                  $product->set_manage_stock( false );
+                  $product->set_stock_status( 'instock' );
+                  $product->set_featured( $is_new );
+                  $pid = $product->save();
+                  if ( ! $pid || is_wp_error( $pid ) ) {
+                      echo "  create failed for " . $sku . "\n";
+                      continue;
+                  }
+                  $created++;
+                  echo "  created " . $sku . " (" . ( $p['name'] ?? '' ) . ") PID=$pid\n";
+                  $attach_image( $pid, $p );
+                  $imaged++;
+                  if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
+                      wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', false );
+                  }
+              }
+
+              wc_update_product_lookup_tables();
+              echo "seed summary: created=$created kept=$kept updated=$updated images=$imaged (force=" . ( $force ? '1' : '0' ) . ")\n";
+              PHP_EOF
+              set +e
+              SEED_OUT=$(STORE_PRODUCTS=/var/www/html/wp-content/store/products.json \
+                          STORE_IMAGES=/var/www/html/wp-content/store/images \
+                          STORE_SEED_FORCE="$STORE_SEED_FORCE" \
+                          wp eval-file /tmp/seed_products.php --allow-root --path=$WP_PATH 2>&1)
+              SEED_RC=$?
+              set -e
+              echo "$SEED_OUT"
+              if [ $SEED_RC -ne 0 ]; then
+                echo "product seeding failed rc=$SEED_RC" >&2
+                exit 1
+              fi
+
+              wp wc tool run regenerate_product_lookup_tables --user="$ADMIN_USER" --allow-root --path=$WP_PATH || true
+
+              # --- Storefront configuration (idempotent) ---
+              echo "Activating urumi-store theme..."
+              wp theme activate urumi-store --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
+              if ! wp theme is-active urumi-store --allow-root --path=$WP_PATH >/dev/null 2>&1; then
+                echo "FATAL: urumi-store theme did not activate (is the theme in wp-content/themes?)" >&2
+                exit 1
+              fi
+              echo "Theme urumi-store active."
+
+              # Front page + posts page. The front-page.html template renders the hero.
+              echo "Ensuring front page and posts page..."
+              HOME_ID=$(wp post list --post_type=page --name=home --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)
+              if [ -z "$HOME_ID" ]; then
+                HOME_ID=$(wp post create --post_type=page --post_status=publish --post_title="Home" --post_name=home --post_content="" --porcelain --allow-root --path=$WP_PATH)
+              fi
+              POSTS_ID=$(wp post list --post_type=page --name=blog --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)
+              if [ -z "$POSTS_ID" ]; then
+                POSTS_ID=$(wp post create --post_type=page --post_status=publish --post_title="Blog" --post_name=blog --post_content="Journal posts live here." --porcelain --allow-root --path=$WP_PATH)
+              fi
+              wp option update show_on_front page --allow-root --path=$WP_PATH
+              wp option update page_on_front "$HOME_ID" --allow-root --path=$WP_PATH
+              wp option update page_for_posts "$POSTS_ID" --allow-root --path=$WP_PATH
+              echo "Front page set (id $HOME_ID), posts page set (id $POSTS_ID)."
+
+              # About + Shipping and returns pages (honest demo copy, created only if missing).
+              echo "Ensuring About page..."
+              if [ -z "$(wp post list --post_type=page --name=about --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)" ]; then
+                wp post create --post_type=page --post_status=publish --post_title="About" --post_name=about \
+                  --post_content="Urumi is a demo storefront built for a school project. We sell a small catalog of everyday goods. This store does not take payments online and does not ship real orders." \
+                  --allow-root --path=$WP_PATH
+                echo "  created About page."
+              fi
+              echo "Ensuring Shipping and returns page..."
+              if [ -z "$(wp post list --post_type=page --name=shipping-and-returns --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)" ]; then
+                wp post create --post_type=page --post_status=publish --post_title="Shipping and returns" --post_name=shipping-and-returns \
+                  --post_content="Shipping and returns\n\nPayment is cash on delivery only. There is no carrier integration, so delivery dates are illustrative and no real parcel is dispatched.\n\nReturns: contact us before sending anything back. Items must be unused and in their original packaging. Because this is a demo store, returns are not actually processed.\n\nThis storefront is a demo for a school project. Orders are not fulfilled and payment is not collected." \
+                  --allow-root --path=$WP_PATH
+                echo "  created Shipping and returns page."
+              fi
+
+              # Primary menu: Shop + the four categories, assigned to the `primary`
+              # location (registered in the theme's functions.php).
+              echo "Ensuring Primary menu..."
+              wp menu create "Primary" --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
+              MENU_ID=$(wp menu list --fields=term_id,name --format=csv --allow-root --path=$WP_PATH 2>/dev/null | grep ',Primary' | head -n1 | cut -d, -f1)
+              if [ -n "$MENU_ID" ]; then
+                for ITEM in "Shop|/shop/" "Apparel|/product-category/apparel/" "Home|/product-category/home/" "Accessories|/product-category/accessories/" "Stationery|/product-category/stationery/"; do
+                  TITLE="${ITEM%%|*}"; LINK="${ITEM#*|}"
+                  if ! wp menu item list "$MENU_ID" --format=json --allow-root --path=$WP_PATH 2>/dev/null | grep -q "$LINK"; then
+                    wp menu item add-custom "$MENU_ID" "$TITLE" "$LINK" --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
+                    echo "  menu item $TITLE added."
+                  fi
+                done
+                wp menu location assign "$MENU_ID" primary --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
+              fi
+              echo "Primary menu ready (menu id $MENU_ID)."
+
+              # WooCommerce store options: USD, COD default, reviews off, guest checkout.
+              echo "Setting WooCommerce store options..."
+              wp option update woocommerce_currency USD --allow-root --path=$WP_PATH
+              wp option update woocommerce_currency_pos left --allow-root --path=$WP_PATH
+              wp option update woocommerce_enable_reviews no --allow-root --path=$WP_PATH
+              wp option update woocommerce_enable_review_rating no --allow-root --path=$WP_PATH
+              wp option update woocommerce_enable_guest_checkout yes --allow-root --path=$WP_PATH
+              # show_avatars: the theme already filters option_show_avatars; the option
+              # write is belt and braces and wp-cli errors when the value is unchanged,
+              # so it must not be able to fail the whole job.
+              wp option update show_avatars 0 --allow-root --path=$WP_PATH || true
+              echo "WooCommerce store options set (USD, COD default, reviews off, guest checkout on)."
+
+              echo "Final product list:"
+              wp post list --post_type=product --format=table --allow-root --path=$WP_PATH | head -n 20
+              wp wc product list --user="$ADMIN_USER" --allow-root --path=$WP_PATH --format=table 2>&1 | head -n 20 || true
+
+              # --- Woo REST API keys (ck/cs) -> Secret woo-secrets ---
+              # This job is a post-install,post-upgrade hook, so it re-runs on every
+              # `helm upgrade`. It must be a NO-OP for credentials when they already work:
+              # rotating here would silently 401 every consumer that holds the previous
+              # key (the woo-mcp pod only reads its env at start, so it would keep the
+              # old key until it restarts). Rotation is an explicit act - delete the
+              # Secret and upgrade (docs/DECISIONS.md).
+              echo "Ensuring Woo Consumer Key/Secret..."
+              NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo "$RELEASE_NS")
+              TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || echo "")
+              CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              WOO_URL="http://${FULLNAME}-wordpress:{{ .Values.wordpress.service.port | default 80 }}"
+
+              # What does the Secret hold right now? (empty when it does not exist)
+              # NOTE: read through the Kubernetes API - this image has no kubectl, and a
+              # failing `kubectl get` would silently look like "no secret" and rotate.
+              secret_field() {
+                # $1 = secret name, $2 = key; prints the decoded value or nothing
+                [ -z "$TOKEN" ] && return 0
+                # the API pretty-prints, so strip newlines AND spaces before matching a
+                # compact "key":"value" pair (the base64 payload contains neither)
+                curl -s --cacert "$CACERT" -H "Authorization: Bearer $TOKEN" \
+                  "https://kubernetes.default.svc/api/v1/namespaces/$NAMESPACE/secrets/$1" \
+                  | tr -d '\n ' | grep -o "\"$2\":\"[A-Za-z0-9+/=]*\"" | head -n1 \
+                  | cut -d'"' -f4 | base64 -d 2>/dev/null
+              }
+
+              EXISTING_CK="$(secret_field woo-secrets WOO_CONSUMER_KEY)"
+              EXISTING_CS=""
+              [ -n "$EXISTING_CK" ] && EXISTING_CS="$(secret_field woo-secrets WOO_CONSUMER_SECRET)"
+              export WP_ADMIN_USER="$ADMIN_USER" EXISTING_CK EXISTING_CS
+              echo "Secret holds a keypair: $([ -n "$EXISTING_CK" ] && echo yes || echo no)"
+
+              # Reuse-or-generate. Woo only ever stores a HASH of the consumer key, so an
+              # existing key cannot be recovered from the DB: if the Secret is missing or
+              # stale we rotate, otherwise the key is left exactly as it is.
+              cat > /tmp/gen_keys.php <<'PHP_EOF'
+              <?php
+              global $wpdb;
+              $desc  = 'Urumi MCP';
+              $table = $wpdb->prefix . 'woocommerce_api_keys';
+              $hash  = function ($k) {
+                  return function_exists('wc_api_hash') ? wc_api_hash($k)
+                      : hash_hmac('sha256', $k, 'wc-api');
+              };
+
+              // Resolve the admin the same way the generate branch does. NOTE: this runs
+              // under WP-CLI, where get_current_user_id() is always 0, so it must never be
+              // used to identify the key owner (that check silently fails -> rotate).
+              $resolve_uid = function () {
+                  $login = getenv('WP_ADMIN_USER') ?: 'admin';
+                  $user  = get_user_by('login', $login);
+                  if (!$user) {
+                      $admins = get_users(array('role' => 'administrator', 'number' => 1));
+                      $user = $admins ? $admins[0] : null;
+                  }
+                  return $user ? (int) $user->ID : 1;
+              };
+              $uid = $resolve_uid();
+
+              $existing_ck = getenv('EXISTING_CK') ?: '';
+              $existing_cs = getenv('EXISTING_CS') ?: '';
+
+              if ($existing_ck && $existing_cs) {
+                  $row = $wpdb->get_row($wpdb->prepare(
+                      "SELECT consumer_key, consumer_secret, truncated_key, permissions, user_id FROM $table WHERE description=%s LIMIT 1",
+                      $desc
+                  ));
+                  if ($row
+                      && $row->consumer_key === $hash($existing_ck)
+                      && hash_equals($row->consumer_secret, $existing_cs)
+                      && $row->permissions === 'read_write'
+                      && (int) $row->user_id === (int) $uid) {
+                      echo "REUSED=1\n";
+                      echo "CK=$existing_ck\n";
+                      echo "CS=$existing_cs\n";
+                      echo "reusing existing read_write key (truncated " . $row->truncated_key . ")\n";
+                      exit(0);
+                  }
+                  echo "Secret keypair does not match the DB - rotating\n";
+              }
+
+              $ck = 'ck_' . bin2hex(random_bytes(16));
+              $cs = 'cs_' . bin2hex(random_bytes(16));
+              $wpdb->delete($table, array('description' => $desc));
+              $inserted = $wpdb->insert($table, array(
+                  'user_id' => $uid,
+                  'description' => $desc,
+                  'permissions' => 'read_write',
+                  'consumer_key' => $hash($ck),
+                  'consumer_secret' => $cs,
+                  'truncated_key' => substr($ck, -7),
+                  'last_access' => null,
+              ));
+              if (!$inserted) {
+                  fwrite(STDERR, "DB insert failed: " . $wpdb->last_error . "\n");
+                  exit(1);
+              }
+              echo "ROTATED=1\n";
+              echo "CK=$ck\n";
+              echo "CS=$cs\n";
+              PHP_EOF
+
+              set +e
+              GEN_OUT=$(wp eval-file /tmp/gen_keys.php --allow-root --path=$WP_PATH 2>&1)
+              GEN_RC=$?
+              set -e
+              # never echo the consumer secret
+              echo "$GEN_OUT" | sed 's/^CS=.*/CS=<redacted>/'
+              if [ $GEN_RC -ne 0 ]; then
+                echo "wp eval-file failed rc=$GEN_RC" >&2
+                exit 1
+              fi
+              CK=$(echo "$GEN_OUT" | sed -n 's/^CK=//p' | tail -n1 | tr -d '\r')
+              CS=$(echo "$GEN_OUT" | sed -n 's/^CS=//p' | tail -n1 | tr -d '\r')
+              if [ -z "$CK" ] || [ -z "$CS" ]; then
+                echo "Failed to extract CK/CS from gen output" >&2
+                exit 1
+              fi
+              echo "Using CK=${CK:0:12}... CS=${CS:0:8}..."
+
+              if [ "$EXISTING_CK" = "$CK" ]; then
+                # nothing changed: leave the Secret (and therefore every consumer) alone
+                echo "Credentials unchanged - Secret left untouched."
+              elif [ -z "$TOKEN" ] || [ ! -f "$CACERT" ]; then
+                echo "No SA token/CA - skipping K8s Secret write"
+                echo "MANUAL: kubectl create secret generic woo-secrets -n $NAMESPACE --from-literal=WOO_URL=$WOO_URL --from-literal=WOO_CONSUMER_KEY=$CK --from-literal=WOO_CONSUMER_SECRET=$CS --dry-run=client -o yaml | kubectl apply -f -"
+              else
+                b64() { printf '%s' "$1" | base64 | tr -d '\n' | tr -d '\r'; }
+                WOO_URL_B64=$(b64 "$WOO_URL")
+                CK_B64=$(b64 "$CK")
+                CS_B64=$(b64 "$CS")
+                HTTP_CODE=$(curl -s -o /tmp/secret_check.json -w "%{http_code}" --cacert "$CACERT" -H "Authorization: Bearer $TOKEN" "https://kubernetes.default.svc/api/v1/namespaces/$NAMESPACE/secrets/woo-secrets" || echo "000")
+                echo "Secret check HTTP $HTTP_CODE"
+                if [ "$HTTP_CODE" = "200" ]; then
+                  echo "Patching existing woo-secrets..."
+                  PATCH_JSON="{\"data\":{\"WOO_URL\":\"$WOO_URL_B64\",\"WOO_CONSUMER_KEY\":\"$CK_B64\",\"WOO_CONSUMER_SECRET\":\"$CS_B64\"}}"
+                  curl -s --cacert "$CACERT" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/merge-patch+json" -X PATCH --data-binary "$PATCH_JSON" "https://kubernetes.default.svc/api/v1/namespaces/$NAMESPACE/secrets/woo-secrets" -o /tmp/patch.json -w "PATCH HTTP %{http_code}\n" || true
+                else
+                  echo "Creating woo-secrets..."
+                  printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"woo-secrets","namespace":"%s"},"type":"Opaque","data":{"WOO_URL":"%s","WOO_CONSUMER_KEY":"%s","WOO_CONSUMER_SECRET":"%s"}}' "$NAMESPACE" "$WOO_URL_B64" "$CK_B64" "$CS_B64" > /tmp/new_secret.json
+                  curl -s --cacert "$CACERT" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -X POST --data-binary @/tmp/new_secret.json "https://kubernetes.default.svc/api/v1/namespaces/$NAMESPACE/secrets" -o /tmp/create.json -w "CREATE HTTP %{http_code}\n" || true
+                fi
+                cat /tmp/secret_check.json /tmp/patch.json /tmp/create.json 2>/dev/null | grep -o '"message":"[^"]*"' | head -n 2 || true
+                echo "Woo-secrets updated. NOTE: running consumers keep the previous key until restarted -"
+                echo "restart woo-mcp (or run the next helm upgrade, which now carries a key checksum)."
+              fi
+
+              # Verify wc/v3 reachable with new keys (Basic auth ck:cs is username:password)
+              echo "Verifying Woo REST with new keys..."
+              for i in $(seq 1 5); do
+                if curl -sf -u "$CK:$CS" "http://$FULLNAME-wordpress:{{ .Values.wordpress.service.port | default 80 }}/wp-json/wc/v3/products?per_page=1" >/tmp/wc_verify.json 2>&1; then
+                  echo "Woo REST verified:"
+                  cat /tmp/wc_verify.json | head -n 20
+                  break
+                else
+                  echo "  woo verify retry $i..."; cat /tmp/wc_verify.json | head -n 20 || true; sleep 2
+                fi
+              done
+
+              echo "=== WP setup complete ==="
+              wp plugin list --allow-root --path=$WP_PATH
+              echo "COD settings (final):"
+              wp option get woocommerce_cod_settings --allow-root --path=$WP_PATH --format=json
+          env:
+            - name: WORDPRESS_DB_HOST
+              valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_HOST } }
+            - name: WORDPRESS_DB_NAME
+              valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_NAME } }
+            - name: WORDPRESS_DB_USER
+              valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_USER } }
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: wordpress-secret, key: WORDPRESS_DB_PASSWORD } }
+            - name: WORDPRESS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.wpSetup.existingAdminSecret }}
+                  name: {{ .Values.wpSetup.existingAdminSecret | quote }}
+                  {{- else }}
+                  name: wordpress-admin
+                  {{- end }}
+                  key: password
+            - name: COD_ENABLED
+              value: {{ ternary "yes" "no" .Values.wpSetup.cod.enabled | quote }}
+            - name: COD_TITLE
+              value: {{ .Values.wpSetup.cod.title | quote }}
+            - name: COD_DESCRIPTION
+              value: {{ .Values.wpSetup.cod.description | quote }}
+            - name: COD_INSTRUCTIONS
+              value: {{ .Values.wpSetup.cod.instructions | quote }}
+            - name: STORE_SEED_FORCE
+              value: {{ .Values.wpSetup.seedForce | default "0" | quote }}
+          # Share wp-content (plugins/themes/uploads) with the WordPress pod so
+          # plugin installs and seeded content are visible on the live storefront.
+          volumeMounts:
+            - name: wp-content
+              mountPath: /var/www/html/wp-content
+          resources:
+            {{- toYaml .Values.wpSetup.resources | nindent 12 }}
+          securityContext:
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "wpSetup") | nindent 12 }}
+      volumes:
+        - name: wp-content
+          persistentVolumeClaim:
+            claimName: {{ include "urumi.fullname" . }}-wp-content
+{{- end }}

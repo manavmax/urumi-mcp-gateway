@@ -270,11 +270,27 @@ async def during_kill() -> int:
     saw_unreachable = False
     down_at = None
     deadline = time.monotonic() + 150
+
+    async def _status_now() -> str | None:
+        admin_password = os.environ.get("GATEWAY_ADMIN_PASSWORD", "")
+        admin = await api_login(ADMIN_EMAIL, admin_password)
+        servers = admin.req("GET", "/api/servers").json()["servers"]
+        row = next((s for s in servers if s["slug"] == "time"), None)
+        return row["status"] if row else None
+
     while time.monotonic() < deadline:
         r = call_tool(client, admin_key, "time__get_current_time", {})
         if r.status_code == 200:
             if saw_failure:
-                break  # recovered
+                # recovery: the status flips BACK only on the next successful
+                # health probe (~one interval), so right now it may STILL be
+                # Unreachable - the last chance to observe the outage marker
+                if not saw_unreachable:
+                    row_status = await _status_now()
+                    if row_status is not None and row_status != "Connected":
+                        saw_unreachable = True
+                        log(f"info: dashboard time status at recovery: {row_status}")
+                break
             await asyncio.sleep(1)
             continue
         if not saw_failure:
@@ -287,14 +303,13 @@ async def during_kill() -> int:
             check("notes work while the time pod is down", rj.status_code == 200, f"status={rj.status_code}")
             checked_others = True
         # and the dashboard status must leave Connected for the time server
+        # (poll EVERY dark iteration: the health loop flips it within its
+        # ~5s interval, so one sample per iteration is what makes this robust)
         if not saw_unreachable:
-            admin_password = os.environ.get("GATEWAY_ADMIN_PASSWORD", "")
-            admin = await api_login(ADMIN_EMAIL, admin_password)
-            servers = admin.req("GET", "/api/servers").json()["servers"]
-            row = next((s for s in servers if s["slug"] == "time"), None)
-            if row and row["status"] != "Connected":
+            row_status = await _status_now()
+            if row_status is not None and row_status != "Connected":
                 saw_unreachable = True
-                log(f"info: dashboard time status during outage: {row['status']}")
+                log(f"info: dashboard time status during outage: {row_status}")
         await asyncio.sleep(2)
 
     check("time tool went dark during the kill window", saw_failure, "")

@@ -44,3 +44,33 @@ What: gateway.replicas (1 prod, 2 local) + PDB (minAvailable 1, only with 2+) + 
 Why: the gateway is stateless (signed cookies, stateless JSON-RPC /mcp, DB-backed tool cache, Postgres rate limits), so replicas are interchangeable - no sticky sessions needed.
 Main failure mode: per-replica LLM cooldowns (a cooldown on replica A does not apply to replica B) and the Recreate rollout strategy; the gateway's own egress policy blocks in-pod probes to its Service VIP (use the ingress).
 Request flow: any replica serves any request; failed logins append login_failures rows shared by all replicas; on startup each pod takes the migration advisory lock, waits if another pod is mid-upgrade, then no-ops at head.
+
+## 2026-10-21: provisioner + multi-store (ADR-060)
+
+**What it does.** The provisioner is a separate single-purpose service: it
+creates a namespace `store-<slug>` (labeled urumi.io/managed-by=provisioner),
+installs the store chart there with the helm CLI baked into its image
+(`helm upgrade --install <slug> /charts/store`), and deletes it again on
+request. The gateway keeps a `stores` row per storefront and enforces who may
+create/delete (per-user max, global max, slug rules); it registers the store's
+woo-mcp as an INTERNAL upstream (slug == store slug) once the store is Ready.
+
+**Why this approach.** Cluster work needs cluster power (RBAC, helm); giving
+the gateway that power would make the biggest blast radius in the system sit on
+the internet-facing service. The provisioner is reachable ONLY from gateway
+pods (NetworkPolicy) and only with the shared token; its cluster access is
+least-privilege plus a code-level rule that it only ever touches namespaces
+labeled urumi.io/managed-by=provisioner.
+
+**Request flow.** Dashboard Stores page -> gateway (role + quota + slug checks)
+-> provisioner POST /v1/stores (202, task starts, concurrency gate) -> helm
+install of the store chart into store-<slug> -> the gateway's sync loop polls
+{phase} and, on Ready, registers the store's woo-mcp as an internal server ->
+tools appear as <slug>__list_orders etc. Teardown reverses: DELETING label ->
+helm uninstall (PVCs keep-annotated survive mishaps) -> namespace delete, and
+the gateway removes the row + registration when the namespace is gone.
+
+**Main failure mode.** Provisioning is SLOW (WordPress + WooCommerce install
+hook) and the laptop node is small: timeouts are generous, provisioning is
+sequential locally, and a timeout marks the store Failed with a safe reason and
+a one-click retry (idempotent helm + kept PVCs make retries cheap).

@@ -8,7 +8,7 @@
 
 ## Current phase
 
-PHASE 5 (provisioner + multi-store) — in progress
+PHASE 6 (hosted MCP servers) — next; PHASE 5 DONE (not yet tagged)
 
 ## What is done
 
@@ -62,19 +62,30 @@ PHASE 5 (provisioner + multi-store) — in progress
   Quirk noted: in-pod -> gateway Service VIP is blocked by the gateway's own
   egress allowlist (expected; probes use the ingress).
 
+## What is done (phase 5)
+
+- PHASE 5 DONE (ADR-060, evidence in BUILD_LOG): separate provisioner
+  Deployment/image/SA (least-privilege ClusterRole + code-level managed-label
+  guard), stores table + Stores page, per-user/global maxima, sequential
+  provisioning on the laptop (maxConcurrent=1 local), helm/store chart per store
+  (fullnameOverride -> <slug>-* names, images forwarded from the main release),
+  cluster-derived readiness (WP AND woo-mcp Available), per-attempt budget with
+  retry clock reset, DELETING-label-first teardown, reconcile resume after a
+  killed provisioner, per-store NetworkPolicies (isolation 5/5), auto MCP
+  registration (<slug>__ tools), clean teardown, chat two-store comparison via
+  stub LLM. CRITICAL FIX ADR-061 (alembic advisory-lock commit bug - 008/009 had
+  silently been rolled back; migrations now verified by post-run DB reads).
+  Gate: make lint, 373 gateway tests, demo-time 8, woo-mcp 21, helm lint
+  local+prod+store, regress-core ALL CHECKS PASSED.
+
 ## What is next
 
-- PHASE 5 provisioner + multi-store: separate provisioner Deployment/image/SA
-  with least-privilege RBAC (namespaces + the store chart kinds, gated by the
-  urumi.io/managed-by=provisioner label enforced in code), reachable only from
-  the gateway (NetworkPolicy + shared internal secret), stores table +
-  Dashboard Stores page (create/delete, polling, per-user + global maxima,
-  maxConcurrent), helm/store chart per store in namespace store-<slug>,
-  per-store NetworkPolicies (isolation proof script), auto MCP registration
-  with <slug>__ tool names, clean teardown + idempotent create + reconcile
-  loop + provisioning timeout. Values flag provisioner.enabled (false in base
-  and prod, true only local). Final scripted test: two stores, chat compares
-  today's orders across both (stub LLM), delete one, verify everything gone.
+- PHASE 6 hosted MCP servers (stand-out 5): admin adds a server by container
+  image in the dashboard (tag/digest required, registry allowlist, port, env
+  vars with secret values), the provisioner (same RBAC pattern) deploys
+  Deployment+Service+Secret+NetworkPolicy with resource caps, auto-registers in
+  the gateway; test with demo-mcp-time as "time2" then remove cleanly. Flag
+  hostedServers.enabled default false.
 
 ## Commands to resume
 
@@ -94,11 +105,11 @@ cd src/gateway && ../../.venv/bin/python -m pytest tests -q   # unit tests
 | Phase | Status | Tag | Gate |
 |---|---|---|---|
 | 0 gaps/hygiene | DONE | phase-0-done | REGRESS-CORE ALL CHECKS PASSED |
-| 1 observability | not started | - | - |
-| 2 rate limits | not started | - | - |
-| 3 many tools | not started | - | - |
-| 4 scaling | not started | - | - |
-| 5 provisioner | not started | - | - |
+| 1 observability | DONE | phase-1-done | REGRESS-CORE ALL CHECKS PASSED |
+| 2 rate limits | DONE | phase-2-done | REGRESS-CORE ALL CHECKS PASSED |
+| 3 many tools | DONE | phase-3-done | REGRESS-CORE ALL CHECKS PASSED |
+| 4 scaling | DONE | phase-4-done | REGRESS-CORE ALL CHECKS PASSED |
+| 5 provisioner | DONE | phase-5-done | REGRESS-CORE ALL CHECKS PASSED + isolation 5/5 + recovery + chat-two-stores |
 | 6 hosted servers | not started | - | - |
 | 7 oauth | not started | - | - |
 | 8 docs | not started | - | - |

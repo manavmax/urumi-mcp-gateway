@@ -1,0 +1,22 @@
+{{- if .Values.wordpress.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-wordpress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: wordpress
+spec:
+  type: ClusterIP
+  ports:
+    # Service keeps port 80 (values: wordpress.service.port) so in-cluster callers
+    # (woo-mcp WOO_URL, wp-setup waits) and the Ingress stay unchanged; targetPort
+    # follows the named container port, which the hardened image moved to 8080.
+    - port: {{ .Values.wordpress.service.port | default 80 }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: wordpress
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

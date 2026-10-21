@@ -1,0 +1,230 @@
+{{- /* Store-namespace isolation (Phase 5, ADR-060).
+
+The namespace is default-deny in BOTH directions, then opened exactly as the
+brief demands:
+  - MariaDB accepts ONLY this store's WordPress and wp-setup (nobody else,
+    including other stores - each store namespace has its own pods/labels).
+  - WordPress accepts ONLY ingress-nginx (the storefront) and this store's
+    woo-mcp.
+  - woo-mcp accepts ONLY the GATEWAY pods (namespace + app=gateway label).
+  - wp-setup accepts nothing.
+Egress is deny-by-default (the CNI here enforces it): DNS everywhere,
+WordPress->MariaDB, woo-mcp->WordPress, wp-setup->MariaDB+WordPress+API server
+(it writes woo-secrets through the K8s API). The node CIDR exception mirrors
+the main chart: API-server traffic is DNAT-ed to a node IP.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-default-deny
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-dns
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+        - { protocol: UDP, port: 9153 }
+        - { protocol: TCP, port: 9153 }
+---
+{{- if .Values.mariadb.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-store-to-mariadb
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: mariadb
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: wordpress
+      ports:
+        - port: {{ .Values.mariadb.port }}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: wp-setup
+      ports:
+        - port: {{ .Values.mariadb.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-wordpress-to-mariadb-egress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: wordpress
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mariadb
+      ports:
+        - port: {{ .Values.mariadb.port }}
+{{- end }}
+---
+{{- if .Values.wordpress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-to-wordpress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: wordpress
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # the public storefront (ingress-nginx) ...
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: {{ .Values.wordpress.containerPort | default 8080 }}
+    # ... and this store's own wp-setup (install hook) and woo-mcp only
+    - from:
+        - podSelector:
+            matchLabels:
+              app: wp-setup
+        - podSelector:
+            matchLabels:
+              app: woo-mcp
+      ports:
+        - port: {{ .Values.wordpress.containerPort | default 8080 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-woo-mcp-to-wordpress-egress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: woo-mcp
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: wordpress
+      ports:
+        - port: {{ .Values.wordpress.containerPort | default 8080 }}
+{{- end }}
+---
+{{- if .Values.wooMcp.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-gateway-to-woo-mcp
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: woo-mcp
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # the GATEWAY pods only - by namespace label AND app label (both, or a
+    # mislabelled pod in another namespace could pass). gatewayNamespace is
+    # set by the provisioner (default urumi).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.gatewayNamespace | default "urumi" | quote }}
+          podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - port: {{ .Values.wooMcp.port }}
+{{- end }}
+---
+{{- if .Values.wpSetup.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-wp-setup-egress
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: wp-setup
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mariadb
+      ports:
+        - port: {{ .Values.mariadb.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: wordpress
+      ports:
+        - port: {{ .Values.wordpress.containerPort | default 8080 }}
+    # the K8s API (writes woo-secrets): the API ClusterIP lives in the service
+    # CIDR AND traffic to it is DNAT-ed to a node IP, hence both exceptions
+    # (mirrors the main chart's wp-setup egress exactly)
+    - to:
+        - ipBlock:
+            cidr: 10.96.0.0/12
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.global.nodeCIDR | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+{{- end }}

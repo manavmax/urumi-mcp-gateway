@@ -37,16 +37,28 @@ def do_run_migrations(connection):
     # ADVISORY XACT LOCK serializes them: the second replica waits for the
     # first pod's migration transaction to commit, then re-runs (a no-op at
     # head). The lock is released automatically at transaction end.
-    if connection.dialect.name == "postgresql":
-        connection.exec_driver_sql("SELECT pg_advisory_xact_lock(715273)")
+    #
+    # ADR-061 FIX: the lock MUST be taken INSIDE alembic's migration
+    # transaction. Taken before it (the ADR-059 code), the lock SELECT
+    # autobegins a transaction; alembic then records the connection as already
+    # in an external transaction and NEVER commits (begin_transaction returns
+    # a no-op context), so every migration was silently rolled back when the
+    # connection closed - logged "done", changed nothing. The lock inside the
+    # migration transaction still serializes replicas and releases at commit.
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
+        if connection.dialect.name == "postgresql":
+            connection.exec_driver_sql("SELECT pg_advisory_xact_lock(715273)")
         context.run_migrations()
 
 async def run_async_migrations():
     connectable = async_engine_from_config(config.get_section(config.config_ini_section, {}), prefix="sqlalchemy.", poolclass=pool.NullPool)
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
+        # belt and braces: commit-as-you-go means an open autobegin transaction
+        # would otherwise roll back at close (the ADR-061 bug), and a no-op
+        # when the migration transaction already committed
+        await connection.commit()
     await connectable.dispose()
 
 def run_migrations_online() -> None:

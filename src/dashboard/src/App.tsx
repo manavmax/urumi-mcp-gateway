@@ -19,6 +19,7 @@ import Servers from "./pages/Servers";
 import Members from "./pages/Members";
 import Audit from "./pages/Audit";
 import Metrics from "./pages/Metrics";
+import Stores from "./pages/Stores";
 import Chat from "./pages/Chat";
 
 /* Servers, members and audit use the fleet layout (fam-f): 1280px content,
@@ -27,8 +28,8 @@ import Chat from "./pages/Chat";
    The pg-* class carries the per-page mockup CSS (servers.html pads table
    cells 12px where members/audit pad them 11px 12px). */
 function familyOf(pathname: string): string {
-  const base = pathname === "/servers" || pathname === "/members" || pathname === "/audit" || pathname === "/metrics" ? "fam-f" : "fam-o";
-  const page = ["/servers", "/members", "/audit", "/metrics", "/chat", "/overview"].includes(pathname)
+  const base = pathname === "/servers" || pathname === "/members" || pathname === "/audit" || pathname === "/metrics" || pathname === "/stores" ? "fam-f" : "fam-o";
+  const page = ["/servers", "/members", "/audit", "/metrics", "/stores", "/chat", "/overview"].includes(pathname)
     ? " pg-" + pathname.slice(1)
     : "";
   return base + page;
@@ -51,6 +52,7 @@ function Shell() {
               <Route path="/members" element={<Members />} />
               <Route path="/audit" element={<Audit />} />
               <Route path="/metrics" element={<Metrics />} />
+              <Route path="/stores" element={<Stores />} />
               <Route path="/chat" element={<Chat />} />
             </Routes>
           </div>

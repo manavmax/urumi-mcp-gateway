@@ -1,0 +1,81 @@
+{{- if .Values.wooMcp.enabled }}
+{{- /* A credential rotation normally happens through the wp-setup hook, which runs AFTER
+       the release is applied, so the Deployment cannot observe it on the same upgrade.
+       The wp-setup job is now a no-op when the keypair still works (it never rotates on
+       upgrade), so this checksum only matters for an explicit rotation: on the NEXT
+       upgrade it differs and the pod rolls, picking the new key up. Without idempotent
+       rotation this annotation is what stops a silent 401 drift. */}}
+{{- $wooSecret := lookup "v1" "Secret" .Release.Namespace "woo-secrets" }}
+{{- $wooKey := "" }}
+{{- if $wooSecret }}{{- $wooKey = index ($wooSecret.data | default dict) "WOO_CONSUMER_KEY" | default "" }}{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "urumi.fullname" . }}-woo-mcp
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: woo-mcp
+    app.kubernetes.io/component: woo-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: woo-mcp
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        # Changes only when the woo-secrets contents change -> forces a rollout so the
+        # pod always starts with the credentials that are actually in the Secret.
+        urumi.io/woo-secret-checksum: {{ $wooKey | sha256sum }}
+      labels:
+        app: woo-mcp
+        app.kubernetes.io/name: {{ include "urumi.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        tier: private
+    spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-woo-mcp
+      automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: woo-mcp
+          image: "{{ .Values.wooMcp.image.repository }}:{{ .Values.wooMcp.image.tag }}"
+          imagePullPolicy: {{ .Values.wooMcp.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.wooMcp.port }}
+              name: http
+          env:
+            - name: WOO_URL
+              valueFrom: { secretKeyRef: { name: woo-secrets, key: WOO_URL } }
+            - name: WOO_CONSUMER_KEY
+              valueFrom: { secretKeyRef: { name: woo-secrets, key: WOO_CONSUMER_KEY } }
+            - name: WOO_CONSUMER_SECRET
+              valueFrom: { secretKeyRef: { name: woo-secrets, key: WOO_CONSUMER_SECRET } }
+            # F3: image upload byte cap (default 5 MB) for the add_product_image tool.
+            # int: helm reads values.yaml numbers as float64 and renders >= 1e6
+            # in scientific notation (5.24288e+06), which the app refuses.
+            - name: IMAGE_MAX_BYTES
+              value: {{ .Values.wooMcp.imageMaxBytes | default 5242880 | int | quote }}
+          resources:
+            {{- toYaml .Values.wooMcp.resources | nindent 12 }}
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "wooMcp") | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

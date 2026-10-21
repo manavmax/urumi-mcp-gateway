@@ -137,6 +137,19 @@ export type AuditMetricsRow = {
   top_failures: FailureReason[];
 };
 export type AuditMetrics = { window_hours: number; servers: AuditMetricsRow[] };
+export type StoreRow = {
+  id: string;
+  slug: string;
+  display_name: string;
+  namespace: string;
+  status: "Provisioning" | "Ready" | "Failed" | "Deleting";
+  failure_reason: string | null;
+  url: string | null;
+  created_at: string;
+  updated_at: string;
+  owner_user_id?: string;
+  owner_email?: string | null;
+};
 export type Stats = {
   range: string;
   window_days: number;
@@ -312,6 +325,16 @@ export const api = {
   // Metrics page: per-server 24h aggregates computed from the audit table
   // (admin-only server-side; members get 403). No Prometheus server needed.
   auditMetrics: () => request<AuditMetrics>("/api/metrics"),
+
+  // Stores (Phase 5): members manage their own, admins manage all. Polling
+  // while any store is Provisioning/Deleting happens on the page.
+  listStores: () => request<{ stores: StoreRow[] }>("/api/stores"),
+  createStore: (displayName: string) =>
+    request<StoreRow>("/api/stores", { method: "POST", body: JSON.stringify({ display_name: displayName }), csrf: true }),
+  deleteStore: (id: string) =>
+    request<{ id: string; status: string }>(`/api/stores/${id}`, { method: "DELETE", csrf: true }),
+  retryStore: (id: string) =>
+    request<{ id: string; status: string }>(`/api/stores/${id}/retry`, { method: "POST", csrf: true }),
 
   // Chat SSE: caller handles the fetch stream. tz = the browser's IANA
   // timezone (FIX PASS F1-8): the server validates it and puts the user's

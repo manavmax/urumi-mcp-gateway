@@ -1,0 +1,19 @@
+{{- if .Values.mariadb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-mariadb
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: mariadb
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.mariadb.port }}
+      targetPort: mysql
+      protocol: TCP
+      name: mysql
+  selector:
+    app: mariadb
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

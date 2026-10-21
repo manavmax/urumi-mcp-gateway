@@ -156,6 +156,11 @@ async def lifespan(app: FastAPI):
         health_task = asyncio.create_task(health_loop())
         app.state.audit_task = audit_task
         app.state.health_task = health_task
+        # Phase 5 (ADR-060): store status sync (no-op unless stores_enabled)
+        from stores.sync import sync_loop
+
+        store_sync_task = asyncio.create_task(sync_loop())
+        app.state.store_sync_task = store_sync_task
         # F3: chat uploads live 15 minutes — sweep expired rows every minute.
         from datetime import UTC, datetime
 
@@ -196,7 +201,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # shutdown
-    for t in [audit_task, health_task, upload_purge_task]:
+    for t in [audit_task, health_task, upload_purge_task, store_sync_task]:
         if t:
             t.cancel()
             # awaiting a cancelled task re-raises CancelledError, which is expected
@@ -272,6 +277,11 @@ def create_app() -> FastAPI:
     app.include_router(stats_router)
     app.include_router(chat_router)
     app.include_router(chat_uploads_router)
+
+    # Phase 5 (ADR-060): per-user storefronts (403 everywhere when the flag is off)
+    from stores.routes import router as stores_router
+
+    app.include_router(stores_router)
 
     @app.get("/")
     async def root():

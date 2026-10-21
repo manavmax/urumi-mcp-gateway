@@ -58,6 +58,7 @@ def _server_out(s: Server, is_admin: bool = True) -> dict:
         "status": s.status,
         "last_error": s.last_error,  # safe human label only, never raw text
         "timeout_ms": s.timeout_ms,
+        "internal": bool(s.internal),  # Phase 5: store-owned registration
         "created_at": s.created_at.isoformat() if s.created_at else None,
         "updated_at": s.updated_at.isoformat() if s.updated_at else None,
     }
@@ -199,6 +200,16 @@ async def patch_server_route(
     srv = await get_server(db, server_id)
     if not srv:
         raise HTTPException(status_code=404, detail="server not found")
+    # Phase 5 (ADR-060): internal store upstreams are lifecycle-owned; the
+    # only sanctioned mutations are enable/disable via the store lifecycle.
+    # (Disabling stays allowed: it is reversible and does not orphan anything.)
+    if srv.internal:
+        mutating = any(
+            v is not None
+            for v in (body.slug, body.url, body.auth_type, body.header_name, body.credential, body.timeout_ms)
+        )
+        if mutating:
+            raise HTTPException(status_code=400, detail="this upstream belongs to a store; only enable/disable is allowed")
     settings = get_settings()
     try:
         srv = await update_server(
@@ -295,6 +306,11 @@ async def delete_server_route(
     srv = await get_server(db, server_id)
     if not srv:
         raise HTTPException(status_code=404, detail="server not found")
+    # Phase 5 (ADR-060): internal store upstreams belong to the store lifecycle
+    # (deleting the store removes them). The admin CRUD surface must not
+    # orphan a live store's tools.
+    if srv.internal:
+        raise HTTPException(status_code=400, detail="this upstream belongs to a store; delete the store instead")
     # recorded before the delete so the slug is on the event; same transaction,
     # so a failed delete rolls the event back too
     record_admin_event(db, actor_user_id=user.id, action="server.delete", target_type="server", target_ref=srv.slug)

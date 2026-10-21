@@ -8,7 +8,7 @@ export type IconName =
   | "search" | "logout" | "chevron" | "plus" | "check" | "check-circle" | "x"
   | "x-circle" | "clock" | "wrench" | "alert" | "pause" | "arrow-up" | "arrow-right"
   | "send" | "cart" | "doc" | "globe" | "edit" | "trash" | "copy" | "eye" | "history"
-  | "bell" | "dot" | "deny" | "download" | "filter" | "lock" | "image" | "pulse";
+  | "bell" | "dot" | "deny" | "download" | "filter" | "lock" | "image" | "pulse" | "store" | "clock";
 
 const PATHS: Record<Exclude<IconName, "logo">, React.ReactNode> = {
   grid: (
@@ -192,6 +192,14 @@ const PATHS: Record<Exclude<IconName, "logo">, React.ReactNode> = {
   pulse: (
     <>
       <path d="M3 12h4l2.5-6 4 12 2.5-6h4" />
+    </>
+  ),
+  store: (
+    <>
+      <path d="M4 8.5L5 4h14l1 4.5" />
+      <path d="M4 8.5a2 2 0 002.5 2 2 2 0 003.5 0 2 2 0 003.5 0 2 2 0 002.5-2" />
+      <path d="M5.5 10.5V19h13v-8.5" />
+      <path d="M9.5 19v-5h5v5" />
     </>
   ),
 };

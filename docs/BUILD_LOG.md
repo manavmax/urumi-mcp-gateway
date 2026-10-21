@@ -96,3 +96,48 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
 - Login lockout shared: tests/test_login_throttle.py::test_lockout_is_shared_across_replicas (two app instances over one DB: the lockout crossed via replica A is enforced by replica B).
 - Gate: make lint clean, make test rc=0 (354 gateway tests), helm lint local+prod clean, values-prod renders replicas: 1 and NO PDB, `bash scripts/regress-core.sh` -> ALL CHECKS PASSED (against 2 replicas).
 - Quirk found: in-pod connections to the gateway Service VIP are blocked by the gateway's own default-deny EGRESS allowlist (kindnet DOES enforce NetworkPolicy here); probes run through the ingress instead.
+
+## 2026-10-21 Phase 5 — provisioner + multi-store (ADR-060)
+
+- Tests: `cd src/gateway && ../../.venv/bin/python -m pytest tests -q` -> 373 passed
+  (test_stores.py 7 router/sync tests, test_provisioner_units.py 12 slug/label/
+  marker/image-forwarding tests). demo-time 8 passed, woo-mcp 21 passed, ruff clean,
+  helm lint local+prod+store clean.
+- Deploy: `DOCKER_CONTEXT=colima make provisioner-image` (helm 3.16.4 + store chart
+  baked at /charts/store), `helm upgrade --install urumi ./helm -n urumi -f
+  helm/values-local.yaml` (provisioner.enabled=true only local; base/prod false).
+- STORE LIFECYCLE (live, in-pod admin session):
+  ```
+  POST /api/stores "Gate Alpha"/"Gate Bravo" -> 201 (Provisioning, store-<slug>)
+  sync loop -> Ready; internal servers:
+    [('gate-alpha','Connected','http://gate-alpha-woo-mcp.store-gate-alpha.svc:8000/mcp'),
+     ('gate-bravo','Connected','http://gate-bravo-woo-mcp.store-gate-bravo.svc:8000/mcp')]
+  tools/list (MCP, admin key): 29 tools, 16 store tools (gate-alpha__*/gate-bravo__*)
+  tools/call gate-alpha__list_orders -> 200 {"orders":[],"count":0}
+  tools/call gate-bravo__list_orders -> 200 {"orders":[],"count":0}
+  ```
+- ISOLATION (scripts/lib/phase5_isolation.sh gate-alpha gate-bravo):
+  `ISOLATION: ALL CHECKS PASSED` (5/5): woo-mcp->own WP connect-OK; woo-mcp->other
+  WP/mariadb BLOCKED; wordpress->own mariadb connect-OK, other mariadb BLOCKED.
+- RECOVERY: store "Gate Charlie" created, provisioner pod force-deleted
+  mid-provision (`kubectl delete pod -l app=provisioner --force`), new pod's
+  reconcile resumed the install -> `STORE gate-charlie status=Ready`.
+- CHAT TWO STORES (scripts/lib/phase5_chat_two_stores.py, STUB LLM 127.0.0.1:9101,
+  no real key): real chat_loop ran -> TOOLCALLS ['gate-alpha__list_orders',
+  'gate-bravo__list_orders'], final text, AUDIT rows under the REAL tool names
+  outcome=success -> `CHAT-TWO-STORES: OK`.
+- TEARDOWN: delete gate-charlie -> namespace gone, store row removed, internal
+  registration removed, 0 charlie tools, 0 charlie PVs.
+- GATE: make lint clean; gateway 373, demo-time 8, woo-mcp 21; helm lint local+prod
+  + store clean; `bash scripts/regress-core.sh` -> REGRESS-CORE: ALL CHECKS PASSED
+  (one flaky check hardened: the dashboard-status check now polls EVERY dark
+  iteration and at recovery - the health loop flips Unreachable within its ~5s
+  interval, which the old single-sample check raced).
+- Fixes landed during the phase (each live-verified): ADR-061 alembic commit bug;
+  store chart wp-setup->WordPress ingress rule; wp-setup API egress on service CIDR
+  AND node CIDR; helm hook --timeout (1140s local); per-attempt provisioning budget
+  (retry resets the clock); DELETING label first; queued-task != "gone"; redrive =
+  uninstall+fresh install (PVCs keep-annotated); store chart API egress; IMAGE_MAX_BYTES
+  int coercion; fullnameOverride for deterministic <slug>-* names; image repos
+  forwarded from the main release; provisioner memory 768Mi; values-local
+  maxConcurrent=1 + lighter main-store requests (2-core node).

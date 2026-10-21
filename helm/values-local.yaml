@@ -98,7 +98,9 @@ wordpress:
   image: { repository: urumi/wordpress, tag: 6.6-php8.2-apache-hardened, pullPolicy: Never }
   containerPort: 8080
   resources:
-    requests: { cpu: 100m, memory: 128Mi }
+    # 2-core kind node: the main stack + two stores only fit with small
+    # requests (the node runs at ~93% with everything up)
+    requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
 
 wpSetup:
@@ -108,10 +110,28 @@ wpSetup:
 
 mariadb:
   resources:
-    requests: { cpu: 100m, memory: 256Mi }
+    requests: { cpu: 50m, memory: 256Mi }
     limits: { cpu: 500m, memory: 512Mi }
 
 postgres:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
+
+# --- Phase 5 (ADR-060): provisioner + multi-store, ON locally -----------------
+provisioner:
+  enabled: true
+  image: { repository: urumi/provisioner, tag: "0.1.0", pullPolicy: Never }
+  # the wp-setup hook needs up to ~13 min on the loaded 2-core node
+  helmTimeout: "1140s"
+stores:
+  # *.localhost resolves to 127.0.0.1 in modern browsers/curl
+  baseDomain: localhost
+  maxPerUser: 2
+  globalMax: 12
+  # ONE store at a time: the 2-core kind node runs at ~93% with the full main
+  # stack up; two simultaneous wp-setup hooks + mariadb cannot schedule. The
+  # brief sanctions low concurrency on a laptop (stores.maxConcurrent still
+  # defaults to 2 for bigger nodes).
+  maxConcurrent: 1
+  provisionTimeoutSeconds: 1200

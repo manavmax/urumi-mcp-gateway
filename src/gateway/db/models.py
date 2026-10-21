@@ -86,6 +86,11 @@ class Server(Base):
     header_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     credential_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     credential_key_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Phase 5 (ADR-060): internal upstreams are auto-registered by the gateway
+    # when a store becomes Ready. They belong to the store lifecycle (deleted
+    # with it), not to the admin CRUD surface: the servers API refuses to
+    # delete or edit them.
+    internal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[str] = mapped_column(Text, default="Unknown", nullable=False)
     # last_error holds ONLY a safe human label (from gw_mcp.categorize.category_label),
@@ -249,6 +254,36 @@ class RateLimitCounter(Base):
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     __table_args__ = (Index("ix_rate_limit_window", "window_start"),)
+
+
+class Store(Base):
+    """A provisioned storefront (Phase 5, ADR-060).
+
+    The user-facing projection of a per-store namespace + helm release owned by
+    the provisioner. status: Provisioning -> Ready | Failed -> Deleting (-> row
+    removed). failure_reason holds the SAFE reason the provisioner reported
+    (timeout, refused, ...). url is the public storefront host. The upstream
+    registration (Server row, slug == store slug, internal=True) is created
+    when the store becomes Ready and removed with it.
+    """
+
+    __tablename__ = "stores"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    namespace: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="Provisioning")
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('Provisioning','Ready','Failed','Deleting')", name="ck_store_status"),
+        Index("ix_stores_owner", "owner_user_id"),
+    )
 
 
 class LoginFailure(Base):

@@ -1,0 +1,22 @@
+{{- if and .Values.wordpress.enabled .Values.wordpress.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "urumi.fullname" . }}-wp-content
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: wordpress
+  annotations:
+    # survives a release uninstall (the redrive path reinstalls over it) -
+    # namespace DELETION still removes it, so teardown stays complete
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.wordpress.persistence.size }}
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass | quote }}
+  {{- end }}
+{{- end }}
