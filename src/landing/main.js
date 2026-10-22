@@ -33,9 +33,62 @@
   setHrefs("[data-link-dashboard]", dashUrl);
   setHrefs("[data-link-store]", storeUrl);
 
+  // Gateway URL for the hero config: explicit config wins, else the derived
+  // dashboard.<apex>/mcp (same convention the Helm values use).
+  var gwUrl = cfg.gatewayUrl || (dashUrl ? dashUrl.replace(/\/+$/, "") + "/mcp" : null);
   var gw = document.querySelector("[data-gateway-url]");
-  if (gw && dashUrl) {
-    gw.textContent = dashUrl.replace(/\/+$/, "") + "/mcp";
+  if (gw && gwUrl) gw.textContent = gwUrl;
+
+  // Store claim is data-driven: features.js storeProductCount; null drops the
+  // count and the sentence reads "a product catalog".
+  var catalog = document.querySelector("[data-store-catalog]");
+  if (catalog) {
+    var n = cfg.storeProductCount;
+    catalog.textContent = typeof n === "number" && n > 0 ? n + "-product" : "";
+  }
+
+  // Copy button: builds the plain-text config from the derived URL. Clipboard
+  // API first (needs a secure context), then a textarea + execCommand fallback
+  // so plain-http deployments still work.
+  var copyBtn = document.getElementById("copyConfig");
+  if (copyBtn && gwUrl) {
+    var configText =
+      '{\n' +
+      '  "mcpServers": {\n' +
+      '    "urumi": {\n' +
+      '      "url": "' + gwUrl + '",\n' +
+      '      "headers": {\n' +
+      '        "Authorization": "Bearer <your-api-key>"\n' +
+      '      }\n' +
+      '    }\n' +
+      '  }\n' +
+      '}';
+    var copyLabel = copyBtn.querySelector(".copy-label");
+    function copied() {
+      if (!copyLabel) return;
+      var prev = "Copy";
+      copyLabel.textContent = "Copied";
+      setTimeout(function () { copyLabel.textContent = prev; }, 1600);
+    }
+    copyBtn.addEventListener("click", function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(configText).then(copied, function () { legacyCopy(configText); copied(); });
+      } else {
+        legacyCopy(configText);
+        copied();
+      }
+    });
+  }
+  function legacyCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* best effort */ }
+    document.body.removeChild(ta);
   }
 
   var beyond = document.getElementById("beyond");

@@ -8,10 +8,20 @@
 //           the page makes zero external requests by design, ADR-080).
 // features  the "Beyond the brief" section. Every item ships enabled:false.
 //           Only items set to true are rendered; when none are true the whole
-//           section is hidden. Flip an item after its branch actually merges,
-//           never before: the page must only claim what exists on this branch.
+//           section is hidden. Flip an item after it actually lands in the
+//           demo, never before: the page must only claim what exists there.
 window.LANDING = {
   repoUrl: "https://github.com/urumi-ai/mcp-gateway",
+  // The real gateway URL shown in the hero MCP config. EMPTY (default) = main.js
+  // derives it from the page host by prefixing the apex with "dashboard."
+  // (dashboard.<apex>/mcp, the same convention the Helm values use), so the
+  // static page never hardcodes a hostname. Set an explicit URL here only if
+  // the gateway lives somewhere the convention cannot express.
+  gatewayUrl: "",
+  // Product count quoted by the store claim ("a 12-product catalog"). Correct
+  // it here after the store work lands; set null to drop the count and read
+  // "a product catalog".
+  storeProductCount: 12,
   videoUrl: "",
   features: [
     {

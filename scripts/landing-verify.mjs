@@ -153,9 +153,36 @@ try {
     }));
     if (!hidden.beyond || !hidden.video) { console.log(`FAIL ${c.name}: beyond/video visibility wrong: ${JSON.stringify(hidden)}`); caseFails++; }
 
-    // gateway URL derived by main.js
+    // gateway URL derived by main.js: never the placeholder, always /mcp
     const gwUrl = await page.evaluate(() => document.querySelector("[data-gateway-url]").textContent);
-    if (!gwUrl.endsWith("/mcp")) { console.log(`FAIL ${c.name}: gateway url not derived: ${gwUrl}`); caseFails++; }
+    if (!gwUrl.endsWith("/mcp") || gwUrl.includes("example.com")) { console.log(`FAIL ${c.name}: gateway url wrong: ${gwUrl}`); caseFails++; }
+    if (!gwUrl.startsWith("http://dashboard.") && !gwUrl.startsWith("https://dashboard.")) { console.log(`FAIL ${c.name}: gateway url not dashboard.<apex>: ${gwUrl}`); caseFails++; }
+
+    // Authorization placeholder is VISIBLE text with escaped angle brackets
+    const bearer = await page.evaluate(() => document.querySelector(".code-block").textContent);
+    if (!bearer.includes("Bearer <your-api-key>")) { console.log(`FAIL ${c.name}: Bearer placeholder not visible in code block`); caseFails++; }
+
+    // copy button + data-driven store claim
+    const hasCopy = await page.evaluate(() => !!document.getElementById("copyConfig"));
+    if (!hasCopy) { console.log(`FAIL ${c.name}: copy button missing`); caseFails++; }
+    const catalog = await page.evaluate(() => document.querySelector("[data-store-catalog]").textContent);
+    if (catalog !== "12-product") { console.log(`FAIL ${c.name}: store catalog claim = "${catalog}", expected "12-product"`); caseFails++; }
+
+    // sticky nav: header must sit at the viewport top while scrolled
+    await page.evaluate(() => window.scrollTo(0, 1600));
+    await page.waitForTimeout(150);
+    const sticky = await page.evaluate(() => {
+      const h = document.querySelector(".nav");
+      const r = h.getBoundingClientRect();
+      return { top: r.top, pos: getComputedStyle(h).position, scrollY: window.scrollY };
+    });
+    if (sticky.scrollY > 0 && (sticky.pos !== "sticky" && sticky.pos !== "fixed" || Math.abs(sticky.top) > 1)) {
+      console.log(`FAIL ${c.name}: nav not stuck at top while scrolled: pos=${sticky.pos} top=${sticky.top}`);
+      caseFails++;
+    }
+    // nav-sticky evidence shot (viewport, mid-scroll)
+    await page.screenshot({ path: join(OUT, `landing-${c.name}-scrolled.png`) });
+    await page.evaluate(() => window.scrollTo(0, 0));
 
     // contrast gate
     const checked = await page.evaluate(`(() => { ${EVAL_SRC}; return window.__check(${JSON.stringify(CONTRAST_SELECTS)}); })()`);

@@ -978,3 +978,39 @@ available), so the visual review is scripted proxies (geometry, overflow, contra
 animation state) plus the saved PNGs for a human pass. The docker run needs explicit
 --tmpfs ...:mode=1777 because plain docker tmpfs defaults are not uid-101-writable; the smoke test
 encodes the same invocation.
+
+## 2026-10-22: Landing polish pass, config-driven claims and copy button (ADR-085)
+
+**What changed.** One timeboxed polish pass on the landing page, no Helm changes. (1) The nav's
+sticky behaviour is now proven in-browser: the verify script scrolls to 1600px and asserts the
+header's rect sits at the viewport top in all four cases, saving a mid-scroll screenshot per case.
+(2) The hero config's gateway URL is config-driven: `landing.gatewayUrl` in features.js, empty by
+default, falling back to `dashboard.<apex>/mcp` derived from the page host (same convention as the
+Helm values, still no hardcoded hostname). The Authorization placeholder is now real visible text
+(`Bearer <your-api-key>` with escaped angle brackets; the first version had raw `<your-api-key>`
+in the HTML, which the parser swallowed as an unknown element, so the page silently showed only
+"Bearer"). A Copy button puts the plain-text config on the clipboard (async Clipboard API with a
+textarea fallback for plain-http, "Copied" feedback), proven by reading the clipboard back in
+Playwright. (3) Hero strengthened with dashboard-accent tokens: a soft radial glow behind the
+config block (`--hero-glow`), a subtle border, a one-time rise-in, a blinking caret, an accent
+outline plus hover glow on primary buttons (`--accent-ring`) and stronger focus rings; more space
+above the fold. All motion collapses under prefers-reduced-motion (re-verified 1e-05s). (4) Section
+rhythm: a mono uppercase eyebrow above every section title and a hairline divider between
+consecutive sections. (5) The features intro now reads "The gateway, the store and the team
+controls below are all live in the demo", the queue intro lost its "branch" wording, and the page
+contains zero "this branch" mentions. (6) The store claim is data-driven: `storeProductCount` in
+features.js fills the "12-product catalog" phrase; null reads "a product catalog".
+
+**Why.** The pass brief asked for exactly these seven items; the copy button and the two new config
+keys keep the page's honesty invariant (claims come from one config file, not prose) while making
+the hero actually usable.
+
+**Known trade-offs.** The glow's horizontal inset initially pushed the 390px scrollWidth to 410px
+(body's overflow-x clip hid the scrollbar, but the strict gate caught it); the glow now spills
+vertically only. execCommand copy is deprecated but is only the plain-http fallback. The clipboard
+round-trip test grants permissions explicitly; real browsers prompt or allow per-site.
+
+**Verification.** scripts/landing-verify.mjs: all 4 cases OK with the new gates (sticky nav at
+top, visible Bearer placeholder, derived URL without example.com, copy button present, store claim
+"12-product"), zero external requests, 32/32 contrast pairs per theme, zero console errors.
+Page weight 57.8KB raw, 17.0KB gzip.

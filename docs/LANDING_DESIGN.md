@@ -71,6 +71,20 @@ Generous vertical rhythm BETWEEN sections, dense data INSIDE mockups: the audit 
 and tool chips reuse the dashboard's 11-14px inner sizing. Both mockup panels carry a visible
 "sample data" chip.
 
+## Polish-pass additions (2026-10-22)
+
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `--hero-glow` | `rgba(122,139,170,.30)` | `rgba(185,196,221,.55)` | soft radial behind the hero config block |
+| `--accent-ring` | `rgba(142,170,200,.55)` | `rgba(79,111,148,.50)` | visible accent outline on primary buttons |
+| `--ring` | `rgba(142,170,200,.65)` | `rgba(79,111,148,.55)` | focus rings, stronger than v1 |
+
+Structure: every section carries a mono uppercase eyebrow (`--tok-key`) and consecutive sections
+are separated by a hairline divider (`.section + .section`). The hero config block gained a subtle
+border, a one-time rise-in, a blinking caret and a Copy button; hero top padding is
+`clamp(88px, 11vw, 148px)`. All new motion collapses under `prefers-reduced-motion` (verified
+computed 1e-05s).
+
 ## Theme switching
 
 Pre-paint script `theme-init.js` (external file, CSP-safe): stored choice in

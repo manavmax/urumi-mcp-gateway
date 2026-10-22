@@ -54,38 +54,46 @@
       </div>
       <p class="hero-note">A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
 
-      <div class="code-card" aria-label="MCP client configuration example">
-        <div class="code-head">
-          <span class="code-title">MCP client config</span>
-          <span class="chip chip-neutral">streamable HTTP</span>
-        </div>
-        <pre class="code-block"><code>{
+      <div class="code-wrap">
+        <div class="code-card" aria-label="MCP client configuration example">
+          <div class="code-head">
+            <span class="code-title">MCP client config</span>
+            <span class="code-head-actions">
+              <span class="chip chip-neutral">streamable HTTP</span>
+              <button class="copy-btn" id="copyConfig" type="button" aria-label="Copy the MCP client config">
+                <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+                <span class="copy-label">Copy</span>
+              </button>
+            </span>
+          </div>
+          <pre class="code-block"><code>{
   <span class="tok-key">"mcpServers"</span>: {
     <span class="tok-key">"urumi"</span>: {
       <span class="tok-key">"url"</span>: <span class="tok-str" data-gateway-url>"https://dashboard.example.com/mcp"</span>,
       <span class="tok-key">"headers"</span>: {
-        <span class="tok-key">"Authorization"</span>: <span class="tok-str">"Bearer <your-api-key>"</span>
+        <span class="tok-key">"Authorization"</span>: <span class="tok-str">"Bearer &lt;your-api-key&gt;"</span>
       }
     }
   }
-}</code></pre>
-        <div class="code-tools">
-          <p class="code-tools-label">One URL, 13 namespaced tools</p>
-          <ul class="tool-chips" aria-label="Namespaced tool names">
-            <li>woo__list_products</li>
-            <li>woo__get_product</li>
-            <li>woo__create_product</li>
-            <li>woo__list_product_images</li>
-            <li>woo__add_product_image</li>
-            <li>woo__list_orders</li>
-            <li>woo__get_order</li>
-            <li>woo__update_order_status</li>
-            <li>time__get_current_time</li>
-            <li>time__convert_time</li>
-            <li>notes__create_note</li>
-            <li>notes__list_notes</li>
-            <li>notes__search_notes</li>
-          </ul>
+}</code><span class="caret" aria-hidden="true"></span></pre>
+          <div class="code-tools">
+            <p class="code-tools-label">One URL, 13 namespaced tools</p>
+            <ul class="tool-chips" aria-label="Namespaced tool names">
+              <li>woo__list_products</li>
+              <li>woo__get_product</li>
+              <li>woo__create_product</li>
+              <li>woo__list_product_images</li>
+              <li>woo__add_product_image</li>
+              <li>woo__list_orders</li>
+              <li>woo__get_order</li>
+              <li>woo__update_order_status</li>
+              <li>time__get_current_time</li>
+              <li>time__convert_time</li>
+              <li>notes__create_note</li>
+              <li>notes__list_notes</li>
+              <li>notes__search_notes</li>
+            </ul>
+          </div>
         </div>
       </div>
     </section>
@@ -107,8 +115,9 @@
     <!-- e. Three-column features -->
     <section class="section" id="features">
       <header class="section-head">
+        <p class="eyebrow">Gateway</p>
         <h2>What is in the box</h2>
-        <p>Everything below is implemented on this branch and verified by the test suite and live checks.</p>
+        <p>The gateway, the store and the team controls below are all live in the demo.</p>
       </header>
       <div class="cols3">
         <article class="feature">
@@ -123,7 +132,7 @@
         <article class="feature">
           <h3>Store and tools</h3>
           <ul class="feature-list">
-            <li><strong>A real store.</strong> WooCommerce with a 12-product catalog and cash on delivery.</li>
+            <li><strong>A real store.</strong> WooCommerce with a <span data-store-catalog>12-product</span> catalog and cash on delivery.</li>
             <li><strong>8 store tools.</strong> Products, orders and images over the WooCommerce REST API.</li>
             <li><strong>Three servers.</strong> woo, time and notes prove aggregation across upstreams.</li>
             <li><strong>Cross-server replies.</strong> One chat prompt can span two servers in one answer.</li>
@@ -144,6 +153,7 @@
     <!-- f. Numbered steps -->
     <section class="section" id="steps">
       <header class="section-head">
+        <p class="eyebrow">Setup</p>
         <h2>From zero to a tool call</h2>
         <p>Three steps, all in the dashboard. No YAML for day-to-day use.</p>
       </header>
@@ -175,6 +185,7 @@
     <!-- g. How a tool call travels -->
     <section class="section" id="tour">
       <header class="section-head">
+        <p class="eyebrow">Under the hood</p>
         <h2>How a tool call travels</h2>
         <p>A call enters through one endpoint, is checked and audited, then reaches the store with credentials the caller never sees.</p>
       </header>
@@ -271,6 +282,7 @@
     <section class="section" id="control">
       <div class="two-col">
         <div class="col-text">
+          <p class="eyebrow">Control</p>
           <h2>Control without ceremony</h2>
           <p>The controls that matter for a team are one click each, and every change lands in a trail you can read later.</p>
           <ul class="feature-list">
@@ -308,6 +320,7 @@
     <!-- i. Observability -->
     <section class="section" id="observability">
       <header class="section-head">
+        <p class="eyebrow">Observability</p>
         <h2>See the fleet at a glance</h2>
         <p>The Overview page computes these from <code>GET /api/stats</code> over a 14-day window. The values below are sample data.</p>
       </header>
@@ -345,6 +358,7 @@
     <!-- j. Security -->
     <section class="section" id="security">
       <header class="section-head">
+        <p class="eyebrow">Security</p>
         <h2>Security posture, stated plainly</h2>
         <p>Two auth domains: your key opens the gateway, the gateway holds the upstream credentials. They never meet.</p>
       </header>
@@ -380,6 +394,7 @@
     <!-- k. Kubernetes and Helm -->
     <section class="section" id="kubernetes">
       <header class="section-head">
+        <p class="eyebrow">Platform</p>
         <h2>One Helm chart, two worlds</h2>
         <p>The same chart deploys to a local kind cluster and to a single-node k3s VPS. Only values change.</p>
       </header>
@@ -421,8 +436,9 @@
     <!-- l. Beyond the brief (features.js drives this; hidden until an item is enabled) -->
     <section class="section" id="beyond" hidden>
       <header class="section-head">
+        <p class="eyebrow">Queue</p>
         <h2>Beyond the brief</h2>
-        <p>Ideas queued past the assignment. Each ships switched off in <code>src/landing/features.js</code> and renders here only after its branch merges.</p>
+        <p>Ideas queued past the assignment. Each one ships switched off in <code>src/landing/features.js</code> and appears here only when it actually lands in the demo.</p>
       </header>
       <div class="cols3" id="beyond-list"></div>
     </section>

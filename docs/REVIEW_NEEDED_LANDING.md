@@ -33,8 +33,8 @@ each item needs your eyes before or shortly after the deploy.
 4. **Demo video.** The section stays hidden until `landing.videoUrl` is set in features.js. It
    renders as a link OUT (no embed), so the page keeps making zero external requests. If you want
    an embedded player instead, that is a deliberate CSP/external-request policy change.
-5. **Look at the screenshots.** artifacts/landing/landing-{desktop,mobile}-{dark,light}.png
-   (1440 and 390, both themes, full page; gitignored). This session could not view images, so the
+5. **Look at the screenshots.** artifacts/landing/ has 8 PNGs: full pages at
+   {desktop,mobile} x {dark,light} plus a mid-scroll shot per case proving the sticky nav. This session could not view images, so the
    visual review was scripted proxies: no horizontal overflow at 390/1440, 32/32 AA contrast pairs
    per theme, zero console errors, reduced-motion collapse verified. Your eyes are the last gate.
 6. **www subdomain.** The component serves only the bare apex (`landing.host`). If you want

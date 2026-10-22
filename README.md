@@ -277,9 +277,11 @@ Enabling it in prod takes three things, in this order:
 **Flipping "Beyond the brief" items.** `src/landing/features.js` is the single config file: every
 item ships `enabled: false`, and only `enabled: true` items render in the "Beyond the brief"
 section (all-off hides the section). Flip an item ONLY after its branch actually merges, then
-rebuild: `make landing-image` + restart `deployment/urumi-landing`. The same file holds
-`repoUrl` (announcement bar + nav) and `videoUrl` (the demo video block stays hidden while empty;
-it renders as a link out, never an embed, so the page keeps making zero external requests).
+rebuild: `make landing-image` + restart `deployment/urumi-landing`. The same file also holds
+`repoUrl` (announcement bar + nav), `gatewayUrl` (the hero MCP config; empty = derived from the
+page host as `dashboard.<apex>/mcp`), `storeProductCount` (the store claim, so a count correction
+never touches prose), and `videoUrl` (the demo video block stays hidden while empty; it renders
+as a link out, never an embed, so the page keeps making zero external requests).
 
 ## Submission (when ready)
 
