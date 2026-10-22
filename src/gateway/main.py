@@ -6,10 +6,12 @@ import asyncio
 import contextlib
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager
 
 from config import get_settings
+from db import schema_check
 from db.session import get_session_factory
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,24 +19,9 @@ from sqlalchemy import select
 
 LOG_FORMAT = '{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}'
 
-# Hardening (ADR-046): security headers on every gateway response. The API serves
-# JSON only, so the CSP is a defence-in-depth cap on what a response COULD render
-# if a content-type ever went wrong: self-only scripts/styles/connects, no
-# framing, no inline anything. The dashboard's nginx sets the same policy for the
-# SPA (src/dashboard/nginx.conf).
-SECURITY_HEADERS = {
-    "Content-Security-Policy": (
-        "default-src 'self'; script-src 'self'; style-src 'self'; "
-        "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; "
-        "base-uri 'self'; form-action 'self'"
-    ),
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
-    "X-Frame-Options": "DENY",
-    # Deliberately empty value (the spec allows an empty policy = all features
-    # denied by default on browsers that honour it).
-    "Permissions-Policy": "",
-}
+# ADR-046 security headers live in security_headers.py (shared with the OAuth
+# consent route, which overrides the CSP for its own inline style block).
+from security_headers import SECURITY_HEADERS  # noqa: E402
 
 
 def configure_logging():
@@ -51,7 +38,13 @@ def configure_logging():
     except Exception:
         level = logging.INFO
     logging.basicConfig(level=level, format=LOG_FORMAT, force=True)
-    logger.disabled = False
+    # re-enable EVERY gateway logger, not just "gateway": the schema-check module
+    # (db.schema_check) and other gateway.* loggers exist at import time, so
+    # fileConfig disabled them too - their lines (e.g. the startup schema
+    # verification result) would be silently dropped after the migration.
+    for name in logging.root.manager.loggerDict:
+        if name == "gateway" or name.startswith("gateway."):
+            logging.getLogger(name).disabled = False
 
 
 logger = logging.getLogger("gateway")
@@ -88,6 +81,18 @@ async def lifespan(app: FastAPI):
             # from here on (seed errors included) is ever seen
             configure_logging()
             logger.info("alembic upgrade head done")
+
+        # RC hardening (companion to ADR-061): the runner's success log is NOT
+        # proof. Read alembic_version through a SEPARATE connection and compare
+        # with the head this code ships with. On mismatch: clear ERROR log,
+        # readiness fails, and the process exits non-zero - a rolled-back or
+        # silently-uncommitted migration can never look healthy again.
+        await schema_check.verify_schema_version()
+        schema_check.schema_verified = True
+    except schema_check.SchemaVersionMismatch as exc:
+        schema_check.schema_verified = False
+        logger.error("SCHEMA VERSION CHECK FAILED: %s", exc)
+        sys.exit(3)
     except Exception as exc:
         logger.warning("alembic upgrade failed (will retry on next start): %s", exc)
 

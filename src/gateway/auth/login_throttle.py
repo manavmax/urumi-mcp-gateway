@@ -25,6 +25,24 @@ from config import get_settings
 logger = logging.getLogger("gateway.login_throttle")
 
 
+class ThrottleUnavailable(Exception):
+    """The login_failures table is missing (rolled-back/uncommitted migration).
+
+    The lockout control CANNOT work without its counter table, so the login
+    endpoint must fail CLOSED for that attempt: an attacker who (somehow) drops
+    the table must not get unlimited password guessing, and a rolled-back
+    migration must never silently disable the control. The login route maps
+    this to 503 with a clear log. Purge/cleanup helpers keep the old fail-open
+    policy - losing a cleanup sweep is not a security event.
+    """
+
+
+def _is_missing_table(exc: Exception) -> bool:
+    """True when the failure is 'the login_failures table does not exist'."""
+    text = str(exc).lower()
+    return ("login_failures" in text and "does not exist" in text) or "no such table" in text
+
+
 def _window_seconds() -> int:
     try:
         value = int(get_settings().login_lockout_window_seconds)
@@ -55,7 +73,13 @@ async def _count_failures(db, kind: str, key: str) -> int:
 
 
 async def is_locked(db, kind: str, key: str) -> bool:
-    """True when this key has reached the failure cap inside the window."""
+    """True when this key has reached the failure cap inside the window.
+
+    Missing login_failures table -> ThrottleUnavailable (the login route fails
+    CLOSED for that attempt, never silently fail-open - see class docstring).
+    Other, transient DB errors keep the ADR-057 fail-open policy: a flaky
+    database must not take the login endpoint down or lock honest users out.
+    """
     from db.session import get_session_factory
 
     factory = get_session_factory()
@@ -63,8 +87,15 @@ async def is_locked(db, kind: str, key: str) -> bool:
         try:
             return await _count_failures(session, kind, key) >= _attempts_allowed()
         except Exception as exc:
-            # fail-open: a broken counter must not lock honest users out, and it
-            # must not take the login endpoint down (same policy as the /mcp
+            if _is_missing_table(exc):
+                logger.error(
+                    "login lockout UNAVAILABLE: the login_failures table is missing "
+                    "(rolled-back or uncommitted migration?) - failing CLOSED for this "
+                    "login attempt (503). Fix: run migrations to head."
+                )
+                raise ThrottleUnavailable("login_failures table missing") from exc
+            # fail-open: a transiently broken counter must not lock honest users out,
+            # and it must not take the login endpoint down (same policy as the /mcp
             # rate limiter - see ADR-057)
             logger.warning("login throttle count failed (allowing attempt): %s", exc)
             return False
@@ -72,7 +103,11 @@ async def is_locked(db, kind: str, key: str) -> bool:
 
 async def record_failure(db, kind: str, key: str) -> bool:
     """Record one failure. Returns True when this failure JUST crossed the cap
-    (i.e. the row count equals the cap) - the caller audits that transition once."""
+    (i.e. the row count equals the cap) - the caller audits that transition once.
+
+    Missing login_failures table -> ThrottleUnavailable (fail CLOSED: a failed
+    login whose counter cannot be written must not be answered with a retryable
+    401, or an attacker could brute-force while the counter is broken)."""
     from db.models import LoginFailure
     from db.session import get_session_factory
 
@@ -84,6 +119,13 @@ async def record_failure(db, kind: str, key: str) -> bool:
             count = await _count_failures(session, kind, key)
         return count == _attempts_allowed()
     except Exception as exc:
+        if _is_missing_table(exc):
+            logger.error(
+                "login lockout UNAVAILABLE: cannot record failure - the login_failures "
+                "table is missing (rolled-back or uncommitted migration?) - failing "
+                "CLOSED for this login attempt (503). Fix: run migrations to head."
+            )
+            raise ThrottleUnavailable("login_failures table missing") from exc
         logger.warning("login throttle record failed: %s", exc)
         return False
 

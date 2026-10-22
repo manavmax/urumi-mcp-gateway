@@ -50,7 +50,17 @@ async def login(body: LoginBody, request: Request, response: Response, db: Async
     # password verify and returns the generic 429 text (no user-existence leak
     # either way).
     client_ip = request.client.host if request.client else "unknown"
-    if await login_throttle.is_locked(db, "user", email) or await login_throttle.is_locked(db, "ip", client_ip):
+    try:
+        locked = await login_throttle.is_locked(db, "user", email) or await login_throttle.is_locked(db, "ip", client_ip)
+    except login_throttle.ThrottleUnavailable:
+        # RC hardening: the lockout counter table is missing (rolled-back or
+        # uncommitted migration). Fail CLOSED with a clear, retryable error -
+        # never silently allow password guessing while the control is broken.
+        raise HTTPException(
+            status_code=503,
+            detail="login temporarily unavailable: lockout storage is missing (schema migration required)",
+        ) from None
+    if locked:
         raise HTTPException(status_code=429, detail="too many attempts, retry later")
     res = await db.execute(select(User).where(User.email == email))
     user = res.scalars().first()
@@ -62,8 +72,17 @@ async def login(body: LoginBody, request: Request, response: Response, db: Async
     if reason:
         # Hardening (ADR-044): count the failure for both keys; when a cap is
         # crossed, write ONE audit row per lockout transition.
-        just_locked_user = await login_throttle.record_failure(db, "user", email)
-        just_locked_ip = await login_throttle.record_failure(db, "ip", client_ip)
+        # RC hardening: a missing login_failures table fails CLOSED (503) - the
+        # attempt must not be answerable with a plain 401 while the counter is
+        # broken, or brute-forcing becomes free.
+        try:
+            just_locked_user = await login_throttle.record_failure(db, "user", email)
+            just_locked_ip = await login_throttle.record_failure(db, "ip", client_ip)
+        except login_throttle.ThrottleUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="login temporarily unavailable: lockout storage is missing (schema migration required)",
+            ) from None
         # login.failed trail (ADR-034): attempted email + time + reason only, NEVER
         # the password. One source (attempted email) can write at most
         # LOGIN_FAILED_EVENT_LIMIT rows per window (the same in-memory rate-limit
