@@ -226,3 +226,28 @@ Do not:
 - Use bold headline weights, large shadows, sharp corners or more than one glow.
 - Invent customers, logos, testimonials, statistics or reviews.
 - Add a framework, a build step, a CDN, analytics or any third-party script.
+
+
+## 13. Rebuild deltas (2026-10-22, ADR-086)
+
+The page in `src/landing/` now implements this spec. Each deviation below is forced
+(miss-measurement, an incomplete light palette, or the repo disagreeing with the copy)
+and is logged with rationale in docs/DECISIONS.md (ADR-086).
+
+- Dark `muted` is `#8B8E89`, not `#6C6E6A`: the spec value measures 3.9:1 on canvas and
+  3.3:1 on surface, below WCAG AA at the 11-14px sizes the role is used at. Same role,
+  AA-safe value. Light `muted` keeps the spec's `#686E6C` (passes everywhere).
+- Light theme completion (front matter defines bg/surface/surfaceRaised only):
+  `surface-alt #EEF2F0` for the alternating bands, cards `#FFFFFF`, `surface-raised
+  #F5F7F6`, danger `#B3261E`, warn `#8A5A00`, faint `#9AA19D`, hairlines `#E2E7E4` /
+  `#C7CDC9`. White cards keep separation on the tinted bands.
+- New token `on-deep` (text on accent-deep fills: chips, selected tabs, step numbers):
+  `#5EEAD4` dark, `#99F6E4` light. The light `accent-bright` (`#0F766E`) is reserved for
+  highlights and links on light backgrounds, where it passes AA.
+- Section 8's caption referenced `scripts/regress-core.sh`, which does not exist in this
+  repo. It now names the real checks: `make test` and `scripts/verify-server-tools.mjs`.
+- The client-tabs config block (motion spec, section 7) is not a numbered section; it is
+  placed under the three steps (step 03 "Use it anywhere"), with the derived gateway URL
+  and the visible `Bearer <your-api-key>` placeholder in every snippet.
+- The closing band carries one extra small line so the data-driven store claim
+  (`features.js` storeProductCount) keeps a home.

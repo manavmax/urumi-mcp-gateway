@@ -1,61 +1,68 @@
-# Landing page: decisions made and items waiting for Manav
+# Landing page rebuild: items waiting for Manav (2026-10-22, ADR-086 pass)
 
-Context: the `landing` branch work was done without access to the cluster (another session uses
-it), and without answers to a few questions only you can settle. Everything below was decided
-unilaterally and logged in docs/DECISIONS.md as ADR-080..084; nothing here blocks merging, but
-each item needs your eyes before or shortly after the deploy.
+Context: the `landing` branch was rebuilt to docs/LANDING_DESIGN.md (commit 1fb69a8) without
+access to the cluster and without answers to the questions below. Everything was decided
+unilaterally and logged as ADR-086; nothing blocks merging, but the items need your eyes.
 
-## Decisions I made (details in docs/DECISIONS.md)
+## 1. Look at the screenshots — I could not (no image input this session)
 
-- ADR-080: static no-build site in `src/landing/`, served by the dashboard nginx pattern
-  (uid 101, 8080, strict CSP, zero external requests, video as a link out, never an embed).
-- ADR-081: dark-first with a light toggle; tokens mirror the dashboard family; stored choice beats
-  `prefers-color-scheme` beats dark. Design tokens documented in docs/LANDING_DESIGN.md.
-- ADR-082: `src/landing/features.js` is the only config file; every beyond-the-brief item ships
-  `enabled: false`, zero enabled items hides the whole section.
-- ADR-083: five new `helm/templates/landing-*.yaml` files; apex Ingress with a dedicated
-  certificate Secret (`urumi-landing-tls`); NetworkPolicy opens ingress ONLY from the ingress
-  controller, no egress at all; dedicated ServiceAccount with no token; flag OFF by default.
-- ADR-084: verification ran with docker + Playwright + helm lint/template only, no cluster.
+**This pass was built by a model without image input.** Every visual check ran as scripted
+probes (geometry, contrast, motion), but nobody has actually LOOKED at the page yet. Please open:
 
-## Waiting on you
+- `artifacts/landing/landing-desktop-dark.png`, `landing-desktop-light.png` (1440, full page)
+- `artifacts/landing/landing-mobile-dark.png`, `landing-mobile-light.png` (390, full page)
+- `artifacts/landing/frames/hero-frame-1..6.png` (6 frames of the hero graphic, 600ms apart;
+  all six hashes differ, so the packet motion rendered)
+- `artifacts/landing/review/` (32 per-section clips, both themes — easiest way to review
+  section by section)
 
-1. **Apex DNS before enabling (prod).** The apex A record must point at the server BEFORE
-   `landing.enabled=true` and `landing.host=<bare domain>` go into the prod upgrade
-   (`--set landing.host=example.com --set landing.enabled=true`, or your uncommitted overlay;
-   I did not touch the committed values-prod.yaml, per the brief it keeps placeholders).
-2. **Confirm the repo URL.** The page links to `https://github.com/urumi-ai/mcp-gateway`
-   (the `home:` field in helm/Chart.yaml). If the public repo lives elsewhere, change `repoUrl` in
-   `src/landing/features.js` and rebuild the image.
-3. **Flip features.js items only after the branches merge.** multi-store, hosted servers, OAuth,
-   compact tool mode, rate limits, metrics are all `enabled: false`. Flip one, then
-   `make landing-image` and restart `deployment/urumi-landing` (on the cluster; I never ran these).
-4. **Demo video.** The section stays hidden until `landing.videoUrl` is set in features.js. It
-   renders as a link OUT (no embed), so the page keeps making zero external requests. If you want
-   an embedded player instead, that is a deliberate CSP/external-request policy change.
-5. **Look at the screenshots.** artifacts/landing/ has 8 PNGs: full pages at
-   {desktop,mobile} x {dark,light} plus a mid-scroll shot per case proving the sticky nav. This session could not view images, so the
-   visual review was scripted proxies: no horizontal overflow at 390/1440, 32/32 AA contrast pairs
-   per theme, zero console errors, reduced-motion collapse verified. Your eyes are the last gate.
-6. **www subdomain.** The component serves only the bare apex (`landing.host`). If you want
-   www.<domain> to reach the page too, it needs one more Ingress rule; I left it out because the
-   brief named the apex only.
-7. **Image tag for the build session.** I built locally as `urumi/landing:0.1.0`. For GHCR, use
-   `make images-push` (it will build all nine images as `ghcr.io/<owner>/landing:<appVersion>-<sha>`)
-   and pin that tag in values-prod.
-8. **Live check on kind (when free).** `make landing-image && make helm-local`, then open
-   http://127.0.0.1.nip.io . Everything above was verified against the docker image on port 8090
-   and with helm template; the in-cluster path (ingress -> NetworkPolicy -> pod) is chart-reviewed
-   but never live-run from this session.
+Things to judge by eye: hero prism composition and plane tilt, packet colours/density,
+terminal look, marquee mask, sim cards, quote cards, the giant footer wordmark, light-theme
+contrast feel. The scripted gates that DID pass: zero external requests, zero console errors,
+no horizontal scroll at 375/768/1024/1440, 59/59 AA pairs both themes, sticky nav,
+reduced-motion final values, simulation state machine, clipboard round-trips, budgets
+(total 196KB/350KB, JS 31.9KB/40KB, fonts 78KB), 6 distinct hero frames.
 
-## Evidence summary
+## 2. Deviations from the spec to approve (details: docs/LANDING_DESIGN.md section 13, ADR-086)
 
-- `docker build -t urumi/landing:0.1.0 src/landing` and `docker run --user 101 ... ` (uid 101,
-  tmpfs for the three emptyDir paths): 200 on /, all five assets 200, 404 for unknown paths, CSP
-  self-only + nosniff + no-referrer + DENY framing on every response.
-- `node scripts/landing-verify.mjs`: all four cases OK (zero external requests, contrast 32/32
-  both themes, zero console errors, beyond/video hidden by default, gateway URL derived).
-- `helm lint` with values-local and values-prod.example: 0 failures. `helm template` with the flag
-  off renders zero landing lines; with values-local it renders SA + Service + Deployment + Ingress
-  + the controller-only NetworkPolicy.
-- Page weight: 52KB raw / 15.5KB gzip total. Secret scan and em-dash scan of src/landing: clean.
+- Dark `muted` darkened `#6C6E6A -> #8B8E89` (spec value fails WCAG AA below 24px: 3.9:1 on
+  canvas, 3.3:1 on surface). Same role, AA-safe value.
+- Light theme completed where the spec's front matter is silent: cards `#FFFFFF` on `#EEF2F0`
+  bands, danger `#B3261E`, warn `#8A5A00`, plus an `on-deep` token (`#5EEAD4` dark /
+  `#99F6E4` light) for text on accent-deep fills.
+- Sim caption: spec said `scripts/regress-core.sh`, which does not exist in the repo; it now
+  names `make test` and `scripts/verify-server-tools.mjs` (repo wins).
+- The client-tabs config block is placed under the three steps (step 03); the 18-section
+  anatomy has no other home for it.
+- One extra small line in the closing band keeps the data-driven `storeProductCount` claim
+  ("a 12-product catalog") after the redesign dropped the old features card it lived in.
+
+## 3. Carried over from the first pass (still open)
+
+1. **Apex DNS before enabling (prod)** — unchanged from ADR-083 notes.
+2. **Confirm the repo URL** in `features.js` (`https://github.com/urumi-ai/mcp-gateway`).
+3. **Flip beyond-the-brief items only after their branches merge**; then `make landing-image`.
+4. **Demo video** stays hidden until `landing.videoUrl` is set.
+5. **www subdomain** still not served; one more Ingress rule if wanted.
+6. **Image tag**: built locally as `urumi/landing:0.2.0`; for GHCR use `make images-push` and
+   pin the tag in values-prod (values-local pins `0.1.0` — bump it when you enable on kind).
+7. **Live check on kind** (`make landing-image && make helm-local`, then the apex host); the
+   in-cluster path was chart-reviewed and helm-templated only, never live-run from this session.
+
+## Evidence summary (this pass)
+
+- `docker build -t urumi/landing:0.2.0 src/landing`; container run as uid 101 on 127.0.0.1:8090;
+  `/`, styles, scripts, fonts all 200; CSP self-only + nosniff + no-referrer + DENY on responses
+  (unchanged from ADR-080); `font/woff2` served with 7-day cache.
+- `node scripts/landing-verify.mjs` (against the container): LANDING VERIFY PASSED — 7 sweeps
+  OK, zero external requests, zero console errors, contrast 59/59 in both themes, budgets
+  total=196,030B (limit 358,400B) js=31,908B (limit 40,960B) fonts=78,064B, 6 hero frames
+  saved, reduced-motion gates green, simulation/clipboard gates green.
+- Scripted probes: packets move (both accent and violet seen in flight), hub pulse animating,
+  marquee translating, audit rows streaming, terminal looping, steps track drawing,
+  diagram replay 12 -> 1 -> 12, spotlight `--mx/--my` set on pointermove, toast on chip copy,
+  announcement dismissal persisted across reload, mobile menu sheet opens.
+- `helm lint ./helm` with values-local: 0 failed. `helm template` flag-off: zero landing lines;
+  with values-local: Deployment/Service/Ingress/NetworkPolicy/SA render.
+- Page weight: 196KB raw total (HTML 48KB, CSS 38KB, JS 31.9KB, fonts 78KB, favicon+rest);
+  far under the 350KB budget; gzip will land well under half of that.

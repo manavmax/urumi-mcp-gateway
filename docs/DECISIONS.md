@@ -1014,3 +1014,65 @@ round-trip test grants permissions explicitly; real browsers prompt or allow per
 top, visible Bearer placeholder, derived URL without example.com, copy button present, store claim
 "12-product"), zero external requests, 32/32 contrast pairs per theme, zero console errors.
 Page weight 57.8KB raw, 17.0KB gzip.
+
+
+## 2026-10-22: Landing page rebuilt to docs/LANDING_DESIGN.md as the single source of truth (ADR-086)
+
+**What changed.** Full rebuild of `src/landing/` to the new spec (the spec file landed as
+commit 1fb69a8 and overrides the older token note): the new token family (near-black
+canvas #040804, surface bands, hairlines, one micro shadow, mint-teal accent), 18
+sections in the spec's order, and the full motion set. Self-hosted fonts: Inter Variable
+and DM Mono installed from the fontsource packages in a temp folder OUTSIDE the repo,
+only the latin woff2 files copied in (48KB + 15KB + 15KB), the two main files preloaded,
+`font-display: swap`, licences recorded in docs/FONT_CREDITS.md. The hero graphic ("the
+gateway prism") is original inline SVG: client cards, /mcp hub with accent ring and
+3s pulse, four upstream cards incl. a dashed "your server", tilted translucent planes
+that follow the pointer, curved paths with accent outgoing / violet returning packets,
+upstream flash on arrival, drifting tool chips; the loop pauses off screen and on hidden
+tabs and renders a static frame under prefers-reduced-motion. Interactions: typing
+terminal (28ms/char, 5s loop), client tabs (Cursor / Claude Code / MCP Inspector) with
+per-snippet copy buttons and 160ms cross fade, count-up stats with a drawing sparkline,
+audit rows streaming every 2.5s (last 5, pause on hover), card spotlight on pointer
+devices, 40s marquee paused on hover, the "Break it yourself" simulation (kill pod ->
+Unreachable after 600ms with the other servers still answering, restarting after 6s,
+Connected again after restart; disable pulls tools from the combined list with the live
+count; revoke -> 401 until a new key is issued; Reset restores), step track drawing on
+scroll, numbered diagram lighting 400ms apart with a Replay pill, bottom-centre toasts,
+nav blur after 8px, mobile menu sheet, entrance reveals staggered 60ms. Light/dark with
+the manual toggle; reduced motion shows final values with loops disabled. No framework,
+no build step, no external requests.
+
+**Kept, per the brief.** The nginx image pattern and headers (CSP unchanged: `font-src
+'self'` already covered fonts; only the cache regex gained `woff2`), all Helm files
+untouched, the features.js contract (every beyond-the-brief item `enabled: false`,
+`gatewayUrl`, `storeProductCount`, `videoUrl`), the real gateway URL derivation
+(`dashboard.<apex>/mcp`), the visible `Bearer <your-api-key>` placeholder (escaped this
+time; raw angle brackets are parser-swallowed, see ADR-085), and the copy buttons.
+
+**Deviations.** Each is listed in docs/LANDING_DESIGN.md section 13: dark `muted`
+darkened to `#8B8E89` because the spec value fails WCAG AA below 24px (3.9:1 canvas,
+3.3:1 surface); light theme completed (white cards on `#EEF2F0` bands, dark danger/warn
+tokens); new `on-deep` token for text on accent-deep fills; the sim caption names real
+checks (`make test`, `scripts/verify-server-tools.mjs`) because `scripts/regress-core.sh`
+does not exist; the client-tabs config block lives under the three steps; the closing
+band gained one small line so `storeProductCount` stays wired.
+
+**Verification.** `docker build -t urumi/landing:0.2.0 src/landing` + the container run
+from ADR-084. scripts/landing-verify.mjs extended and green: zero external requests, zero
+console errors at every width, no horizontal scroll at 375/768/1024/1440, 59/59 AA pairs
+in both themes, sticky nav with the scrolled backdrop, reduced-motion gates (packets
+hidden, marquee stopped, final stat values, terminal/diagram final states), the full
+simulation state machine, clipboard round-trips for all three snippets plus tool chips,
+tab switching, budgets from real response bodies (total 196KB of the 350KB budget, JS
+31.9KB of 40KB, fonts 78KB), screenshots at 1440/390 in both themes and 6 hero frames
+600ms apart with six distinct hashes. Scripted probes (no image input this session):
+packets move with both spec colours, hub pulse, marquee motion, streaming rows, terminal
+typing, track draw, diagram replay restart (12 -> 1 -> 12), spotlight variables, toasts,
+announcement persistence, mobile sheet, tab switch. `helm lint` 0 failures; flag-off
+`helm template` renders zero landing lines; values-local renders the landing resources.
+
+**Known trade-offs.** The hero graphic begins just below the fold at 1440x900 (y=1008);
+its packets intentionally stay paused until it is scrolled into view, which is the spec's
+off-screen pause. This session's model has NO image input, so the screenshots and frames
+were not visually reviewed here; scripted geometry and motion probes substitute, and the
+visual pass is the top item for Manav in docs/REVIEW_NEEDED_LANDING.md.

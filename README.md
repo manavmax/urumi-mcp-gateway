@@ -256,7 +256,10 @@ headers + pod-log scan).
 
 `src/landing/` is a one-page static site (plain HTML/CSS/vanilla JS, no build step) served at the
 APEX domain by the `landing` component (ADR-080/083). Dark-first with a light toggle; zero external
-requests, strict CSP, nginx non-root uid 101 on 8080.
+requests, strict CSP, nginx non-root uid 101 on 8080. The design source of truth is
+docs/LANDING_DESIGN.md (rebuilt to it in ADR-086); Inter Variable and DM Mono are self-hosted
+woff2 in `src/landing/fonts/` (credits: docs/FONT_CREDITS.md). Verify with
+`node scripts/landing-verify.mjs` against the dockerised page.
 
 ```bash
 make landing-image                              # build + import into the kind node
