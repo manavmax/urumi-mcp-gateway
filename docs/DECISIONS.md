@@ -1032,6 +1032,30 @@ strategy is kept (mutable image tags), so upgrades briefly take the gateway
 down - unchanged single-replica behaviour for prod (1 replica unless Manav
 raises it).
 
+## 2026-10-22: startup schema gate + login-lockout fail-closed (RC, companions to ADR-061)
+
+**What changed.** (1) After `alembic upgrade head`, the gateway reads
+`alembic_version` through a SEPARATE connection and compares it with the head
+the code ships with (`db/schema_check.py`). Mismatch -> clear ERROR log,
+`/readyz` unready, exit code 3 - a rolled-back or silently-uncommitted migration
+can never look healthy again. Proven live: pointing the check at a 006 database
+while the code is at 011 raises `SchemaVersionMismatch` and exits 3; the
+healthy path logs `schema version verified: db=011_oauth code=011_oauth`.
+(2) Login lockout when `login_failures` is MISSING now fails CLOSED
+(`ThrottleUnavailable` -> 503 on the login route) instead of silently failing
+open; transient DB errors keep the ADR-057 fail-open policy; cleanup helpers
+(record_success/purge) stay fail-open. (3) Chart fix: the OAuth env block was
+nested under `provisioner.enabled`, so `oauth.enabled=true` was inert without
+the provisioner - moved to top level (ADR-063 independence restored).
+(4) The consent page's inline style violated the gateway CSP (style-src 'self')
+and rendered unstyled; the consent response now overrides its own CSP with the
+style's sha256 hash. (5) `configure_logging()` re-enables ALL `gateway.*`
+loggers after alembic's fileConfig (the schema-check log line was being
+silently dropped). Tests: test_schema_check.py, test_login_lockout_missing_table.py,
+test_alembic_commit.py (real-Postgres commit proof, skips without
+RC_TEST_DATABASE_URL; negative control = pre-ADR-061 env.py from 1bc1e7c logs
+success but commits nothing).
+
 ## 2026-10-21: alembic advisory-lock commit bug fixed (ADR-061)
 
 **What changed.** `alembic/env.py` took the ADR-059 advisory lock

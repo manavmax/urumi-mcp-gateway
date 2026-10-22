@@ -68,6 +68,77 @@ helm upgrade --install urumi ./helm -n urumi -f helm/values-prod.yaml \
 - **Alembic (ADR-061):** migration verification is a post-run DB READ
   (`SELECT version_num FROM alembic_version` + the new schema object), never the
   runner's own success log.
+- **Startup schema gate (RC):** the gateway reads `alembic_version` through a
+  SEPARATE connection after migrating and compares it with the alembic head the
+  code ships with. Mismatch = clear ERROR log, `/readyz` unready, exit code 3.
+  Consequence for rollbacks: rolling the CODE back across a migration boundary
+  (database ahead of code) makes the NEW gateway refuse to serve BY DESIGN -
+  restore the pre-upgrade pg_dump (below) or re-apply the newer release. Code
+  from BEFORE the gate existed (e.g. main @ 8cf8f73) still runs against the
+  newer schema, because that build has no check and every migration so far is
+  additive (verified live: main images Ready on a 011_oauth database).
+
+## pg_dump before upgrading, and restore (RC rehearsal - every command run for real)
+
+Take a dump BEFORE the upgrade (release `urumi`, namespace `rc-verify`; on the
+VPS substitute the real namespace). Custom format (`-Fc`) keeps it compressed
+and selective:
+
+```bash
+# 1. DUMP (run immediately before the upgrade)
+kubectl exec urumi-postgres-0 -n rc-verify -- \
+  sh -c 'pg_dump -U urumi -d urumi -Fc -f /tmp/urumi-pre-upgrade.dump'
+
+# 2. COPY OFF THE POD (the pod filesystem is not a backup)
+kubectl cp rc-verify/urumi-postgres-0:/tmp/urumi-pre-upgrade.dump \
+  urumi-pre-upgrade.dump -c postgres
+```
+
+Restore - the RECOVERY DRILL executed in this rehearsal restored the pre-upgrade
+dump into a scratch database and reproduced the exact pre-upgrade state
+(alembic_version `006_chat_uploads`, 211 audit rows, 3 users, 9 tables, 0
+pg_restore errors):
+
+```bash
+# 3a. drill: restore into a scratch DB and verify
+kubectl exec urumi-postgres-0 -n rc-verify -- psql -U urumi -d postgres \
+  -c 'DROP DATABASE IF EXISTS urumi_restored' -c 'CREATE DATABASE urumi_restored'
+kubectl exec urumi-postgres-0 -n rc-verify -- \
+  pg_restore -U urumi -d urumi_restored --no-owner /tmp/urumi-pre-upgrade.dump
+kubectl exec urumi-postgres-0 -n rc-verify -- psql -U urumi -d urumi_restored \
+  -t -c "SELECT version_num FROM alembic_version"   # -> 006_chat_uploads
+
+# 3b. REAL recovery (destroys the current database - this is the point):
+#     scale the gateway down first so nothing writes while you restore.
+kubectl scale deployment/urumi-gateway -n rc-verify --replicas=0
+kubectl exec urumi-postgres-0 -n rc-verify -- psql -U urumi -d postgres \
+  -c 'DROP DATABASE urumi' -c 'CREATE DATABASE urumi'
+kubectl exec urumi-postgres-0 -n rc-verify -- \
+  pg_restore -U urumi -d urumi --no-owner /tmp/urumi-pre-upgrade.dump
+kubectl scale deployment/urumi-gateway -n rc-verify --replicas=1
+# the gateway re-runs `alembic upgrade head` on start: the restored 006 DB is
+# migrated forward again; the startup schema gate then verifies db == code head.
+```
+
+MariaDB/WordPress data is NOT in this dump (separate engine): a full-point-in-time
+recovery needs the same pg_dump treatment for MariaDB
+(`mariadb-dump`) - documented here as the gap it is; the WordPress volume is a
+PVC that survives upgrades/rollbacks untouched (table above).
+
+## RC rehearsal: bonus-all over a main-shaped database (2026-10-22)
+
+Executed on kind, namespace `rc-verify`, release `urumi`: baseline = main @
+8cf8f73 (images `rc-main`, alembic head 006), upgrade = bonus-all (images
+`rc-bonus*`, prod-shaped values: provisioner/hostedServers/oauth disabled,
+1 replica, `--rollback-on-failure --wait`), helm revision 2 -> 3. Result: every
+old row intact (per-table count + md5 checksums equal on legacy-shape columns),
+old API keys still authenticate, revoked key still 401, stored upstream
+credential still decrypts, audit/permission rows byte-identical, WooCommerce
+order #48 intact, `scripts/regress-core.sh` ALL CHECKS PASSED. Manual
+`helm rollback 2` then re-proved main's images on the 011 schema (readyz ready,
+MCP + login + order intact, alembic_version untouched), and `helm rollback 5`
+returned to the bonus release. Revision history: 2 (main) -> 3 (bonus) -> 4/5
+(schema-gate builds) -> 6 (rollback to 2) -> 7 (rollback to 5).
 
 ## What upgrades/rollbacks do to state
 
