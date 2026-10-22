@@ -112,13 +112,13 @@ export default function Metrics() {
                 <tbody>
                   {rows.map((s) => (
                     <tr key={s.server}>
-                      <td className="mono">{s.server}</td>
-                      <td className="num">{s.calls.toLocaleString("en-US")}</td>
-                      <td className="num">{s.errors.toLocaleString("en-US")}</td>
-                      <td className="num">{fmtRate(s.error_rate)}</td>
-                      <td className="num">{fmtMs(s.p50_ms)}</td>
-                      <td className="num">{fmtMs(s.p95_ms)}</td>
-                      <td>
+                      <td className="mono" data-label="Server">{s.server}</td>
+                      <td className="num" data-label="Calls">{s.calls.toLocaleString("en-US")}</td>
+                      <td className="num" data-label="Errors">{s.errors.toLocaleString("en-US")}</td>
+                      <td className="num" data-label="Error rate">{fmtRate(s.error_rate)}</td>
+                      <td className="num" data-label="P50">{fmtMs(s.p50_ms)}</td>
+                      <td className="num" data-label="P95">{fmtMs(s.p95_ms)}</td>
+                      <td data-label="Top failure reasons">
                         <div className="reasons">
                           {s.top_failures.length === 0 ? (
                             <span className="muted">none</span>

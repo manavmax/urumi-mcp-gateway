@@ -8,6 +8,7 @@ import { api, type StoreRow } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Topbar } from "../components/Topbar";
 import { Icon } from "../components/icons";
+import { FeatureDisabled } from "../components/FeatureDisabled";
 
 function statusChip(status: StoreRow["status"]): { cls: string; icon: "clock" | "check-circle" | "alert" | "x-circle" } {
   switch (status) {
@@ -28,8 +29,12 @@ function fmtDate(iso: string): string {
 }
 
 export default function Stores() {
-  const { user } = useAuth();
+  const { user, features } = useAuth();
   const isAdmin = user?.role === "admin";
+  /* RC: with the provisioner disabled this page must not fire API calls (they
+     403 by design) - show the friendly panel instead, with zero console noise.
+     All hooks run unconditionally; the early return sits below them. */
+  const disabled = !features.stores;
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -52,12 +57,13 @@ export default function Stores() {
   }
 
   useEffect(() => {
+    if (disabled) return;
     alive.current = true;
     load();
     return () => {
       alive.current = false;
     };
-  }, []);
+  }, [disabled]);
 
   // poll while anything is in flight
   const inFlight = stores.some((s) => s.status === "Provisioning" || s.status === "Deleting");
@@ -108,6 +114,16 @@ export default function Stores() {
     }
   }
 
+  if (disabled) {
+    return (
+      <FeatureDisabled
+        title="Stores"
+        icon="store"
+        enableHint="An administrator enables multi-store provisioning on the gateway with: helm upgrade --set provisioner.enabled=true (and stores then appear here for each user)."
+      />
+    );
+  }
+
   return (
     <>
       <Topbar />
@@ -130,17 +146,20 @@ export default function Stores() {
             <h3 className="card-title">New store</h3>
           </div>
           <div className="row wrap">
-            <input
-              type="text"
-              placeholder="Store name (e.g. Bangalore branch)"
-              value={name}
-              maxLength={60}
-              aria-label="Store name"
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && name.trim() && !busy) void create();
-              }}
-            />
+            <div className="field">
+              <label htmlFor="store-name">Store name</label>
+              <input
+                id="store-name"
+                type="text"
+                placeholder="e.g. Bangalore branch"
+                value={name}
+                maxLength={60}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && name.trim() && !busy) void create();
+                }}
+              />
+            </div>
             <button className="btn btn-primary" type="button" disabled={!name.trim() || busy} onClick={() => void create()}>
               Create store
             </button>

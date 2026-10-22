@@ -12,6 +12,7 @@ import { NavLink, useSearchParams } from "react-router-dom";
 import { Icon } from "./icons";
 import { initials } from "../lib/search";
 import { useSharedTheme, type Theme } from "../lib/theme";
+import { useAuth } from "../lib/auth";
 import type { IconName } from "./icons";
 
 type NavItem = { to: string; label: string; icon: IconName };
@@ -29,11 +30,23 @@ const NAV: NavItem[] = [
 
 const railStyle = (i: number) => ({ "--i": i } as React.CSSProperties);
 
+/* RC: optional-feature items disappear from BOTH navigations when the gateway
+   runs with the corresponding Helm flag off (features come from /api/me). */
+function useNavItems(): NavItem[] {
+  const { features } = useAuth();
+  return NAV.filter((item) => {
+    if (item.to === "/stores") return features.stores;
+    if (item.to === "/hosted") return features.hosted;
+    return true;
+  });
+}
+
 export function Sidebar({ email, role, onLogout }: { email?: string; role?: string; onLogout: () => void }) {
   const [params] = useSearchParams();
   const forced = params.get("expanded") === "1" ? " force" : "";
   const roleLabel = role === "admin" ? "Administrator" : role === "member" ? "Member" : role || "";
   const { theme, setTheme } = useSharedTheme();
+  const items = useNavItems();
   return (
     <aside className={`sidebar-pill${forced}`} id="rail" aria-label="Primary">
       <NavLink className="brand" to="/overview" aria-label="Urumi home">
@@ -43,7 +56,7 @@ export function Sidebar({ email, role, onLogout }: { email?: string; role?: stri
         </span>
       </NavLink>
       <nav className="rail-nav" aria-label="Primary">
-        {NAV.map((item, i) => (
+        {items.map((item, i) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -82,9 +95,10 @@ export function Sidebar({ email, role, onLogout }: { email?: string; role?: stri
 
 /* Mobile: the bottom tab bar replaces the pill entirely (spec section 8). */
 export function BottomNav() {
+  const items = useNavItems();
   return (
     <nav className="bottomnav" aria-label="Primary mobile">
-      {NAV.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}

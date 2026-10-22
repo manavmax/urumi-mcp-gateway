@@ -331,12 +331,19 @@ details.tools[open] { border-radius: var(--r-inner); padding: 0; }
 .keybox { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s2); background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-pill); padding: 8px 14px; font-family: var(--font-mono); font-size: var(--t-sm); overflow: hidden; }
 .keybox code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------- feature-disabled panel (RC) ---------- */
+.feature-disabled { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s4); }
+.fd-icon { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 14px; background: var(--tint-soft); color: var(--primary); }
+.fd-title { font-weight: 700; margin: 2px 0 4px; }
+
 /* ---------- fields, filters, modal (family F) ---------- */
 .field { display: grid; gap: 5px; flex: 1; min-width: 150px; }
 .field.grow { flex: 2; }
 .field label { font-size: var(--t-sm); font-weight: 650; }
 .field input, .field select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--hairline-strong); border-radius: var(--r-pill); padding: 8px 14px; width: 100%; }
-.field input:focus, .field select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+.field textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--hairline-strong); border-radius: var(--r-inner); padding: 8px 14px; width: 100%; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+.field textarea { resize: vertical; min-height: 64px; font-family: var(--font-mono); font-size: var(--t-sm); }
 .field .hint { font-size: var(--t-xs); color: var(--text-faint); }
 .filters { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: flex-end; }
 .filters .field label { font-size: var(--t-xs); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-faint); }

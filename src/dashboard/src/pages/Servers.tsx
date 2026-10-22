@@ -379,7 +379,7 @@ export default function Servers() {
                 <div className="card-title"><Icon name="lock" />Permissions</div>
                 <span className="chip chip-neutral"><Icon name="deny" />{permCount} restricted for members</span>
               </div>
-              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setPermOpen(false)}>Close</button>
+              <button className="btn btn-secondary" type="button" onClick={() => setPermOpen(false)}>Close</button>
             </div>
             <div className="modal-body">
               {permErr && <div className="alert alert-error" role="alert">{permErr}</div>}

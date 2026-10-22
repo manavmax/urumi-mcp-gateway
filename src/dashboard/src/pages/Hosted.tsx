@@ -10,6 +10,7 @@ import { api, type HostedRow } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Topbar } from "../components/Topbar";
 import { Icon } from "../components/icons";
+import { FeatureDisabled } from "../components/FeatureDisabled";
 
 function statusChip(status: HostedRow["status"]): { cls: string; icon: "clock" | "check-circle" | "alert" | "x-circle" } {
   switch (status) {
@@ -30,8 +31,12 @@ function fmtDate(iso: string): string {
 }
 
 export default function Hosted() {
-  const { user } = useAuth();
+  const { user, features } = useAuth();
   const isAdmin = user?.role === "admin";
+  /* RC: with hostedServers disabled the page must not fire API calls (403 by
+     design) - show the friendly panel instead, with zero console noise. All
+     hooks run unconditionally; the early return sits below them. */
+  const disabled = !features.hosted;
   const [rows, setRows] = useState<HostedRow[]>([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -54,12 +59,13 @@ export default function Hosted() {
   }
 
   useEffect(() => {
+    if (disabled) return;
     alive.current = true;
     load();
     return () => {
       alive.current = false;
     };
-  }, []);
+  }, [disabled]);
 
   const inFlight = rows.some((r) => r.status === "Provisioning" || r.status === "Deleting");
   useEffect(() => {
@@ -111,6 +117,16 @@ export default function Hosted() {
 
   const canCreate = isAdmin && form.name.trim() && form.image.trim() && !busy;
 
+  if (disabled) {
+    return (
+      <FeatureDisabled
+        title="Hosted servers"
+        icon="server"
+        enableHint="An administrator enables hosted MCP servers on the gateway with: helm upgrade --set hostedServers.enabled=true (admins can then host upstreams from a container image here)."
+      />
+    );
+  }
+
   return (
     <>
       <Topbar />
@@ -135,45 +151,55 @@ export default function Hosted() {
           {isAdmin ? (
             <>
               <div className="row wrap">
-                <input
-                  type="text"
-                  placeholder="name (e.g. time2)"
-                  value={form.name}
-                  maxLength={30}
-                  aria-label="Hosted server name"
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-                <input
-                  type="text"
-                  placeholder="image (registry/repo:tag — :latest refused)"
-                  value={form.image}
-                  maxLength={200}
-                  className="grow"
-                  aria-label="Container image"
-                  onChange={(e) => setForm({ ...form, image: e.target.value })}
-                />
-                <input
-                  type="number"
-                  placeholder="port"
-                  value={form.port}
-                  min={1}
-                  max={65535}
-                  aria-label="Port"
-                  onChange={(e) => setForm({ ...form, port: e.target.value })}
-                />
+                <div className="field">
+                  <label htmlFor="hosted-name">Name</label>
+                  <input
+                    id="hosted-name"
+                    type="text"
+                    placeholder="e.g. time2"
+                    value={form.name}
+                    maxLength={30}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+                <div className="field grow">
+                  <label htmlFor="hosted-image">Container image</label>
+                  <input
+                    id="hosted-image"
+                    type="text"
+                    placeholder="registry/repo:tag — :latest refused"
+                    value={form.image}
+                    maxLength={200}
+                    onChange={(e) => setForm({ ...form, image: e.target.value })}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="hosted-port">Port</label>
+                  <input
+                    id="hosted-port"
+                    type="number"
+                    placeholder="8080"
+                    value={form.port}
+                    min={1}
+                    max={65535}
+                    onChange={(e) => setForm({ ...form, port: e.target.value })}
+                  />
+                </div>
                 <button className="btn btn-primary" type="button" disabled={!canCreate} onClick={() => void create()}>
                   Host server
                 </button>
               </div>
               <div className="row wrap">
-                <textarea
-                  placeholder={"env vars, one NAME=value per line (optional)\nvalues are stored in a cluster Secret and never shown again"}
-                  value={form.envText}
-                  rows={2}
-                  className="grow"
-                  aria-label="Environment variables"
-                  onChange={(e) => setForm({ ...form, envText: e.target.value })}
-                />
+                <div className="field grow">
+                  <label htmlFor="hosted-env">Environment variables (optional)</label>
+                  <textarea
+                    id="hosted-env"
+                    placeholder={"one NAME=value per line — values are stored in a cluster Secret and never shown again"}
+                    value={form.envText}
+                    rows={2}
+                    onChange={(e) => setForm({ ...form, envText: e.target.value })}
+                  />
+                </div>
               </div>
               <div className="small muted">
                 The image runs non-root, read-only, no service-account token, with capped CPU/memory and ingress only

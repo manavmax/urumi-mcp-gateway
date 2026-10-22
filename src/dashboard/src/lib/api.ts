@@ -48,7 +48,13 @@ async function request<T>(path: string, opts: ApiOpts = {}): Promise<T> {
 }
 
 // ---- typed helpers ----
-export type Me = { user: { id: string; email: string; role: string }; csrf_token: string };
+export type Me = {
+  user: { id: string; email: string; role: string };
+  csrf_token: string;
+  /* RC: which optional features this deployment has enabled (mirrors the Helm
+     flags). An older gateway omits the field - treated as both on. */
+  features?: { stores: boolean; hosted: boolean };
+};
 export type Server = {
   id: string;
   slug: string;
