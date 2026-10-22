@@ -16,16 +16,28 @@ and maps them to users (permissions / rate limits / audit unchanged).
 
 from __future__ import annotations
 
+import base64
+import hashlib
+
 import config
 from auth.rbac import get_current_user_via_session, verify_csrf
 from db.models import OauthToken, User
 from db.session import get_db
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from security_headers import SECURITY_HEADERS
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from oauth import core
+
+# The consent page's CSS: a FIXED string (never user input) so its CSP hash is
+# stable. Change the CSS -> the hash below is derived from this constant at
+# import time (no hand-maintained hash).
+CONSENT_CSS = "body{font-family:system-ui,sans-serif;max-width:34rem;margin:12vh auto;padding:0 1rem;}"
+_CONSENT_STYLE_HASH = base64.b64encode(hashlib.sha256(CONSENT_CSS.encode()).digest()).decode()
+_CSP = SECURITY_HEADERS["Content-Security-Policy"]
+CONSENT_CSP = _CSP.replace("style-src 'self'", f"style-src 'self' 'sha256-{_CONSENT_STYLE_HASH}'")
 
 router = APIRouter()
 
@@ -112,7 +124,13 @@ async def authorize_form(
             "state": echo["state"],
         },
     )
-    return HTMLResponse(html)
+    # RC fix: the consent page carries one inline <style> block. The gateway CSP
+    # (style-src 'self', ADR-046) refused it and the page rendered UNSTYLED. The
+    # middleware uses setdefault, so overriding the CSP here with the style's own
+    # hash allows exactly this block and nothing else.
+    resp = HTMLResponse(html)
+    resp.headers["Content-Security-Policy"] = CONSENT_CSP
+    return resp
 
 
 @router.post("/oauth/authorize")
@@ -228,8 +246,9 @@ def _consent_html(*, client_name: str, scope: str, resource: str, hidden: dict) 
     )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Authorize { _esc(client_name) } — Urumi gateway</title>
-<meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="font-family: system-ui, sans-serif; max-width: 34rem; margin: 12vh auto; padding: 0 1rem;">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>{ CONSENT_CSS }</style></head>
+<body>
 <h1>Authorize access</h1>
 <p><strong>{ _esc(client_name) }</strong> is asking to use the Urumi MCP gateway <strong>as your user</strong>.</p>
 <ul>

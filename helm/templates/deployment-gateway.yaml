@@ -180,8 +180,12 @@ spec:
             - name: HOSTED_GLOBAL_MAX
               value: {{ .Values.hostedServers.globalMax | default 5 | quote }}
             {{- end }}
+            {{- end }}
             {{- if .Values.oauth.enabled }}
-            # Phase 7 (ADR-063): OAuth for the MCP endpoint (API keys unchanged)
+            # Phase 7 (ADR-063): OAuth for the MCP endpoint (API keys unchanged).
+            # NOT nested under provisioner.enabled: OAuth is independent of store
+            # provisioning (RC rehearsal fix - the old nesting made oauth.enabled
+            # inert whenever provisioner.enabled was false).
             - name: OAUTH_ENABLED
               value: "true"
             - name: PUBLIC_BASE_URL
@@ -190,7 +194,6 @@ spec:
               value: {{ .Values.oauth.resourceUri | default (printf "%s/mcp" (.Values.oauth.publicBaseUrl | default (printf "http://%s" .Values.ingress.hosts.dashboard))) | quote }}
             - name: OAUTH_ISSUER
               value: {{ .Values.oauth.issuer | default (.Values.oauth.publicBaseUrl | default (printf "http://%s" .Values.ingress.hosts.dashboard)) | quote }}
-            {{- end }}
             {{- end }}
             # Timezone fallback (ADR-054): the chat system prompt stamps this zone when
             # the browser sends no valid IANA timezone. Base default is UTC; the local
