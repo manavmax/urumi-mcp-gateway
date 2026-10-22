@@ -1,144 +1,1277 @@
 {
-  "currency": "USD",
-  "note": "Single source of truth for the storefront catalog. The wp-setup job seeds by SKU and never overwrites admin edits unless STORE_SEED_FORCE=1. The image generator (scripts/gen-store-images.py) leaves existing <sku>.png files alone so the owner can drop in better photos without code changes.",
+  "brand": "Loam & Ember",
+  "tagline": "Slow-made goods for warm rooms and quiet desks.",
+  "note": "Single source of truth for the storefront catalog. The wp-setup seed (helm/templates/jobs/wp-setup.yaml) creates products by SKU, idempotently: running twice creates nothing and resets nothing. 'kind' and 'tint' drive scripts/gen-store-images.py (original generated artwork; see docs/IMAGE_CREDITS.md). 'new' and 'featured' are distinct flags; 'sale_price' makes the product (or variation) on sale; 'stock' enables manage-stock with that quantity; weight is kg, dimensions are cm.",
   "categories": [
-    { "slug": "apparel", "name": "Apparel", "tint": "periwinkle" },
-    { "slug": "home", "name": "Home", "tint": "peach" },
-    { "slug": "accessories", "name": "Accessories", "tint": "lilac" },
-    { "slug": "stationery", "name": "Stationery", "tint": "sand" }
+    {
+      "name": "Ceramics",
+      "slug": "ceramics",
+      "tint": "periwinkle",
+      "description": "Stoneware and porcelain thrown in small batches, glazed in quiet colours."
+    },
+    {
+      "name": "Textiles",
+      "slug": "textiles",
+      "tint": "lilac",
+      "description": "Wool, linen and cotton woven by mills we visit, in colours that settle a room."
+    },
+    {
+      "name": "Candles & Care",
+      "slug": "candles-care",
+      "tint": "peach",
+      "description": "Slow-burning candles and gentle soaps, poured and cut in our studio."
+    },
+    {
+      "name": "Desk & Paper",
+      "slug": "desk-paper",
+      "tint": "sand",
+      "description": "Notebooks, pens and small organisers for a calmer desk."
+    },
+    {
+      "name": "Kitchen",
+      "slug": "kitchen",
+      "tint": "sage",
+      "description": "Boards, jars and towels that make cooking feel unhurried."
+    },
+    {
+      "name": "Carry",
+      "slug": "carry",
+      "tint": "clay",
+      "description": "Bags and baskets in waxed canvas and heavy cotton, built to last."
+    }
   ],
   "products": [
     {
-      "sku": "URUMI-TEE-001",
-      "name": "Urumi Classic Tee",
-      "category": "Apparel",
-      "price": "29.99",
-      "short_description": "Heavyweight cotton tee with a relaxed fit.",
-      "description": "A heavyweight cotton tee in a relaxed fit with a clean crew neckline. The brushed fabric feels soft against the skin. Machine wash cold and tumble dry low.",
-      "image": "URUMI-TEE-001.png",
-      "alt": "Urumi Classic Tee, a heavyweight cotton t-shirt in a relaxed fit",
-      "new": false
-    },
-    {
-      "sku": "URUMI-HOODIE-001",
-      "name": "Urumi Hoodie",
-      "category": "Apparel",
-      "price": "59.99",
-      "short_description": "Fleece-lined hoodie with a kangaroo pocket.",
-      "description": "A fleece-lined hoodie with a comfortable kangaroo pocket and a drawstring hood. The cotton blend keeps its shape after many washes. Layer it over anything.",
-      "image": "URUMI-HOODIE-001.png",
-      "alt": "Urumi Hoodie, a fleece-lined hoodie with a kangaroo pocket",
-      "new": false
-    },
-    {
-      "sku": "102938",
-      "name": "Urumi Shoes",
-      "category": "Apparel",
-      "price": "149.99",
-      "short_description": "Everyday sneakers in a minimalist white.",
-      "description": "Everyday sneakers in a clean minimalist silhouette. The cotton-lined upper and rubber outsole keep the build simple. A versatile pair for daily wear.",
-      "image": "102938.png",
-      "alt": "Urumi Shoes, minimalist white everyday sneakers",
-      "new": false
-    },
-    {
-      "sku": "URUMI-CAP-001",
-      "name": "Urumi Cap",
-      "category": "Apparel",
+      "sku": "LOAM-CER-001",
+      "name": "Stoneware Mug 12 oz",
+      "category": "ceramics",
+      "kind": "mug",
+      "tint": "periwinkle",
+      "motif": "speckle",
       "price": "24.00",
-      "short_description": "Six-panel cap in a sturdy cotton twill.",
-      "description": "A six-panel cap with an adjustable strap at the back. The cotton twill keeps its shape and the curved brim sits low. One size fits most.",
-      "image": "URUMI-CAP-001.png",
-      "alt": "Urumi Cap, a six-panel cap in cotton twill",
-      "new": true
+      "sale_price": null,
+      "stock": 42,
+      "weight": "0.62",
+      "dimensions": {
+        "length": "11",
+        "width": "9",
+        "height": "9.5"
+      },
+      "tags": [
+        "ceramics",
+        "handmade",
+        "stoneware"
+      ],
+      "image": "LOAM-CER-001.png",
+      "gallery": [
+        "LOAM-CER-001-2.png",
+        "LOAM-CER-001-3.png",
+        "LOAM-CER-001-4.png"
+      ],
+      "alt": "Stoneware mug with a soft speckled glaze and a generous handle",
+      "short_description": "A hand-thrown stoneware mug with a soft speckled glaze and a handle that fits a full hand.",
+      "description": "Our everyday mug is thrown on the wheel in small batches and finished in a food-safe speckled glaze, so no two are exactly alike. The 12 oz body holds a long coffee or a wide tea, and the pulled handle keeps knuckles clear of the wall. Fired to 1,260 C, it is tough enough for the dishwasher and the microwave. Made by a two-person studio in Stonington.",
+      "featured": true,
+      "variations": [
+        {
+          "sku": "LOAM-CER-001-SAGE",
+          "attributes": {
+            "Glaze": "Sage"
+          },
+          "price": "24.00",
+          "stock": 18
+        },
+        {
+          "sku": "LOAM-CER-001-SAND",
+          "attributes": {
+            "Glaze": "Sand"
+          },
+          "price": "24.00",
+          "stock": 16
+        },
+        {
+          "sku": "LOAM-CER-001-SLATE",
+          "attributes": {
+            "Glaze": "Slate"
+          },
+          "price": "26.00",
+          "stock": 8
+        }
+      ]
     },
     {
-      "sku": "URUMI-MUG-001",
-      "name": "Ceramic Mug",
-      "category": "Home",
-      "price": "18.00",
-      "short_description": "Hand-glazed ceramic mug, 12 oz.",
-      "description": "A hand-glazed ceramic mug with a comfortable handle. Each one carries its own glaze pattern, so no two are alike. Dishwasher safe.",
-      "image": "URUMI-MUG-001.png",
-      "alt": "Ceramic Mug, a hand-glazed ceramic mug",
-      "new": true
-    },
-    {
-      "sku": "URUMI-CANDLE-001",
-      "name": "Scented Candle",
-      "category": "Home",
-      "price": "22.00",
-      "short_description": "Soy wax candle with a sandalwood scent.",
-      "description": "A soy wax candle with a soft sandalwood and cedar fragrance. Poured into a recyclable glass jar with a cotton wick. A calm addition to any room.",
-      "image": "URUMI-CANDLE-001.png",
-      "alt": "Scented Candle, a soy wax candle in a glass jar",
-      "new": true
-    },
-    {
-      "sku": "URUMI-THROW-001",
-      "name": "Wool Throw",
-      "category": "Home",
-      "price": "64.00",
-      "short_description": "Woven wool throw, 50 by 60 inches.",
-      "description": "A woven wool throw with a soft hand feel and a neat fringe. Generous 50 by 60 inches so it drapes well over a sofa. Dry clean only.",
-      "image": "URUMI-THROW-001.png",
-      "alt": "Wool Throw, a woven wool throw blanket",
-      "new": true
-    },
-    {
-      "sku": "URUMI-TOTE-001",
-      "name": "Canvas Tote",
-      "category": "Accessories",
-      "price": "28.00",
-      "short_description": "Heavy canvas tote with an interior pocket.",
-      "description": "A heavy canvas tote with reinforced handles and one interior pocket. Roomy enough for a laptop and your daily carry. Spot clean only.",
-      "image": "URUMI-TOTE-001.png",
-      "alt": "Canvas Tote, a heavy canvas tote bag",
-      "new": true
-    },
-    {
-      "sku": "URUMI-BACKPACK-001",
-      "name": "Everyday Backpack",
-      "category": "Accessories",
-      "price": "89.00",
-      "short_description": "Waxed canvas backpack with padded straps.",
-      "description": "A waxed canvas backpack with padded straps and a simple two-compartment layout. The front pocket holds small items within easy reach. A dependable bag for work or weekends.",
-      "image": "URUMI-BACKPACK-001.png",
-      "alt": "Everyday Backpack, a waxed canvas backpack",
-      "new": true
-    },
-    {
-      "sku": "URUMI-BOTTLE-001",
-      "name": "Steel Water Bottle",
-      "category": "Accessories",
+      "sku": "LOAM-CER-002",
+      "name": "Ramen Bowl",
+      "category": "ceramics",
+      "kind": "bowl",
+      "tint": "periwinkle",
+      "motif": "none",
       "price": "32.00",
-      "short_description": "Double-wall steel bottle with a matte finish.",
-      "description": "A double-wall steel bottle with a matte finish and a wide mouth. The loop cap clips neatly onto a bag. Hand wash only.",
-      "image": "URUMI-BOTTLE-001.png",
-      "alt": "Steel Water Bottle, a double-wall steel bottle",
+      "sale_price": "26.00",
+      "stock": 23,
+      "weight": "0.95",
+      "dimensions": {
+        "length": "18",
+        "width": "18",
+        "height": "9"
+      },
+      "tags": [
+        "ceramics",
+        "handmade",
+        "kitchen"
+      ],
+      "image": "LOAM-CER-002.png",
+      "gallery": [
+        "LOAM-CER-002-2.png",
+        "LOAM-CER-002-3.png"
+      ],
+      "alt": "Deep stoneware ramen bowl with a wide rim",
+      "short_description": "A deep stoneware bowl with a wide rim, sized for ramen night or a generous salad.",
+      "description": "Thrown with a high wall and a generous 18 cm mouth, this bowl keeps broth warm while you eat and gives noodles room to be lifted. The unglazed foot is sanded smooth so it never scratches a table. Dishwasher and microwave safe. Sale ends when this season's kiln is claimed."
+    },
+    {
+      "sku": "LOAM-CER-003",
+      "name": "Dinner Plates, Set of 4",
+      "category": "ceramics",
+      "kind": "plates",
+      "tint": "periwinkle",
+      "motif": "speckle",
+      "price": "68.00",
+      "sale_price": null,
+      "stock": 15,
+      "weight": "3.4",
+      "dimensions": {
+        "length": "27",
+        "width": "27",
+        "height": "8"
+      },
+      "tags": [
+        "ceramics",
+        "stoneware",
+        "kitchen"
+      ],
+      "image": "LOAM-CER-003.png",
+      "gallery": [
+        "LOAM-CER-003-2.png",
+        "LOAM-CER-003-3.png"
+      ],
+      "alt": "Stack of four speckled stoneware dinner plates",
+      "short_description": "Four 27 cm stoneware plates in a quiet speckled glaze, stacked and ready for weekdays.",
+      "description": "A flat-rim plate at a friendly weight, thrown to sit square on the table and in the stack. The glaze pools slightly at the well, which keeps sauces where they belong. Sold as a set of four, each plate within a millimetre of its brothers. Safe for oven, microwave and dishwasher.",
       "new": true
     },
     {
-      "sku": "URUMI-NOTEBOOK-001",
-      "name": "Hardcover Notebook",
-      "category": "Stationery",
+      "sku": "LOAM-CER-004",
+      "name": "Bud Vase",
+      "category": "ceramics",
+      "kind": "vase",
+      "tint": "periwinkle",
+      "motif": "none",
+      "price": "19.00",
+      "sale_price": null,
+      "stock": 31,
+      "weight": "0.45",
+      "dimensions": {
+        "length": "9",
+        "width": "9",
+        "height": "14"
+      },
+      "tags": [
+        "ceramics",
+        "handmade",
+        "gift"
+      ],
+      "image": "LOAM-CER-004.png",
+      "gallery": [
+        "LOAM-CER-004-2.png",
+        "LOAM-CER-004-3.png"
+      ],
+      "alt": "Small stoneware bud vase with a narrow neck",
+      "short_description": "A narrow-necked bud vase that turns one stem into a small occasion.",
+      "description": "Turned tall and narrow so a single stem stands to attention, with a weighted base that forgives a heavy dahlia. The matte glaze shifts from soft grey to warm white in daylight. Watertight and wipe-clean; hand wash to keep the outside matte."
+    },
+    {
+      "sku": "LOAM-CER-005",
+      "name": "Stoneware Teapot 750 ml",
+      "category": "ceramics",
+      "kind": "teapot",
+      "tint": "periwinkle",
+      "motif": "none",
+      "price": "54.00",
+      "sale_price": "44.00",
+      "stock": 12,
+      "weight": "1.1",
+      "dimensions": {
+        "length": "21",
+        "width": "14",
+        "height": "13"
+      },
+      "tags": [
+        "ceramics",
+        "handmade",
+        "kitchen"
+      ],
+      "image": "LOAM-CER-005.png",
+      "gallery": [
+        "LOAM-CER-005-2.png",
+        "LOAM-CER-005-3.png"
+      ],
+      "alt": "Round stoneware teapot with a bamboo handle and drip-free spout",
+      "short_description": "A round-bellied teapot with a drip-free spout and a wrapped bamboo handle.",
+      "description": "The rounded body keeps a full pot of tea hot through a long conversation, and the cut spout pours clean to the last drop. The bamboo handle stays cool while the pot is full. Includes a stainless fine-mesh basket that lifts out for loose leaf. Hand wash; not for the microwave."
+    },
+    {
+      "sku": "LOAM-CER-006",
+      "name": "Spoon Rest",
+      "category": "ceramics",
+      "kind": "spoonrest",
+      "tint": "periwinkle",
+      "motif": "none",
+      "price": "16.00",
+      "sale_price": null,
+      "stock": 0,
+      "weight": "0.3",
+      "dimensions": {
+        "length": "13",
+        "width": "10",
+        "height": "3"
+      },
+      "tags": [
+        "ceramics",
+        "kitchen",
+        "gift"
+      ],
+      "image": "LOAM-CER-006.png",
+      "gallery": [
+        "LOAM-CER-006-2.png",
+        "LOAM-CER-006-3.png"
+      ],
+      "alt": "Small stoneware spoon rest with a curved well",
+      "short_description": "A curved stoneware spoon rest that keeps the stove tidy between stirs.",
+      "description": "A shallow well with a raised lip holds a heavy wooden spoon without a wobble, and the glaze wipes clean of tomato and turmeric alike. Back in stock after the next kiln load.",
+      "out_of_stock": true
+    },
+    {
+      "sku": "LOAM-TEX-001",
+      "name": "Wool Throw",
+      "category": "textiles",
+      "kind": "throw",
+      "tint": "lilac",
+      "motif": "fringe",
+      "price": "64.00",
+      "sale_price": null,
+      "stock": 14,
+      "weight": "1.3",
+      "dimensions": {
+        "length": "35",
+        "width": "28",
+        "height": "12"
+      },
+      "tags": [
+        "wool",
+        "textiles",
+        "gift"
+      ],
+      "image": "LOAM-TEX-001.png",
+      "gallery": [
+        "LOAM-TEX-001-2.png",
+        "LOAM-TEX-001-3.png",
+        "LOAM-TEX-001-4.png"
+      ],
+      "alt": "Woven wool throw with a neat hand-knotted fringe",
+      "short_description": "A soft woven wool throw with a hand-knotted fringe, generous enough for two.",
+      "description": "Woven in a family mill from undyed New Zealand wool and finished with a hand-knotted fringe, this throw drapes heavily in the good way: it stays where you put it. The 50 by 60 inch size covers a reading chair; the larger size is for the whole sofa. Dry clean or spot clean only.",
+      "featured": true,
+      "variations": [
+        {
+          "sku": "LOAM-TEX-001-M",
+          "attributes": {
+            "Size": "50 x 60 in"
+          },
+          "price": "64.00",
+          "stock": 9,
+          "sale_price": "52.00"
+        },
+        {
+          "sku": "LOAM-TEX-001-L",
+          "attributes": {
+            "Size": "60 x 80 in"
+          },
+          "price": "84.00",
+          "stock": 5
+        }
+      ]
+    },
+    {
+      "sku": "LOAM-TEX-002",
+      "name": "Linen Cushion Cover 18 in",
+      "category": "textiles",
+      "kind": "cushion",
+      "tint": "lilac",
+      "motif": "none",
+      "price": "28.00",
+      "sale_price": null,
+      "stock": 33,
+      "weight": "0.35",
+      "dimensions": {
+        "length": "46",
+        "width": "46",
+        "height": "3"
+      },
+      "tags": [
+        "linen",
+        "textiles",
+        "everyday"
+      ],
+      "image": "LOAM-TEX-002.png",
+      "gallery": [
+        "LOAM-TEX-002-2.png",
+        "LOAM-TEX-002-3.png"
+      ],
+      "alt": "Stonewashed linen cushion cover with a hidden zip",
+      "short_description": "A stonewashed linen cushion cover with a hidden zip; insert sold separately.",
+      "description": "Cut from European flax that is stonewashed twice, this cover arrives already soft and softens further with every wash. The hidden zip disappears into the seam, and the colour is yarn-dyed so it fades evenly, not patchily. Fits a standard 18 inch insert.",
+      "new": true,
+      "variations": [
+        {
+          "sku": "LOAM-TEX-002-SAGE",
+          "attributes": {
+            "Colour": "Sage"
+          },
+          "price": "28.00",
+          "stock": 12
+        },
+        {
+          "sku": "LOAM-TEX-002-CLAY",
+          "attributes": {
+            "Colour": "Clay"
+          },
+          "price": "28.00",
+          "stock": 9
+        },
+        {
+          "sku": "LOAM-TEX-002-NAT",
+          "attributes": {
+            "Colour": "Natural"
+          },
+          "price": "28.00",
+          "stock": 8
+        },
+        {
+          "sku": "LOAM-TEX-002-INK",
+          "attributes": {
+            "Colour": "Ink"
+          },
+          "price": "30.00",
+          "stock": 4
+        }
+      ]
+    },
+    {
+      "sku": "LOAM-TEX-003",
+      "name": "Linen Napkins, Set of 6",
+      "category": "textiles",
+      "kind": "napkins",
+      "tint": "lilac",
+      "motif": "none",
+      "price": "42.00",
+      "sale_price": null,
+      "stock": 19,
+      "weight": "0.7",
+      "dimensions": {
+        "length": "30",
+        "width": "22",
+        "height": "4"
+      },
+      "tags": [
+        "linen",
+        "textiles",
+        "kitchen"
+      ],
+      "image": "LOAM-TEX-003.png",
+      "gallery": [
+        "LOAM-TEX-003-2.png",
+        "LOAM-TEX-003-3.png"
+      ],
+      "alt": "Six linen napkins with a mitred hem, stacked",
+      "short_description": "Six midweight linen napkins with a mitred hem; they only get better with washing.",
+      "description": "A midweight European flax napkin with a double-turned mitred hem that sits flat after washing. Slightly slubby in the hand, the way good linen should be. Machine wash warm, tumble low; iron if you like sharp corners."
+    },
+    {
+      "sku": "LOAM-TEX-004",
+      "name": "Waffle Hand Towels, Set of 2",
+      "category": "textiles",
+      "kind": "towels",
+      "tint": "lilac",
+      "motif": "waffle",
+      "price": "24.00",
+      "sale_price": null,
+      "stock": 27,
+      "weight": "0.5",
+      "dimensions": {
+        "length": "28",
+        "width": "20",
+        "height": "5"
+      },
+      "tags": [
+        "cotton",
+        "textiles",
+        "kitchen"
+      ],
+      "image": "LOAM-TEX-004.png",
+      "gallery": [
+        "LOAM-TEX-004-2.png",
+        "LOAM-TEX-004-3.png"
+      ],
+      "alt": "Two waffle-weave cotton hand towels",
+      "short_description": "Two waffle-weave towels that dry fast and look neat on the rail.",
+      "description": "The deep waffle weave pulls water off glass and hands, then dries in half the time of terry, so it never goes sour on the rail. Cotton from a GOTS-certified mill, loomed at a generous 40 by 70 cm. Machine wash and tumble low."
+    },
+    {
+      "sku": "LOAM-TEX-005",
+      "name": "Table Runner 14 x 72",
+      "category": "textiles",
+      "kind": "runner",
+      "tint": "lilac",
+      "motif": "stripe",
+      "price": "38.00",
+      "sale_price": null,
+      "stock": 11,
+      "weight": "0.55",
+      "dimensions": {
+        "length": "183",
+        "width": "10",
+        "height": "8"
+      },
+      "tags": [
+        "linen",
+        "textiles",
+        "gift"
+      ],
+      "image": "LOAM-TEX-005.png",
+      "gallery": [
+        "LOAM-TEX-005-2.png",
+        "LOAM-TEX-005-3.png"
+      ],
+      "alt": "Striped linen table runner with hand-knotted fringe",
+      "short_description": "A striped linen runner with a hand-knotted fringe, wide enough for a shared table.",
+      "description": "Yarn-dyed stripes run the length of a 14 by 72 inch linen runner, with a hand-knotted fringe at each end. It layers over a bare board or a cloth without adding bulk, and the stripe stays crisp because the yarn is dyed before weaving. Machine wash cool, dry flat."
+    },
+    {
+      "sku": "LOAM-TEX-006",
+      "name": "Cotton Bath Mat",
+      "category": "textiles",
+      "kind": "bathmat",
+      "tint": "lilac",
+      "motif": "waffle",
+      "price": "32.00",
+      "sale_price": null,
+      "stock": 8,
+      "weight": "0.85",
+      "dimensions": {
+        "length": "80",
+        "width": "50",
+        "height": "3"
+      },
+      "tags": [
+        "cotton",
+        "textiles",
+        "everyday"
+      ],
+      "image": "LOAM-TEX-006.png",
+      "gallery": [
+        "LOAM-TEX-006-2.png",
+        "LOAM-TEX-006-3.png"
+      ],
+      "alt": "Thick cotton bath mat in a low waffle weave",
+      "short_description": "A thick, low-pile cotton bath mat that dries overnight and lies flat.",
+      "description": "Loomed at 700 grams per square metre in a low waffle, this mat drinks up puddles yet dries by morning, and the anti-slip backing is a woven cotton grid, not plastic. Fits standard tubs at 50 by 80 cm. Wash warm; no softener, which mats the pile."
+    },
+    {
+      "sku": "LOAM-CND-001",
+      "name": "Cedar & Smoke Candle",
+      "category": "candles-care",
+      "kind": "candle",
+      "tint": "peach",
+      "motif": "label",
+      "price": "24.00",
+      "sale_price": "19.00",
+      "stock": 36,
+      "weight": "0.55",
+      "dimensions": {
+        "length": "9",
+        "width": "9",
+        "height": "10"
+      },
+      "tags": [
+        "candle",
+        "handmade",
+        "gift"
+      ],
+      "image": "LOAM-CND-001.png",
+      "gallery": [
+        "LOAM-CND-001-2.png",
+        "LOAM-CND-001-3.png",
+        "LOAM-CND-001-4.png"
+      ],
+      "alt": "Soy candle in a reusable glass jar, cedar and smoke scent",
+      "short_description": "A slow soy candle in cedar and smoke, poured into a jar worth keeping.",
+      "description": "Cedarwood, a thread of vetiver and the memory of a wood stove: our first and best-loved scent. Soy wax and a cotton wick burn clean for about 45 hours in a reusable glass jar with a pop-off cork lid. Trim the wick to 5 mm before each light.",
+      "featured": true
+    },
+    {
+      "sku": "LOAM-CND-002",
+      "name": "Fig & Fern Candle",
+      "category": "candles-care",
+      "kind": "candle",
+      "tint": "peach",
+      "motif": "label-alt",
+      "price": "24.00",
+      "sale_price": null,
+      "stock": 29,
+      "weight": "0.55",
+      "dimensions": {
+        "length": "9",
+        "width": "9",
+        "height": "10"
+      },
+      "tags": [
+        "candle",
+        "handmade"
+      ],
+      "image": "LOAM-CND-002.png",
+      "gallery": [
+        "LOAM-CND-002-2.png",
+        "LOAM-CND-002-3.png",
+        "LOAM-CND-002-4.png"
+      ],
+      "alt": "Soy candle in a reusable glass jar, fig and fern scent",
+      "short_description": "Green fig and crushed fern leaves: a candle that smells like a shaded porch.",
+      "description": "A greener cousin to Cedar & Smoke: ripe fig, crushed fern and a little warm sandalwood at the base. The same slow-burning soy and cotton wick, about 45 hours in a jar that repurposes happily as a pen cup. Trim the wick before each light.",
+      "new": true
+    },
+    {
+      "sku": "LOAM-CND-003",
+      "name": "Wax Melts, Set of 6",
+      "category": "candles-care",
+      "kind": "melts",
+      "tint": "peach",
+      "motif": "none",
       "price": "14.00",
-      "short_description": "Lay-flat notebook with 192 pages.",
-      "description": "A hardcover notebook with 192 pages of smooth, fountain-pen friendly paper. The lay-flat binding keeps both hands free while you write. Ruled pages in a cloth-bound cover.",
-      "image": "URUMI-NOTEBOOK-001.png",
-      "alt": "Hardcover Notebook, a lay-flat hardcover notebook",
+      "sale_price": null,
+      "stock": 40,
+      "weight": "0.2",
+      "dimensions": {
+        "length": "16",
+        "width": "11",
+        "height": "3"
+      },
+      "tags": [
+        "candle",
+        "gift"
+      ],
+      "image": "LOAM-CND-003.png",
+      "gallery": [
+        "LOAM-CND-003-2.png",
+        "LOAM-CND-003-3.png"
+      ],
+      "alt": "Clamshell of six soy wax melts",
+      "short_description": "Six soy wax melts for the warmer; the Cedar & Smoke scent without the wick.",
+      "description": "The same soy blend as our jar candles, poured into a snap clamshell of six melts. One cube scents a room for two evenings in a standard wax warmer. Flame-free, so it is the dorm- and office-safe way to wear the scent."
+    },
+    {
+      "sku": "LOAM-CND-004",
+      "name": "Hand Soap Bar",
+      "category": "candles-care",
+      "kind": "soap",
+      "tint": "peach",
+      "motif": "none",
+      "price": "12.00",
+      "sale_price": "9.60",
+      "stock": 44,
+      "weight": "0.14",
+      "dimensions": {
+        "length": "8.5",
+        "width": "6",
+        "height": "2.5"
+      },
+      "tags": [
+        "handmade",
+        "gift",
+        "everyday"
+      ],
+      "image": "LOAM-CND-004.png",
+      "gallery": [
+        "LOAM-CND-004-2.png",
+        "LOAM-CND-004-3.png"
+      ],
+      "alt": "Cold-process olive oil soap bar, stamped with a leaf",
+      "short_description": "A cold-process olive oil soap, cured six weeks and stamped by hand.",
+      "description": "Cold-pressed olive and coconut oils, saponified slowly and cured six weeks so the bar lasts a month at the sink. Scented only with a trace of the cedar blend; nothing else. Wrapped in a paper band that composts."
+    },
+    {
+      "sku": "LOAM-CND-005",
+      "name": "Room & Linen Mist",
+      "category": "candles-care",
+      "kind": "mist",
+      "tint": "peach",
+      "motif": "label",
+      "price": "22.00",
+      "sale_price": null,
+      "stock": 26,
+      "weight": "0.3",
+      "dimensions": {
+        "length": "6",
+        "width": "6",
+        "height": "16"
+      },
+      "tags": [
+        "handmade",
+        "gift",
+        "everyday"
+      ],
+      "image": "LOAM-CND-005.png",
+      "gallery": [
+        "LOAM-CND-005-2.png",
+        "LOAM-CND-005-3.png",
+        "LOAM-CND-005-4.png"
+      ],
+      "alt": "Amber glass room and linen mist bottle with a fine sprayer",
+      "short_description": "A fine cedar-and-amber mist for pillows, sofas and the air above them.",
+      "description": "The Cedar & Smoke scent, thinned for fabric and air: two sprays over a pillow, three over a sofa, and the room settles. Alcohol-free base with real essential oils, in an amber glass bottle with a fine-mist sprayer. Shake before use; keep out of direct sun."
+    },
+    {
+      "sku": "LOAM-CND-006",
+      "name": "Incense Holder",
+      "category": "candles-care",
+      "kind": "incense",
+      "tint": "peach",
+      "motif": "none",
+      "price": "18.00",
+      "sale_price": null,
+      "stock": 21,
+      "weight": "0.28",
+      "dimensions": {
+        "length": "10",
+        "width": "10",
+        "height": "4"
+      },
+      "tags": [
+        "ceramics",
+        "handmade",
+        "gift"
+      ],
+      "image": "LOAM-CND-006.png",
+      "gallery": [
+        "LOAM-CND-006-2.png",
+        "LOAM-CND-006-3.png"
+      ],
+      "alt": "Dome-shaped stoneware incense holder with an angled catch",
+      "short_description": "A stoneware dome that holds a stick at an angle and catches every ash.",
+      "description": "A weighted stoneware dome with a brass insert that takes a stick at a slight angle, so ash falls back onto the plate instead of the table. Works with sticks of any length up to 28 cm. Wipe clean; the glaze does not stain."
+    },
+    {
+      "sku": "LOAM-DSK-001",
+      "name": "Layflat Notebook",
+      "category": "desk-paper",
+      "kind": "notebook",
+      "tint": "sand",
+      "motif": "elastic",
+      "price": "18.00",
+      "sale_price": null,
+      "stock": 52,
+      "weight": "0.4",
+      "dimensions": {
+        "length": "21",
+        "width": "14.5",
+        "height": "1.5"
+      },
+      "tags": [
+        "paper",
+        "everyday",
+        "gift"
+      ],
+      "image": "LOAM-DSK-001.png",
+      "gallery": [
+        "LOAM-DSK-001-2.png",
+        "LOAM-DSK-001-3.png",
+        "LOAM-DSK-001-4.png"
+      ],
+      "alt": "Cloth-bound layflat notebook with an elastic band",
+      "short_description": "A cloth-bound layflat notebook that stays open at the page you left.",
+      "description": "Sewn in signatures so it opens flat from the first page, with 192 sheets of 100 gsm paper that takes fountain pen ink without ghosting. The cloth cover is wrapped by hand and an elastic band keeps the whole thing shut in a bag. Comes in Dot and Ruled inside.",
+      "featured": true,
+      "variations": [
+        {
+          "sku": "LOAM-DSK-001-DOT",
+          "attributes": {
+            "Interior": "Dot grid"
+          },
+          "price": "18.00",
+          "stock": 30
+        },
+        {
+          "sku": "LOAM-DSK-001-RUL",
+          "attributes": {
+            "Interior": "Ruled"
+          },
+          "price": "18.00",
+          "stock": 22
+        }
+      ]
+    },
+    {
+      "sku": "LOAM-DSK-002",
+      "name": "Gel Pen Set",
+      "category": "desk-paper",
+      "kind": "pens",
+      "tint": "sand",
+      "motif": "none",
+      "price": "12.00",
+      "sale_price": null,
+      "stock": 61,
+      "weight": "0.09",
+      "dimensions": {
+        "length": "17",
+        "width": "8",
+        "height": "2"
+      },
+      "tags": [
+        "paper",
+        "everyday"
+      ],
+      "image": "LOAM-DSK-002.png",
+      "gallery": [
+        "LOAM-DSK-002-2.png",
+        "LOAM-DSK-002-3.png"
+      ],
+      "alt": "Two gel pens in ink and navy beside a canvas case",
+      "short_description": "Two fine-point gel pens (ink and navy) in a small canvas slip.",
+      "description": "A 0.5 mm gel tip that lays a clean, quick-drying line with no blob, in two colours: warm ink black and a deep navy. The aluminium barrels are weighted forward to sit lightly in the hand. Arrives in a cotton slip that fits a pocket."
+    },
+    {
+      "sku": "LOAM-DSK-003",
+      "name": "Pencil Pouch",
+      "category": "desk-paper",
+      "kind": "pouch",
+      "tint": "sand",
+      "motif": "zip",
+      "price": "26.00",
+      "sale_price": null,
+      "stock": 24,
+      "weight": "0.12",
+      "dimensions": {
+        "length": "21",
+        "width": "9",
+        "height": "3"
+      },
+      "tags": [
+        "waxed-canvas",
+        "carry",
+        "everyday"
+      ],
+      "image": "LOAM-DSK-003.png",
+      "gallery": [
+        "LOAM-DSK-003-2.png",
+        "LOAM-DSK-003-3.png"
+      ],
+      "alt": "Waxed canvas pencil pouch with a brass zip",
+      "short_description": "A waxed canvas pencil pouch with a brass zip that opens all the way flat.",
+      "description": "Ten-ounce waxed canvas with a self-repairing brass zip that opens the pouch flat, so pens are visible at a glance rather than buried. It stands up on the desk when full and folds flat when empty. Wipe clean with a damp cloth; the wax darkens pleasantly where you hold it."
+    },
+    {
+      "sku": "LOAM-DSK-004",
+      "name": "Desk Tray",
+      "category": "desk-paper",
+      "kind": "tray",
+      "tint": "sand",
+      "motif": "none",
+      "price": "34.00",
+      "sale_price": null,
+      "stock": 17,
+      "weight": "0.6",
+      "dimensions": {
+        "length": "24",
+        "width": "16",
+        "height": "3"
+      },
+      "tags": [
+        "handmade",
+        "everyday",
+        "gift"
+      ],
+      "image": "LOAM-DSK-004.png",
+      "gallery": [
+        "LOAM-DSK-004-2.png",
+        "LOAM-DSK-004-3.png"
+      ],
+      "alt": "Solid ash desk tray with a shallow well and felt base",
+      "short_description": "A solid-ash tray that corrals keys, coins and the pocket you empty at 6 pm.",
+      "description": "Milled from solid ash with a shallow well and a hand-rubbed oil finish, sized to hold a phone, keys, wallet and one pair of earrings. Cork-backed so it never scratches, and heavy enough that it does not travel. Wipe with a dry cloth; re-oil once a year."
+    },
+    {
+      "sku": "LOAM-DSK-005",
+      "name": "Weekly Planner Pad",
+      "category": "desk-paper",
+      "kind": "planner",
+      "tint": "sand",
+      "motif": "none",
+      "price": "16.00",
+      "sale_price": null,
+      "stock": 38,
+      "weight": "0.35",
+      "dimensions": {
+        "length": "28",
+        "width": "21",
+        "height": "1.2"
+      },
+      "tags": [
+        "paper",
+        "everyday"
+      ],
+      "image": "LOAM-DSK-005.png",
+      "gallery": [
+        "LOAM-DSK-005-2.png",
+        "LOAM-DSK-005-3.png",
+        "LOAM-DSK-005-4.png"
+      ],
+      "alt": "A4 weekly planner pad with 52 undated sheets",
+      "short_description": "52 undated weekly pages on a sturdy board backing; start any Monday.",
+      "description": "One week per page with room for the three things that matter and the twenty that pretend to. Undated, so a missed week costs you nothing, printed on 120 gsm that shrugs off gel ink and mild coffee. Glued at the top with a stiff board back; tear off and carry the week with you.",
       "new": true
     },
     {
-      "sku": "URUMI-PEN-001",
-      "name": "Pen Set",
-      "category": "Stationery",
-      "price": "12.00",
-      "short_description": "Two gel pens in a small canvas case.",
-      "description": "A set of two gel pens in a small canvas zip case. The black and navy inks write smoothly on any paper. A tidy everyday carry for the desk.",
-      "image": "URUMI-PEN-001.png",
-      "alt": "Pen Set, two gel pens in a canvas case",
+      "sku": "LOAM-DSK-006",
+      "name": "Letter Writing Set",
+      "category": "desk-paper",
+      "kind": "letters",
+      "tint": "sand",
+      "motif": "none",
+      "price": "22.00",
+      "sale_price": null,
+      "stock": 0,
+      "weight": "0.3",
+      "dimensions": {
+        "length": "24",
+        "width": "17",
+        "height": "2"
+      },
+      "tags": [
+        "paper",
+        "gift"
+      ],
+      "image": "LOAM-DSK-006.png",
+      "gallery": [
+        "LOAM-DSK-006-2.png",
+        "LOAM-DSK-006-3.png"
+      ],
+      "alt": "Letter writing set with ten sheets, envelopes and wax seals",
+      "short_description": "Ten sheets, ten lined envelopes and wax seals: a kit for real letters.",
+      "description": "Ten sheets of cream laid paper with a faint grain, ten self-lined envelopes and a sheet of wax-effect seals. The paper takes fountain pen ink beautifully. Currently being reprinted with our second print run; back soon.",
+      "out_of_stock": true
+    },
+    {
+      "sku": "LOAM-KIT-001",
+      "name": "Serving Board",
+      "category": "kitchen",
+      "kind": "board",
+      "tint": "sage",
+      "motif": "none",
+      "price": "48.00",
+      "sale_price": null,
+      "stock": 16,
+      "weight": "1.2",
+      "dimensions": {
+        "length": "45",
+        "width": "20",
+        "height": "2"
+      },
+      "tags": [
+        "kitchen",
+        "handmade",
+        "gift"
+      ],
+      "image": "LOAM-KIT-001.png",
+      "gallery": [
+        "LOAM-KIT-001-2.png",
+        "LOAM-KIT-001-3.png",
+        "LOAM-KIT-001-4.png"
+      ],
+      "alt": "Walnut and ash serving board with a leather hanging loop",
+      "short_description": "A walnut-and-ash board that goes from the counter to the table to the wall.",
+      "description": "A two-wood board, walnut on ash, finished with food-safe oil and wax, with a brass-ferrule leather loop for hanging between uses. The grain hides knife marks; a yearly re-oil keeps the wood fed. 45 by 20 cm with a comfortable thumb notch. Hand wash and dry immediately.",
+      "featured": true
+    },
+    {
+      "sku": "LOAM-KIT-002",
+      "name": "Storage Jar",
+      "category": "kitchen",
+      "kind": "jar",
+      "tint": "sage",
+      "motif": "label",
+      "price": "22.00",
+      "sale_price": null,
+      "stock": 34,
+      "weight": "0.8",
+      "dimensions": {
+        "length": "11",
+        "width": "11",
+        "height": "18"
+      },
+      "tags": [
+        "ceramics",
+        "kitchen",
+        "everyday"
+      ],
+      "image": "LOAM-KIT-002.png",
+      "gallery": [
+        "LOAM-KIT-002-2.png",
+        "LOAM-KIT-002-3.png"
+      ],
+      "alt": "Stoneware storage jar with an airtight bamboo lid",
+      "short_description": "A stoneware jar with an airtight bamboo lid for coffee, tea or flour.",
+      "description": "A glazed stoneware body with a silicone-sealed bamboo lid keeps coffee beans honest for weeks. The straight walls suit a permanent-kitchen-marker label if you like yours named. Two sizes; the small fits an espresso bench, the large holds a kilo of flour.",
+      "variations": [
+        {
+          "sku": "LOAM-KIT-002-S",
+          "attributes": {
+            "Size": "750 ml"
+          },
+          "price": "22.00",
+          "stock": 22
+        },
+        {
+          "sku": "LOAM-KIT-002-L",
+          "attributes": {
+            "Size": "1.5 L"
+          },
+          "price": "32.00",
+          "stock": 12,
+          "sale_price": "26.00"
+        }
+      ]
+    },
+    {
+      "sku": "LOAM-KIT-003",
+      "name": "Tea Towels, Set of 2",
+      "category": "kitchen",
+      "kind": "towels",
+      "tint": "sage",
+      "motif": "stripe",
+      "price": "22.00",
+      "sale_price": null,
+      "stock": 30,
+      "weight": "0.4",
+      "dimensions": {
+        "length": "30",
+        "width": "22",
+        "height": "5"
+      },
+      "tags": [
+        "cotton",
+        "kitchen",
+        "everyday"
+      ],
+      "image": "LOAM-KIT-003.png",
+      "gallery": [
+        "LOAM-KIT-003-2.png",
+        "LOAM-KIT-003-3.png",
+        "LOAM-KIT-003-4.png"
+      ],
+      "alt": "Two striped cotton tea towels on a rail",
+      "short_description": "Two striped cotton tea towels that dry glasses without leaving lint.",
+      "description": "A tight plain weave in yarn-dyed stripes that dries glass without lint and holds up to a year of weekly washing. Cotton from a GOTS-certified mill, hung from a generous corner loop. 50 by 70 cm each; machine wash warm.",
       "new": true
+    },
+    {
+      "sku": "LOAM-KIT-004",
+      "name": "Trivet Tile",
+      "category": "kitchen",
+      "kind": "trivet",
+      "tint": "sage",
+      "motif": "none",
+      "price": "18.00",
+      "sale_price": null,
+      "stock": 25,
+      "weight": "0.45",
+      "dimensions": {
+        "length": "16",
+        "width": "16",
+        "height": "2"
+      },
+      "tags": [
+        "ceramics",
+        "kitchen",
+        "gift"
+      ],
+      "image": "LOAM-KIT-004.png",
+      "gallery": [
+        "LOAM-KIT-004-2.png",
+        "LOAM-KIT-004-3.png"
+      ],
+      "alt": "Square stoneware trivet tile with cork feet",
+      "short_description": "A stoneware trivet tile with cork feet; hot pans stop here.",
+      "description": "A fired stoneware tile that shrugs off a 250 C pot straight from the oven, with four cork feet that keep it steady and keep the table untouched. The speckled glaze matches our dinner plates. Wipe clean; the glaze does not care what you spill."
+    },
+    {
+      "sku": "LOAM-KIT-005",
+      "name": "Canvas Apron",
+      "category": "kitchen",
+      "kind": "apron",
+      "tint": "sage",
+      "motif": "none",
+      "price": "42.00",
+      "sale_price": null,
+      "stock": 13,
+      "weight": "0.65",
+      "dimensions": {
+        "length": "32",
+        "width": "26",
+        "height": "3"
+      },
+      "tags": [
+        "waxed-canvas",
+        "kitchen",
+        "everyday"
+      ],
+      "image": "LOAM-KIT-005.png",
+      "gallery": [
+        "LOAM-KIT-005-2.png",
+        "LOAM-KIT-005-3.png"
+      ],
+      "alt": "Waxed canvas apron with crossback leather straps",
+      "short_description": "A crossback waxed canvas apron with leather straps and a deep front pocket.",
+      "description": "Ten-ounce waxed canvas with a crossback harness in vegetable-tanned leather that spreads the weight and never pinches your neck. One deep pocket takes a phone, a towel and a spoon. Wipe clean; re-wax yearly with our stick if you want the water beading back."
+    },
+    {
+      "sku": "LOAM-KIT-006",
+      "name": "Measuring Spoons, Set of 4",
+      "category": "kitchen",
+      "kind": "spoons",
+      "tint": "sage",
+      "motif": "none",
+      "price": "16.00",
+      "sale_price": null,
+      "stock": 28,
+      "weight": "0.18",
+      "dimensions": {
+        "length": "15",
+        "width": "4",
+        "height": "2"
+      },
+      "tags": [
+        "kitchen",
+        "everyday"
+      ],
+      "image": "LOAM-KIT-006.png",
+      "gallery": [
+        "LOAM-KIT-006-2.png",
+        "LOAM-KIT-006-3.png"
+      ],
+      "alt": "Four stainless measuring spoons on a ring",
+      "short_description": "Four stainless spoons on a ring that snaps apart for the dishwasher.",
+      "description": "Stamped stainless steel with deep, level bowls and clear etched sizes that will not wear off: 1/4, 1/2, 1 teaspoon and 1 tablespoon. The ring snaps open so the set can go straight into the dishwasher or live on its hook."
+    },
+    {
+      "sku": "LOAM-CAR-001",
+      "name": "Canvas Tote",
+      "category": "carry",
+      "kind": "tote",
+      "tint": "clay",
+      "motif": "none",
+      "price": "32.00",
+      "sale_price": null,
+      "stock": 27,
+      "weight": "0.5",
+      "dimensions": {
+        "length": "40",
+        "width": "14",
+        "height": "36"
+      },
+      "tags": [
+        "waxed-canvas",
+        "carry",
+        "everyday"
+      ],
+      "image": "LOAM-CAR-001.png",
+      "gallery": [
+        "LOAM-CAR-001-2.png",
+        "LOAM-CAR-001-3.png",
+        "LOAM-CAR-001-4.png"
+      ],
+      "alt": "Waxed canvas tote with flat carry handles and an interior pocket",
+      "short_description": "A waxed canvas tote with a laptop pocket that shrugs off a wet commute.",
+      "description": "Cut from 12-ounce waxed canvas with box corners, flat handles that sit right on the shoulder and a flannel-lined pocket that holds a 14 inch laptop. The wax sheds drizzle and gains a record of everywhere it has been. Two colours, both deliberately plain.",
+      "featured": true,
+      "variations": [
+        {
+          "sku": "LOAM-CAR-001-NAT",
+          "attributes": {
+            "Colour": "Natural"
+          },
+          "price": "32.00",
+          "stock": 16
+        },
+        {
+          "sku": "LOAM-CAR-001-INK",
+          "attributes": {
+            "Colour": "Ink"
+          },
+          "price": "34.00",
+          "stock": 11
+        }
+      ]
+    },
+    {
+      "sku": "LOAM-CAR-002",
+      "name": "Crossbody Pouch",
+      "category": "carry",
+      "kind": "pouch",
+      "tint": "clay",
+      "motif": "zip",
+      "price": "38.00",
+      "sale_price": "30.00",
+      "stock": 18,
+      "weight": "0.2",
+      "dimensions": {
+        "length": "20",
+        "width": "6",
+        "height": "13"
+      },
+      "tags": [
+        "waxed-canvas",
+        "carry"
+      ],
+      "image": "LOAM-CAR-002.png",
+      "gallery": [
+        "LOAM-CAR-002-2.png",
+        "LOAM-CAR-002-3.png"
+      ],
+      "alt": "Small waxed canvas crossbody pouch with an adjustable strap",
+      "short_description": "A small crossbody for keys, phone and card case, on an adjustable strap.",
+      "description": "The phone-keys-card run: a waxed canvas pouch with a zip that opens wide, a card-sized inner slip and an adjustable cotton webbing strap. Small enough to forget, big enough for the essentials. Sale on the natural colour while stock lasts."
+    },
+    {
+      "sku": "LOAM-CAR-003",
+      "name": "Market Basket",
+      "category": "carry",
+      "kind": "basket",
+      "tint": "clay",
+      "motif": "weave",
+      "price": "36.00",
+      "sale_price": null,
+      "stock": 12,
+      "weight": "0.7",
+      "dimensions": {
+        "length": "38",
+        "width": "26",
+        "height": "25"
+      },
+      "tags": [
+        "carry",
+        "handmade",
+        "kitchen"
+      ],
+      "image": "LOAM-CAR-003.png",
+      "gallery": [
+        "LOAM-CAR-003-2.png",
+        "LOAM-CAR-003-3.png"
+      ],
+      "alt": "Woven seagrass market basket with short handles",
+      "short_description": "A seagrass market basket that folds flat and stands up full.",
+      "description": "Hand-woven seagrass over a stiff rim, shaped to stand up when full and fold flat in a cupboard. Takes a market run, a ball of yarn, or the toys that otherwise live on the stairs. Wipe with a dry cloth; keep out of the rain."
+    },
+    {
+      "sku": "LOAM-CAR-004",
+      "name": "Gym Sack",
+      "category": "carry",
+      "kind": "sack",
+      "tint": "clay",
+      "motif": "none",
+      "price": "24.00",
+      "sale_price": null,
+      "stock": 22,
+      "weight": "0.25",
+      "dimensions": {
+        "length": "36",
+        "width": "4",
+        "height": "45"
+      },
+      "tags": [
+        "waxed-canvas",
+        "carry",
+        "everyday"
+      ],
+      "image": "LOAM-CAR-004.png",
+      "gallery": [
+        "LOAM-CAR-004-2.png",
+        "LOAM-CAR-004-3.png"
+      ],
+      "alt": "Waxed canvas drawstring gym sack",
+      "short_description": "A drawstring gym sack in waxed canvas, with a zip pocket for valuables.",
+      "description": "A slim drawstring sack that fits shoes, a towel and a change of shirt, with a hidden zip pocket for the things you do not want loose. Cotton cord pulls through brass grommets and knots at a comfortable length. The waxed canvas wipes clean after a locker-room floor."
+    },
+    {
+      "sku": "LOAM-CAR-005",
+      "name": "Laptop Sleeve 13 in",
+      "category": "carry",
+      "kind": "sleeve",
+      "tint": "clay",
+      "motif": "zip",
+      "price": "44.00",
+      "sale_price": null,
+      "stock": 15,
+      "weight": "0.3",
+      "dimensions": {
+        "length": "34",
+        "width": "25",
+        "height": "2.5"
+      },
+      "tags": [
+        "waxed-canvas",
+        "carry",
+        "everyday"
+      ],
+      "image": "LOAM-CAR-005.png",
+      "gallery": [
+        "LOAM-CAR-005-2.png",
+        "LOAM-CAR-005-3.png"
+      ],
+      "alt": "Padded waxed canvas laptop sleeve for a 13 inch laptop",
+      "short_description": "A padded waxed canvas sleeve for a 13 inch laptop, with a snug brass zip.",
+      "description": "Twelve-ounce waxed canvas over 5 mm closed-cell padding, cut snug for a 13 inch laptop with a felt-lined interior that does not scratch anodised aluminium. The brass zip runs past the corners so the laptop enters without a fight. Fits inside every one of our totes.",
+      "new": true
+    },
+    {
+      "sku": "LOAM-CAR-006",
+      "name": "Weekend Duffel",
+      "category": "carry",
+      "kind": "duffel",
+      "tint": "clay",
+      "motif": "none",
+      "price": "98.00",
+      "sale_price": "79.00",
+      "stock": 7,
+      "weight": "1.1",
+      "dimensions": {
+        "length": "55",
+        "width": "28",
+        "height": "28"
+      },
+      "tags": [
+        "waxed-canvas",
+        "carry",
+        "gift"
+      ],
+      "image": "LOAM-CAR-006.png",
+      "gallery": [
+        "LOAM-CAR-006-2.png",
+        "LOAM-CAR-006-3.png",
+        "LOAM-CAR-006-4.png"
+      ],
+      "alt": "Waxed canvas weekend duffel with leather base corners",
+      "short_description": "A waxed canvas duffel that fits two nights of everything, overhead-bin friendly.",
+      "description": "Two nights of everything: 55 cm of waxed canvas with a full-length zip, a leather-lined base, an interior zip pocket for the wet things and a detachable shoulder strap. Sized for overhead bins and train racks alike. Re-wax once a year and it will outlast the trips."
     }
   ]
 }
