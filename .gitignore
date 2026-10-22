@@ -6,6 +6,8 @@
 .env.*
 !.env.example
 *.key
+.pexels_key
+.unsplash_key
 *.pem
 *.crt
 /secrets.yaml
@@ -54,6 +56,10 @@ Thumbs.db
 
 # Artifacts (screenshots, live SSE dumps — not committed)
 artifacts/
+
+# Store photo sourcing: API cache + curation workspace (never committed)
+store/photos-cache/
+artifacts/store-photos/
 
 # Design mockup PNG renders (regenerate with node design/mockups/shoot.mjs)
 design/mockups/png/
