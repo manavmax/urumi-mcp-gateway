@@ -134,7 +134,16 @@ async def me(request: Request, db: AsyncSession = Depends(get_db), user=Depends(
         token = request.cookies.get(get_settings().session_cookie_name, "")
         data = verify_session_cookie(token)
         csrf = (data or {}).get("csrf", "")
-    return {"user": {"id": str(user.id), "email": user.email, "role": user.role}, "csrf_token": csrf}
+    # RC: feature flags for the dashboard shell - the Nav hides Stores/Hosted
+    # servers and the routes show a friendly "not enabled" panel instead of
+    # firing API calls that 403 (no console errors). Mirrors the Helm flags:
+    # stores_enabled <- provisioner.enabled, hosted_enabled <- hostedServers.enabled.
+    settings = get_settings()
+    return {
+        "user": {"id": str(user.id), "email": user.email, "role": user.role},
+        "csrf_token": csrf,
+        "features": {"stores": settings.stores_enabled, "hosted": settings.hosted_enabled},
+    }
 
 
 @router.get("/api/users")
