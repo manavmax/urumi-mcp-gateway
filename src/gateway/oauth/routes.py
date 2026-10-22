@@ -16,28 +16,25 @@ and maps them to users (permissions / rate limits / audit unchanged).
 
 from __future__ import annotations
 
-import base64
-import hashlib
+from pathlib import Path
 
 import config
 from auth.rbac import get_current_user_via_session, verify_csrf
 from db.models import OauthToken, User
 from db.session import get_db
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from security_headers import SECURITY_HEADERS
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from oauth import core
 
-# The consent page's CSS: a FIXED string (never user input) so its CSP hash is
-# stable. Change the CSS -> the hash below is derived from this constant at
-# import time (no hand-maintained hash).
-CONSENT_CSS = "body{font-family:system-ui,sans-serif;max-width:34rem;margin:12vh auto;padding:0 1rem;}"
-_CONSENT_STYLE_HASH = base64.b64encode(hashlib.sha256(CONSENT_CSS.encode()).digest()).decode()
-_CSP = SECURITY_HEADERS["Content-Security-Policy"]
-CONSENT_CSP = _CSP.replace("style-src 'self'", f"style-src 'self' 'sha256-{_CONSENT_STYLE_HASH}'")
+# Consent page CSS, served as a real file at /oauth/consent.css: the gateway CSP
+# (style-src 'self', ADR-046) allows same-origin stylesheets, and the file
+# mirrors the dashboard's design tokens (light default, dark via
+# prefers-color-scheme - the consent page lives outside the SPA's theme
+# switcher). Loaded once at import; the file ships with the image.
+CONSENT_CSS = (Path(__file__).resolve().parent / "consent.css").read_text()
 
 router = APIRouter()
 
@@ -83,6 +80,17 @@ async def register_client(request: Request, db: AsyncSession = Depends(get_db)):
     return JSONResponse(doc, status_code=201)
 
 
+@router.get("/oauth/consent.css", include_in_schema=False)
+async def consent_css():
+    """The consent page's stylesheet (same-origin, so style-src 'self' allows
+    it). Long cache: the file is baked into the image and immutable per deploy."""
+    return Response(
+        content=CONSENT_CSS,
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @router.get("/oauth/authorize")
 async def authorize_form(
     request: Request,
@@ -124,13 +132,8 @@ async def authorize_form(
             "state": echo["state"],
         },
     )
-    # RC fix: the consent page carries one inline <style> block. The gateway CSP
-    # (style-src 'self', ADR-046) refused it and the page rendered UNSTYLED. The
-    # middleware uses setdefault, so overriding the CSP here with the style's own
-    # hash allows exactly this block and nothing else.
-    resp = HTMLResponse(html)
-    resp.headers["Content-Security-Policy"] = CONSENT_CSP
-    return resp
+    # RC: styling comes from /oauth/consent.css (same origin, CSP-allowed).
+    return HTMLResponse(html)
 
 
 @router.post("/oauth/authorize")
@@ -240,28 +243,48 @@ async def revoke_endpoint(request: Request, db: AsyncSession = Depends(get_db)):
     return JSONResponse({})
 
 
+_LOGO_SVG = (
+    '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="1.9" stroke-linecap="round" aria-hidden="true" focusable="false">'
+    '<rect x="3" y="3" width="18" height="18" rx="5.5" />'
+    '<path d="M9.2 16.8v-3.4a2.8 2.8 0 0 1 5.6 0v3.4" />'
+    '<path d="M7 12h10" /></svg>'
+)
+
+
 def _consent_html(*, client_name: str, scope: str, resource: str, hidden: dict) -> str:
+    """Dashboard-styled consent card (tokens mirrored in /oauth/consent.css).
+    The client name and the requested access (scope + resource, RFC 8707) are
+    the two things a user must see clearly before approving."""
     inputs = "".join(
         f'<input type="hidden" name="{k}" value="{_esc(v)}" />' for k, v in hidden.items()
     )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Authorize { _esc(client_name) } — Urumi gateway</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>{ CONSENT_CSS }</style></head>
+<link rel="stylesheet" href="/oauth/consent.css"></head>
 <body>
-<h1>Authorize access</h1>
-<p><strong>{ _esc(client_name) }</strong> is asking to use the Urumi MCP gateway <strong>as your user</strong>.</p>
-<ul>
-  <li>Access scope: <code>{ _esc(scope or "mcp") }</code></li>
-  <li>Resource: <code>{ _esc(resource) }</code></li>
-  <li>It will be able to call the tools you can call (stores you own, allowed upstreams), and every call is audited under your account.</li>
-</ul>
-<form method="post" action="/oauth/authorize">
-  {inputs}
-  <button type="submit" name="decision" value="approve">Approve</button>
-  <button type="submit" name="decision" value="deny">Deny</button>
-</form>
-<p class="small muted">Denying returns an access_denied error to the client. You can revoke access later from the dashboard.</p>
+<main class="consent-card">
+  <div class="brand">
+    <span class="mark">{ _LOGO_SVG }</span>
+    <span class="name">Urumi<small>MCP Gateway</small></span>
+  </div>
+  <h1>Authorize access</h1>
+  <p class="lead"><strong>{ _esc(client_name) }</strong> is asking to use the Urumi MCP gateway <strong>as you</strong> - with the access listed below.</p>
+  <dl class="access">
+    <div><dt>Application</dt><dd>{ _esc(client_name) }</dd></div>
+    <div><dt>Access scope</dt><dd>{ _esc(scope or "mcp") }</dd></div>
+    <div><dt>Resource</dt><dd>{ _esc(resource) }</dd></div>
+  </dl>
+  <p class="note">Approving lets it call the tools you can call (your stores, allowed upstreams); every call is audited under your account. You can revoke access later from the dashboard.</p>
+  <form method="post" action="/oauth/authorize">
+    {inputs}
+    <div class="actions">
+      <button type="submit" name="decision" value="approve" class="approve">Approve</button>
+      <button type="submit" name="decision" value="deny" class="deny">Deny</button>
+    </div>
+  </form>
+</main>
 </body></html>"""
 
 

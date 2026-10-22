@@ -120,10 +120,54 @@ kubectl scale deployment/urumi-gateway -n rc-verify --replicas=1
 # migrated forward again; the startup schema gate then verifies db == code head.
 ```
 
-MariaDB/WordPress data is NOT in this dump (separate engine): a full-point-in-time
-recovery needs the same pg_dump treatment for MariaDB
-(`mariadb-dump`) - documented here as the gap it is; the WordPress volume is a
-PVC that survives upgrades/rollbacks untouched (table above).
+MariaDB/WordPress data is NOT in this dump (separate engine) - the store
+recovery drill below covers it; the WordPress uploads volume is a PVC that
+survives upgrades/rollbacks untouched (table above) and is backed up with one
+line:
+
+    kubectl exec deploy/urumi-wordpress -n <ns> -- tar cz - /var/www/html/wp-content/uploads > uploads-$(date +%F).tgz
+
+## MariaDB (store database) dump + restore drill - every command run for real
+
+The WooCommerce store lives in MariaDB (`mariadb:11.4` StatefulSet), NOT in the
+pg_dump. Back it up the same way, from the mariadb pod:
+
+```bash
+# 1. DUMP the store database (run immediately before the upgrade; consistent
+#    InnoDB snapshot via --single-transaction)
+kubectl exec urumi-mariadb-0 -n rc-verify -- sh -c \
+  'mariadb-dump -u wordpress -p"$MARIADB_PASSWORD" wordpress --single-transaction --routines --triggers > /tmp/rc-store-dump.sql'
+#    all-databases variant (root): MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-dump -u root --all-databases
+
+# 2. COPY OFF THE POD
+kubectl cp rc-verify/urumi-mariadb-0:/tmp/rc-store-dump.sql rc-store-dump.sql -c mariadb
+```
+
+Restore - the RECOVERY DRILL executed in this rehearsal (407,722-byte dump,
+21 INSERT sections, 0 restore errors):
+
+```bash
+# 3a. drill: restore into a scratch database, then compare counts
+kubectl exec -i urumi-mariadb-0 -n rc-verify -- sh -c \
+  'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -u root -e \
+   "DROP DATABASE IF EXISTS store_restore_check; CREATE DATABASE store_restore_check;" \
+   && MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -u root store_restore_check < /tmp/rc-store-dump.sql'
+
+# 3b. REAL recovery (destroys the live store database - stop writers first):
+kubectl scale deployment/urumi-wordpress -n rc-verify --replicas=0
+kubectl exec urumi-mariadb-0 -n rc-verify -- sh -c \
+  'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -u root -e "DROP DATABASE wordpress; CREATE DATABASE wordpress;"'
+kubectl exec -i urumi-mariadb-0 -n rc-verify -- sh -c \
+  'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -u root wordpress < /tmp/rc-store-dump.sql'
+kubectl scale deployment/urumi-wordpress -n rc-verify --replicas=1
+```
+
+Verified counts after the drill (live vs restored into `store_restore_check`):
+products 12 = 12, orders 1 = 1, order_items 1 = 1, order #48 status
+`wc-processing` = `wc-processing`. Every root `mariadb` call needs
+`MYSQL_PWD="$MARIADB_ROOT_PASSWORD"` - `using password: NO` means the prefix
+was forgotten on that call. The `wordpress` user cannot read other databases
+(by design), so verification and restore run as root.
 
 ## RC rehearsal: bonus-all over a main-shaped database (2026-10-22)
 

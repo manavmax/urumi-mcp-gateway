@@ -1,0 +1,109 @@
+/* OAuth consent page — mirrors the dashboard's design system
+   (src/dashboard/src/styles/tokens.css). Served by the gateway at
+   /oauth/consent.css so the gateway CSP (style-src 'self') allows it.
+   Light is the default; dark follows prefers-color-scheme (the consent page
+   sits outside the SPA, so there is no data-theme switcher to inherit). */
+
+:root {
+  --bg: #ECEBE7;
+  --surface: #FFFFFF;
+  --surface-2: #F4F3EF;
+  --tint-soft: #F1F0EC;
+  --hairline: rgba(20, 23, 28, 0.07);
+  --hairline-strong: rgba(20, 23, 28, 0.10);
+  --text: #14171C;
+  --muted: #5F6673;
+  --text-faint: #5F6673;
+  --ink: #14171C;
+  --ink-hover: #2A2E35;
+  --on-primary: #FFFFFF;
+  --ring: rgba(185, 196, 221, 0.55);
+  --shadow-card: 0 1px 2px rgba(20, 23, 28, 0.04), 0 10px 30px rgba(20, 23, 28, 0.05);
+  --radius-card: 24px;
+  --radius-inner: 14px;
+  --radius-pill: 999px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161B;
+    --surface: #1C1F26;
+    --surface-2: #22262F;
+    --tint-soft: #1E2128;
+    --hairline: rgba(255, 255, 255, 0.07);
+    --hairline-strong: rgba(255, 255, 255, 0.10);
+    --text: #ECEDEF;
+    --muted: #9AA1AE;
+    --text-faint: #9AA1AE;
+    --ink: #ECEDEF;
+    --ink-hover: #FFFFFF;
+    --on-primary: #14171C;
+    --ring: rgba(122, 139, 170, 0.55);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 10px 30px rgba(0, 0, 0, 0.30);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.consent-card {
+  width: 100%;
+  max-width: 26rem;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 28px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.brand .mark {
+  width: 34px; height: 34px; flex: 0 0 34px;
+  display: grid; place-items: center;
+  background: var(--ink); color: var(--bg);
+  border-radius: 10px;
+}
+.brand .mark svg { display: block; }
+.brand .name { font-weight: 700; letter-spacing: -0.01em; font-size: 16px; }
+.brand .name small { display: block; font-weight: 600; font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-faint); }
+
+h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 6px; }
+.lead { margin: 0 0 16px; color: var(--text); }
+.lead b { font-weight: 700; }
+
+.access {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-inner);
+  margin: 0 0 16px;
+  overflow: hidden;
+}
+.access > div {
+  display: flex; gap: 12px; justify-content: space-between; align-items: baseline;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+.access > div:last-child { border-bottom: none; }
+.access dt { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-faint); }
+.access dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; word-break: break-all; text-align: right; }
+
+.note { margin: 0 0 18px; font-size: 12px; color: var(--muted); }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+button { font: inherit; font-weight: 650; cursor: pointer; border-radius: var(--radius-pill); padding: 9px 18px; border: 1px solid transparent; transition: background 120ms ease; }
+button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+button:active { transform: translateY(1px); }
+.approve { background: var(--ink); color: var(--on-primary); }
+.approve:hover { background: var(--ink-hover); }
+.deny { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--hairline); }
+.deny:hover { background: var(--tint-soft); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
