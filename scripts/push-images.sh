@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and push all 8 custom Urumi images to GHCR (multi-arch via buildx).
+# Build and push all 9 custom Urumi images to GHCR (multi-arch via buildx).
 #
 # One stranger-runnable line:
 #   GHCR_OWNER=<owner> GHCR_TOKEN=<token> scripts/push-images.sh
@@ -31,8 +31,8 @@ APP_VERSION=$(sed -n 's/^appVersion: *"\([^"]*\)".*/\1/p' helm/Chart.yaml)
 GIT_SHA=$(git rev-parse --short HEAD)
 TAG="${APP_VERSION}-${GIT_SHA}"
 
-# Image name -> build context (all 8 custom images the chart deploys).
-IMAGES="gateway:src/gateway dashboard:src/dashboard woo-mcp:src/woo-mcp \
+# Image name -> build context (all 9 custom images the chart deploys).
+IMAGES="gateway:src/gateway dashboard:src/dashboard landing:src/landing woo-mcp:src/woo-mcp \
 demo-mcp-time:src/demo-mcp-time demo-mcp-notes:src/demo-mcp-notes \
 wordpress:src/wordpress wp-cli:src/wp-cli store-assets:store"
 
