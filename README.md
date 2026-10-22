@@ -252,6 +252,35 @@ Short version; the full model lives in `THREAT_MODEL.md` and the decisions in
 re-runs the live probes (uid/caps/ro-root/token + NetworkPolicy + lockout +
 headers + pod-log scan).
 
+## Landing page (apex host)
+
+`src/landing/` is a one-page static site (plain HTML/CSS/vanilla JS, no build step) served at the
+APEX domain by the `landing` component (ADR-080/083). Dark-first with a light toggle; zero external
+requests, strict CSP, nginx non-root uid 101 on 8080.
+
+```bash
+make landing-image                              # build + import into the kind node
+helm template urumi ./helm -n urumi -f helm/values-local.yaml | grep -c landing   # 22 lines when on
+```
+
+Enabling it in prod takes three things, in this order:
+
+1. **The apex A record must point at this server BEFORE enabling** (e.g. `example.com -> <server IP>`;
+   `www` is not used by the component).
+2. Set `landing.host` to the bare domain (`--set landing.host=example.com` or an uncommitted
+   overlay) and `landing.enabled=true` (values-prod only; `values.yaml` ships the flag OFF and
+   `values-local.yaml` turns it on for kind at `127.0.0.1.nip.io`).
+3. Upgrade: the chart renders a dedicated `landing` Deployment/Service/Ingress/NetworkPolicy
+   (templates/landing-*.yaml). The apex certificate uses its OWN Secret (`landing.tlsSecret`,
+   default `urumi-landing-tls`) because cert-manager issues one Certificate per Ingress.
+
+**Flipping "Beyond the brief" items.** `src/landing/features.js` is the single config file: every
+item ships `enabled: false`, and only `enabled: true` items render in the "Beyond the brief"
+section (all-off hides the section). Flip an item ONLY after its branch actually merges, then
+rebuild: `make landing-image` + restart `deployment/urumi-landing`. The same file holds
+`repoUrl` (announcement bar + nav) and `videoUrl` (the demo video block stays hidden while empty;
+it renders as a link out, never an embed, so the page keeps making zero external requests).
+
 ## Submission (when ready)
 
 - Demo video (chapters: design, K8s, MCP internals, security, chat, local→VPS) + GitHub repo → https://forms.gle/nftwgyNeenSDmiRb6

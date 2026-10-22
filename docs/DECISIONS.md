@@ -833,3 +833,148 @@ button was unreachable, so no save ever happened. After the fix the same
 browser flow toggles a tool off, scrolls to Save, gets PUT 200, and after
 closing/reopening shows "1 restricted for members" with the switch still off -
 at 1440x960 and 390x844.
+
+## 2026-10-22: Landing page is a static no-build site served by the dashboard nginx pattern (ADR-080)
+
+**What changed.** `src/landing/` is a one-page site: plain HTML, CSS and a little vanilla JS, no
+framework and no build step. It is served by a tiny nginx image (`FROM nginx:1.27-alpine`) copied
+from the dashboard image pattern: unprivileged 8080, run as uid 101 via the chart, read-only root,
+and the same three emptyDirs (/tmp, /var/cache/nginx, /var/run) that let non-root nginx boot. The
+security headers are byte-identical to the dashboard's (CSP self-only with no inline scripts, the
+theme bootstrap lives in the external theme-init.js, nosniff, no-referrer, DENY framing, empty
+Permissions-Policy) and the add_header inheritance gotcha is handled the same way. The page makes
+ZERO external requests: system fonts only, inline SVG only, no CDN, no analytics, no trackers, and
+the optional demo video renders as a link out, never an embed.
+
+**Why.** The brief asked for a fast, honest one-page site at the apex domain, and the repo already
+has a proven hardened static-serving shape (the dashboard). Reusing it keeps the security story in
+one family instead of inventing a second nginx config.
+
+**Alternatives considered.**
+- A React/Vite app for the landing: rejected, a build step and 100x the JS for zero benefit on a
+  static page (the brief forbade frameworks anyway).
+- An embed for the demo video (YouTube/iframe): rejected, it breaks the zero-external-request
+  guarantee and the CSP; a link out keeps both and the block stays hidden until videoUrl is set.
+
+**Known trade-offs.** The empty-value Permissions-Policy header is silently dropped by nginx
+(verified by curl: five of the six headers arrive; the sixth is the empty one). This matches the
+dashboard/gateway behaviour exactly, so the family stays consistent. Editing features.js requires
+an image rebuild by design (the config ships inside the image; there is no Secret wiring for a
+static page).
+
+**Verification.** `scripts/landing-verify.mjs` (playwright-core): 1440 and 390, light AND dark,
+into gitignored artifacts/landing/. Gates: zero external requests, zero console errors, no
+horizontal scroll and no element past the viewport at either width, 32-pair AA contrast gate per
+theme (one real failure found and fixed: the sample-data chip used light text on a mid-tone tint;
+it now uses the dashboard's on-tint rule, dark ink on tints in both themes), pre-paint theme
+applied in both modes, reduced-motion collapses the flow animation (computed 1e-05s), and with the
+default config the Beyond-the-brief and video sections stay hidden. Page weight 52KB raw, 15.5KB
+gzip. docker build + docker run as uid 101 with tmpfs emptyDir mimics, curl headers checked.
+
+## 2026-10-22: Landing theme is dark-first with dashboard-family tokens (ADR-081)
+
+**What changed.** The landing ships dark by default with a light mode. Tokens mirror
+src/dashboard/src/styles/tokens.css: same neutral scale (dark surfaces #14161B/#1C1F26/#22262F,
+light greige #ECEBE7/white), same ink pill primary (light-on-dark in dark mode), same accent tints
+(periwinkle, sky, blush) and the Dusk gradient restricted to one 3px strip on the hero code card.
+No green accent anywhere. Theme resolution: stored choice in localStorage (try/catch), else
+prefers-color-scheme, else dark. The pre-paint bootstrap is an external file (theme-init.js)
+because the CSP forbids inline scripts; the nav toggle stores the choice. Radii (24/14/10/999),
+shadow family and the 20px spacing grid are the dashboard's; the type scale extends it with display
+sizes (h1 up to 54px) for a marketing page. Final values documented in docs/LANDING_DESIGN.md.
+
+**Why.** The brief said dark-first with a light mode and one family with the product. The
+dashboard's dark set already passed contrast review, so reusing it avoids inventing (and
+re-measuring) a second palette.
+
+**Alternatives considered.**
+- Light-first like the dashboard app: rejected, the brief explicitly said dark-first for the site.
+- A separate landing palette: rejected, two colour systems would read as two products.
+
+**Known trade-offs.** The dashboard defaults to Light and remembers System-less choices; the
+landing defaults to Dark. They share the token VALUES, not the default. A visitor moving from site
+to app sees the app start light unless they pick dark there; acceptable, the site is the storefront
+and the app is the tool.
+
+## 2026-10-22: Beyond-the-brief and the video block are config-driven from features.js (ADR-082)
+
+**What changed.** `src/landing/features.js` is the single config file: `repoUrl` (announcement bar
++ nav + footer, defaulting to the Chart.yaml home), `videoUrl` (empty = the video section stays
+hidden), and `features`: multi-store provisioning, hosted MCP servers, OAuth, compact tool mode,
+rate limits, metrics. Every item ships `enabled: false`; main.js renders ONLY enabled items, and
+when none are enabled the whole section stays hidden. main.js also derives the dashboard/store
+links from the apex host the page is served on (dashboard.<apex>, store.<apex>, the same
+convention the Helm values use), with optional explicit overrides in the same file, so the static
+page carries no hardcoded hostname and the hero code card shows the real /mcp URL of the
+deployment.
+
+**Why.** The page must only claim what exists on the branch at build time. A flipped boolean that
+ships before its branch merges would be a false claim on a public page; the flip therefore lives in
+the image build, not in cluster state.
+
+**Alternatives considered.**
+- Helm values -> rendered config: rejected, the page is static and the flag belongs to the site's
+  content build, not the release; also avoids wiring a ConfigMap for one boolean.
+- Rendering disabled items greyed out: rejected, showing "OAuth" as a grey card still advertises a
+  thing that does not exist; hidden means honest.
+
+**Known trade-offs.** Flipping a flag requires `make landing-image` plus a landing rollout. The
+section disappears entirely while all items are off, so the code that renders it is untestable in
+the default build; scripts/landing-verify.mjs asserts the default-hidden state, and the render path
+is six lines of DOM building in main.js.
+
+## 2026-10-22: Helm landing component, separate files, apex Ingress with a dedicated cert (ADR-083)
+
+**What changed.** The landing deploys from five NEW templates (nothing existing was edited except
+values files and the schema): landing-deployment.yaml (dashboard-shaped: uid 101 via the shared
+securityContext helper, readOnlyRootFilesystem, probes on /, small resources 10m/32Mi requests),
+landing-service.yaml (ClusterIP), landing-serviceaccount.yaml (automountServiceAccountToken false;
+kept in its own file instead of serviceaccounts.yaml to stay conflict-free),
+landing-networkpolicy.yaml (the ONLY opening for the landing pod: ingress from the
+ingress-controller namespace on the values port; no egress rule at all, a static server needs not
+even DNS), and landing-ingress.yaml. The Ingress serves the APEX host from the `landing.host`
+value; TLS follows the existing cert-manager pattern (same annotations object, same tlsEnabled
+gate) but with a DEDICATED secretName (`landing.tlsSecret`, default urumi-landing-tls) because
+cert-manager issues one Certificate per Ingress and two Certificates cannot share a Secret. The
+Ingress renders only when `landing.host` is set: an empty host would render a catch-all rule that
+steals traffic from the store/dashboard Ingress. `landing.enabled` defaults FALSE in values.yaml
+and true in values-local.yaml (kind apex 127.0.0.1.nip.io). No hostname is hardcoded in any
+template. Makefile gained `landing-image` (same build+import style); push-images.sh and
+smoke-images.sh list the ninth image.
+
+**Why.** Merge safety first: every new manifest is a new file, so other branches cannot conflict
+with it; the only shared-file touches are the values appends and one schema property.
+
+**Alternatives considered.**
+- One combined Ingress object edited inside ingress.yaml: rejected, it would put the landing in the
+  highest-conflict file in the chart and entangle its rollout with the store/dashboard host list.
+- Sharing the existing urumi-tls Secret: rejected (cert-manager shim creates a Certificate per
+  Ingress; two Certificates claiming one Secret fight). The apex gets its own cert, renewed
+  independently.
+- Adding the landing port to the shared public-tier NetworkPolicy: rejected in favour of a
+  dedicated policy that allows ONLY the ingress controller (the brief's wording); the landing needs
+  no same-namespace callers and no egress.
+
+**Known trade-offs.** Two certificates to renew instead of one, and the apex A record must point
+at the server BEFORE enabling (documented in README). The local kind values turn the flag on with
+the nip.io apex, which is plain HTTP locally (global.tlsEnabled false), same as the dashboard.
+
+## 2026-10-22: Landing verification posture: docker + playwright + helm only, no cluster (ADR-084)
+
+**What changed.** The landing branch was verified WITHOUT touching the kind cluster, kubectl or any
+helm release (another session owns them): docker build + docker run as uid 101 with tmpfs mounts
+mimicking the pod's emptyDirs, curl header assertions, scripts/landing-verify.mjs (Playwright:
+screenshots 1440/390 in both themes into gitignored artifacts/landing/, zero-external-request,
+overflow, contrast and console gates), helm lint with values-local and values-prod.example, and
+helm template proving the flag renders four resources + the NetworkPolicy when on and ZERO landing
+lines when off. npm ci in src/dashboard installed the existing playwright-core devDep for the
+script; node_modules stay gitignored.
+
+**Why.** The brief for this session forbade cluster access; every gate had to be runnable against
+the image and the chart alone, and each must stay runnable later as a regression check.
+
+**Known trade-offs.** The screenshots cannot be visually reviewed by this session (no image input
+available), so the visual review is scripted proxies (geometry, overflow, contrast, computed
+animation state) plus the saved PNGs for a human pass. The docker run needs explicit
+--tmpfs ...:mode=1777 because plain docker tmpfs defaults are not uid-101-writable; the smoke test
+encodes the same invocation.
