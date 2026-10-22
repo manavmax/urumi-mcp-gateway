@@ -1,29 +1,221 @@
 {
-  "purpose": "Seed set of the demo store: the 12 products store/products.json defines and that the wp-setup Helm job creates. Any product NOT matched here is treated as test data and is deleted through the Woo REST API. Orphan media (attachments that are not the image of a kept product) and every order are also deleted. This file is the audit trail for that rule - edit it deliberately, together with store/products.json and helm/templates/jobs/wp-setup.yaml (the 'Seed products by SKU' section) so the three never drift.",
-  "source": "store/products.json (single source of truth) via helm/templates/jobs/wp-setup.yaml 'Seed products by SKU'",
+  "note": "Keep manifest for make demo-reset (ADR-032, regenerated for the Loam & Ember catalog per ADR-073). Any product whose SKU is NOT in this list is deleted; orders are always removed. Edit deliberately, together with store/products.json.",
   "products": [
-    { "name": "Urumi Classic Tee", "sku": "URUMI-TEE-001", "regular_price": "29.99", "type": "simple" },
-    { "name": "Urumi Hoodie", "sku": "URUMI-HOODIE-001", "regular_price": "59.99", "type": "simple" },
-    { "name": "Urumi Shoes", "sku": "102938", "regular_price": "149.99", "type": "simple" },
-    { "name": "Urumi Cap", "sku": "URUMI-CAP-001", "regular_price": "24.00", "type": "simple" },
-    { "name": "Ceramic Mug", "sku": "URUMI-MUG-001", "regular_price": "18.00", "type": "simple" },
-    { "name": "Scented Candle", "sku": "URUMI-CANDLE-001", "regular_price": "22.00", "type": "simple" },
-    { "name": "Wool Throw", "sku": "URUMI-THROW-001", "regular_price": "64.00", "type": "simple" },
-    { "name": "Canvas Tote", "sku": "URUMI-TOTE-001", "regular_price": "28.00", "type": "simple" },
-    { "name": "Everyday Backpack", "sku": "URUMI-BACKPACK-001", "regular_price": "89.00", "type": "simple" },
-    { "name": "Steel Water Bottle", "sku": "URUMI-BOTTLE-001", "regular_price": "32.00", "type": "simple" },
-    { "name": "Hardcover Notebook", "sku": "URUMI-NOTEBOOK-001", "regular_price": "14.00", "type": "simple" },
-    { "name": "Pen Set", "sku": "URUMI-PEN-001", "regular_price": "12.00", "type": "simple" }
-  ],
-  "products_rule": "KEEP a product iff its SKU matches one of the SKUs above (case-insensitive). A product with NO SKU is kept only when its name matches a seed name exactly; every other product (any SKU, any status, including drafts) is deleted.",
-  "media_rule": "DELETE every attachment that is NOT the featured image of a kept product (orphan media from test uploads). Attachments that ARE a kept product's image stay.",
-  "orders_rule": "wp-setup seeds NO orders, so every order in the store was created during testing: all of them are deleted (every status, force=true).",
-  "never_touched": [
-    "WordPress/WooCommerce settings (woocommerce_* options, incl. COD), pages, tax, shipping",
-    "Kubernetes Secrets (woo-secrets, gateway-secrets, demo-notes-token, gateway-admin, ...)",
-    "Kubernetes PVCs and the persistent MariaDB/Postgres data",
-    "The Helm release `urumi` itself (the script never runs helm)",
-    "Gateway servers/tools rows and their Fernet-encrypted credentials",
-    "The gateway admin user admin@urumi.local and API keys owned by admin users"
+    {
+      "sku": "LOAM-CER-001",
+      "name": "Stoneware Mug 12 oz",
+      "type": "variable",
+      "price": "24.00"
+    },
+    {
+      "sku": "LOAM-CER-002",
+      "name": "Ramen Bowl",
+      "type": "simple",
+      "price": "32.00"
+    },
+    {
+      "sku": "LOAM-CER-003",
+      "name": "Dinner Plates, Set of 4",
+      "type": "simple",
+      "price": "68.00"
+    },
+    {
+      "sku": "LOAM-CER-004",
+      "name": "Bud Vase",
+      "type": "simple",
+      "price": "19.00"
+    },
+    {
+      "sku": "LOAM-CER-005",
+      "name": "Stoneware Teapot 750 ml",
+      "type": "simple",
+      "price": "54.00"
+    },
+    {
+      "sku": "LOAM-CER-006",
+      "name": "Spoon Rest",
+      "type": "simple",
+      "price": "16.00"
+    },
+    {
+      "sku": "LOAM-TEX-001",
+      "name": "Wool Throw",
+      "type": "variable",
+      "price": "64.00"
+    },
+    {
+      "sku": "LOAM-TEX-002",
+      "name": "Linen Cushion Cover 18 in",
+      "type": "variable",
+      "price": "28.00"
+    },
+    {
+      "sku": "LOAM-TEX-003",
+      "name": "Linen Napkins, Set of 6",
+      "type": "simple",
+      "price": "42.00"
+    },
+    {
+      "sku": "LOAM-TEX-004",
+      "name": "Waffle Hand Towels, Set of 2",
+      "type": "simple",
+      "price": "24.00"
+    },
+    {
+      "sku": "LOAM-TEX-005",
+      "name": "Table Runner 14 x 72",
+      "type": "simple",
+      "price": "38.00"
+    },
+    {
+      "sku": "LOAM-TEX-006",
+      "name": "Cotton Bath Mat",
+      "type": "simple",
+      "price": "32.00"
+    },
+    {
+      "sku": "LOAM-CND-001",
+      "name": "Cedar & Smoke Candle",
+      "type": "simple",
+      "price": "24.00"
+    },
+    {
+      "sku": "LOAM-CND-002",
+      "name": "Fig & Fern Candle",
+      "type": "simple",
+      "price": "24.00"
+    },
+    {
+      "sku": "LOAM-CND-003",
+      "name": "Wax Melts, Set of 6",
+      "type": "simple",
+      "price": "14.00"
+    },
+    {
+      "sku": "LOAM-CND-004",
+      "name": "Hand Soap Bar",
+      "type": "simple",
+      "price": "12.00"
+    },
+    {
+      "sku": "LOAM-CND-005",
+      "name": "Room & Linen Mist",
+      "type": "simple",
+      "price": "22.00"
+    },
+    {
+      "sku": "LOAM-CND-006",
+      "name": "Incense Holder",
+      "type": "simple",
+      "price": "18.00"
+    },
+    {
+      "sku": "LOAM-DSK-001",
+      "name": "Layflat Notebook",
+      "type": "variable",
+      "price": "18.00"
+    },
+    {
+      "sku": "LOAM-DSK-002",
+      "name": "Gel Pen Set",
+      "type": "simple",
+      "price": "12.00"
+    },
+    {
+      "sku": "LOAM-DSK-003",
+      "name": "Pencil Pouch",
+      "type": "simple",
+      "price": "26.00"
+    },
+    {
+      "sku": "LOAM-DSK-004",
+      "name": "Desk Tray",
+      "type": "simple",
+      "price": "34.00"
+    },
+    {
+      "sku": "LOAM-DSK-005",
+      "name": "Weekly Planner Pad",
+      "type": "simple",
+      "price": "16.00"
+    },
+    {
+      "sku": "LOAM-DSK-006",
+      "name": "Letter Writing Set",
+      "type": "simple",
+      "price": "22.00"
+    },
+    {
+      "sku": "LOAM-KIT-001",
+      "name": "Serving Board",
+      "type": "simple",
+      "price": "48.00"
+    },
+    {
+      "sku": "LOAM-KIT-002",
+      "name": "Storage Jar",
+      "type": "variable",
+      "price": "22.00"
+    },
+    {
+      "sku": "LOAM-KIT-003",
+      "name": "Tea Towels, Set of 2",
+      "type": "simple",
+      "price": "22.00"
+    },
+    {
+      "sku": "LOAM-KIT-004",
+      "name": "Trivet Tile",
+      "type": "simple",
+      "price": "18.00"
+    },
+    {
+      "sku": "LOAM-KIT-005",
+      "name": "Canvas Apron",
+      "type": "simple",
+      "price": "42.00"
+    },
+    {
+      "sku": "LOAM-KIT-006",
+      "name": "Measuring Spoons, Set of 4",
+      "type": "simple",
+      "price": "16.00"
+    },
+    {
+      "sku": "LOAM-CAR-001",
+      "name": "Canvas Tote",
+      "type": "variable",
+      "price": "32.00"
+    },
+    {
+      "sku": "LOAM-CAR-002",
+      "name": "Crossbody Pouch",
+      "type": "simple",
+      "price": "38.00"
+    },
+    {
+      "sku": "LOAM-CAR-003",
+      "name": "Market Basket",
+      "type": "simple",
+      "price": "36.00"
+    },
+    {
+      "sku": "LOAM-CAR-004",
+      "name": "Gym Sack",
+      "type": "simple",
+      "price": "24.00"
+    },
+    {
+      "sku": "LOAM-CAR-005",
+      "name": "Laptop Sleeve 13 in",
+      "type": "simple",
+      "price": "44.00"
+    },
+    {
+      "sku": "LOAM-CAR-006",
+      "name": "Weekend Duffel",
+      "type": "simple",
+      "price": "98.00"
+    }
   ]
 }

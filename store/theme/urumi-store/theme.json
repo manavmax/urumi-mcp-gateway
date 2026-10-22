@@ -24,6 +24,9 @@
         { "name": "Lilac", "slug": "lilac", "color": "#D9C8DC" },
         { "name": "Peach", "slug": "peach", "color": "#EFCBBE" },
         { "name": "Sand", "slug": "sand", "color": "#E8DFD0" },
+        { "name": "Sage", "slug": "sage", "color": "#D8E0D4" },
+        { "name": "Clay Soft", "slug": "clay-soft", "color": "#EBD9CC" },
+        { "name": "Accent", "slug": "accent", "color": "#A0522D" },
         { "name": "White", "slug": "white", "color": "#FFFFFF" }
       ],
       "gradients": [
@@ -113,6 +116,7 @@
       "hairline-strong": "rgba(20, 23, 28, 0.12)",
       "nav-bg": "rgba(255, 255, 255, 0.86)",
       "ring": "rgba(185, 196, 221, 0.55)",
+      "accent": "#A0522D",
       "radius": {
         "s": "12px",
         "card": "24px",

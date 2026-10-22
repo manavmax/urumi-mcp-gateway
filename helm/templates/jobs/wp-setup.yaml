@@ -448,11 +448,14 @@ spec:
               wp rewrite flush --hard --allow-root --path=$WP_PATH || true
 
               # --- Seed products BY SKU from store/products.json (idempotent) ---
-              # products.json is the single source of truth (copied to wp-content/store
-              # by the store-assets initContainer). The PHP helper creates missing
-              # products, attaches the image and sets the category; on a re-run existing
-              # products are never duplicated and admin edits are never overwritten
-              # unless STORE_SEED_FORCE=1. Orders and customers are never touched.
+              # products.json is the single source of truth (copied to wp-content/store by
+              # the store-assets initContainer). The PHP helper creates missing products and
+              # variations by SKU and attaches images; on a re-run existing records are
+              # never duplicated and admin edits are never overwritten unless
+              # STORE_SEED_FORCE=1. Supports the full store v2 model (ADR-070/071): sale
+              # price, manage-stock + out-of-stock, weight/dimensions, tags, gallery
+              # sideloads, and variable products whose variations carry their own SKU,
+              # price and stock. Orders and customers are never touched.
               echo "Seeding products by SKU from store/products.json..."
               cat > /tmp/seed_products.php <<'PHP_EOF'
               <?php
@@ -463,7 +466,7 @@ spec:
               require_once ABSPATH . 'wp-admin/includes/file.php';
               require_once ABSPATH . 'wp-admin/includes/image.php';
               require_once ABSPATH . 'wp-admin/includes/media.php';
-
+              
               $data_path = getenv( 'STORE_PRODUCTS' ) ?: WP_CONTENT_DIR . '/store/products.json';
               $img_dir   = getenv( 'STORE_IMAGES' ) ?: WP_CONTENT_DIR . '/store/images';
               $force     = getenv( 'STORE_SEED_FORCE' ) === '1';
@@ -473,119 +476,263 @@ spec:
                   fwrite( STDERR, "no products in $data_path\n" );
                   exit( 2 );
               }
-
-              // Ensure the four category terms exist (Apparel, Home, Accessories, Stationery).
+              
+              // Category terms from the catalog, with descriptions.
               $cat_by_name = array();
+              $cat_by_slug = array();
               foreach ( ( $data['categories'] ?? array() ) as $c ) {
                   $name = (string) ( $c['name'] ?? '' );
                   if ( '' === $name ) { continue; }
                   $slug = sanitize_title( $name );
                   $term = term_exists( $slug, 'product_cat' );
                   if ( ! $term ) {
-                      $term = wp_insert_term( $name, 'product_cat', array( 'slug' => $slug ) );
+                      $term = wp_insert_term( $name, 'product_cat', array(
+                          'slug'        => $slug,
+                          'description' => (string) ( $c['description'] ?? '' ),
+                      ) );
                   }
                   if ( ! is_wp_error( $term ) ) {
-                      $cat_by_name[ $name ] = is_array( $term ) ? (int) $term['term_id'] : (int) $term;
+                      $tid = is_array( $term ) ? (int) $term['term_id'] : (int) $term;
+                      $cat_by_name[ $name ] = $tid;
+                      $cat_by_slug[ $slug ] = $tid;
+                      $desc = (string) ( $c['description'] ?? '' );
+                      if ( '' !== $desc ) { wp_update_term( $tid, 'product_cat', array( 'description' => $desc ) ); }
                   }
               }
-
-              $attach_image = function ( $pid, $p ) use ( $img_dir ) {
-                  $name = (string) ( $p['image'] ?? ( $p['sku'] . '.png' ) );
-                  $file = $img_dir . '/' . basename( $name );
-                  if ( ! is_file( $file ) ) {
-                      echo "  no image file for " . $p['sku'] . " ($file)\n";
-                      return;
-                  }
-                  $tmp = wp_tempnam( 'urumi-seed' );
-                  if ( ! $tmp || ! copy( $file, $tmp ) ) {
-                      echo "  temp copy failed for " . $p['sku'] . "\n";
-                      return;
-                  }
-                  $att_id = media_handle_sideload( array( 'name' => sanitize_file_name( $name ), 'tmp_name' => $tmp ), 0 );
-                  if ( is_wp_error( $att_id ) ) {
-                      echo "  image sideload failed for " . $p['sku'] . ": " . $att_id->get_error_message() . "\n";
-                      @unlink( $tmp );
-                      return;
-                  }
-                  set_post_thumbnail( $pid, (int) $att_id );
-                  update_post_meta( (int) $att_id, '_wp_attachment_image_alt', (string) ( $p['alt'] ?? $p['name'] ) );
-                  echo "  attached image " . $name . " to " . $p['sku'] . "\n";
+              
+              // Resolve a product's category reference: products.json entries may
+              // name the category by name or slug; both resolve to the same term.
+              $cat_for = function ( $ref ) use ( $cat_by_name, $cat_by_slug ) {
+                  $ref = (string) $ref;
+                  if ( isset( $cat_by_name[ $ref ] ) ) { return $cat_by_name[ $ref ]; }
+                  $tsl = sanitize_title( $ref );
+                  if ( isset( $cat_by_slug[ $tsl ] ) ) { return $cat_by_slug[ $tsl ]; }
+                  return 0;
               };
 
-              $created = 0; $kept = 0; $updated = 0; $imaged = 0;
+              // Sideload one file from the store images dir; returns attachment id or 0.
+              $sideload = function ( $file, $dest_pid, $alt ) use ( $img_dir ) {
+                  $src = $img_dir . '/' . basename( $file );
+                  if ( ! is_file( $src ) ) {
+                      echo "  no image file $file\n";
+                      return 0;
+                  }
+                  $tmp = wp_tempnam( 'loam-seed' );
+                  if ( ! $tmp || ! copy( $src, $tmp ) ) {
+                      echo "  temp copy failed for $file\n";
+                      return 0;
+                  }
+                  $att = media_handle_sideload( array( 'name' => sanitize_file_name( basename( $file ) ), 'tmp_name' => $tmp ), $dest_pid );
+                  if ( is_wp_error( $att ) ) {
+                      echo "  sideload failed for $file: " . $att->get_error_message() . "\n";
+                      @unlink( $tmp );
+                      return 0;
+                  }
+                  if ( $alt ) { update_post_meta( (int) $att, '_wp_attachment_image_alt', (string) $alt ); }
+                  return (int) $att;
+              };
+              
+              $attach_main = function ( $pid, $p ) use ( $sideload ) {
+                  $name = (string) ( $p['image'] ?? ( $p['sku'] . '.png' ) );
+                  $att  = $sideload( $name, $pid, (string) ( $p['alt'] ?? $p['name'] ) );
+                  if ( ! $att ) { return false; }
+                  set_post_thumbnail( $pid, $att );
+                  echo "  attached image " . basename( $name ) . " to " . $p['sku'] . "\n";
+                  return true;
+              };
+              
+              // Gallery attachments are created ONCE (never re-attached on force, which
+              // would duplicate attachments; the media reset prunes orphans).
+              $attach_gallery = function ( $pid, $p ) use ( $sideload ) {
+                  $ids = array();
+                  foreach ( ( $p['gallery'] ?? array() ) as $g ) {
+                      $att = $sideload( $g, $pid, (string) ( $p['alt'] ?? $p['name'] ) );
+                      if ( $att ) { $ids[] = $att; }
+                  }
+                  if ( $ids ) {
+                      $product = wc_get_product( $pid );
+                      $product->set_gallery_image_ids( array_merge( (array) $product->get_gallery_image_ids(), $ids ) );
+                      $product->save();
+                      echo "  attached " . count( $ids ) . " gallery images to " . $p['sku'] . "\n";
+                  }
+              };
+              
+              // Full data model shared by simple and variable products.
+              $apply_common = function ( $product, $p ) {
+                  if ( ! empty( $p['description'] ) ) { $product->set_description( (string) $p['description'] ); }
+                  if ( ! empty( $p['short_description'] ) ) { $product->set_short_description( (string) $p['short_description'] ); }
+                  if ( isset( $p['stock'] ) ) {
+                      $stock = (int) $p['stock'];
+                      $product->set_manage_stock( true );
+                      $product->set_stock_quantity( $stock );
+                      $product->set_stock_status( $stock > 0 ? 'instock' : 'outofstock' );
+                  }
+                  if ( ! empty( $p['weight'] ) ) { $product->set_weight( (string) $p['weight'] ); }
+                  if ( ! empty( $p['dimensions'] ) && is_array( $p['dimensions'] ) ) {
+                      $d = $p['dimensions'];
+                      $product->set_length( (string) ( $d['length'] ?? '' ) );
+                      $product->set_width( (string) ( $d['width'] ?? '' ) );
+                      $product->set_height( (string) ( $d['height'] ?? '' ) );
+                  }
+                  if ( ! empty( $p['tags'] ) && is_array( $p['tags'] ) ) {
+                      wp_set_object_terms( $product->get_id(), array_map( 'sanitize_text_field', $p['tags'] ), 'product_tag' );
+                  }
+                  $product->set_featured( ! empty( $p['featured'] ) );
+              };
+              
+              // 'New' is a catalog flag distinct from Woo's 'featured'; the theme reads the
+              // _urumi_is_new meta (the flag is catalog-owned, refreshed on every run).
+              $mark_new = function ( $pid, $p ) {
+                  if ( ! empty( $p['new'] ) ) {
+                      update_post_meta( $pid, '_urumi_is_new', '1' );
+                  } else {
+                      delete_post_meta( $pid, '_urumi_is_new' );
+                  }
+              };
+              
+              // name => ordered unique options, from the variations' attribute maps.
+              $variation_attrs = function ( $variations ) {
+                  $names = array();
+                  foreach ( $variations as $v ) {
+                      foreach ( ( $v['attributes'] ?? array() ) as $n => $val ) {
+                          $n = (string) $n;
+                          if ( ! isset( $names[ $n ] ) ) { $names[ $n ] = array(); }
+                          if ( ! in_array( (string) $val, $names[ $n ], true ) ) { $names[ $n ][] = (string) $val; }
+                      }
+                  }
+                  return $names;
+              };
+              
+              $created = 0; $kept = 0; $updated = 0; $imaged = 0; $variations_created = 0;
+              
               foreach ( $data['products'] as $p ) {
-                  $sku    = (string) ( $p['sku'] ?? '' );
-                  $is_new = ! empty( $p['new'] );
+                  $sku = (string) ( $p['sku'] ?? '' );
                   if ( '' === $sku ) { continue; }
-
+                  $has_variations = ! empty( $p['variations'] ) && is_array( $p['variations'] );
+              
                   $pid = wc_get_product_id_by_sku( $sku );
                   if ( $pid ) {
                       $product = wc_get_product( $pid );
                       if ( $force ) {
                           $product->set_name( (string) ( $p['name'] ?? $product->get_name() ) );
-                          $product->set_regular_price( (string) ( $p['price'] ?? $product->get_regular_price() ) );
-                          $product->set_description( (string) ( $p['description'] ?? '' ) );
-                          $product->set_short_description( (string) ( $p['short_description'] ?? '' ) );
+                          if ( ! $has_variations ) {
+                              if ( ! empty( $p['price'] ) ) { $product->set_regular_price( (string) $p['price'] ); }
+                              $product->set_sale_price( ! empty( $p['sale_price'] ) ? (string) $p['sale_price'] : '' );
+                          }
                           $product->set_status( 'publish' );
-                          $product->set_manage_stock( false );
-                          $product->set_stock_status( 'instock' );
-                          $product->set_featured( $is_new );
+                          $apply_common( $product, $p );
                           $product->save();
-                          // Force also re-attaches the catalog image (the previous
-                          // attachment is left as orphan media for the media reset).
-                          $attach_image( $pid, $p );
-                          $imaged++;
-                          // Force sets the category exactly (replaces leftovers like
-                          // Uncategorized from older seeds).
-                          if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
-                              wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', false );
+                          // Force re-attaches the catalog image (the previous attachment is
+                          // left as orphan media for the media reset). Gallery is NOT
+                          // re-attached (it would duplicate attachments).
+                          if ( $attach_main( $pid, $p ) ) { $imaged++; }
+                          if ( ! empty( $cat_for( $p['category'] ?? '' ) ) ) {
+                              wp_set_object_terms( $pid, array( $cat_for( $p['category'] ?? '' ) ), 'product_cat', false );
                           }
                           $updated++;
                       } else {
-                          $kept++; // admin edits stay; only missing bits are backfilled below
+                          $kept++; // admin edits stay; missing bits are backfilled below
                       }
-                      // Non-destructive backfill: image and category when missing.
+                      // Non-destructive backfill: image, gallery, category when missing.
                       if ( ! $product->get_image_id() ) {
-                          $attach_image( $pid, $p );
-                          $imaged++;
+                          if ( $attach_main( $pid, $p ) ) { $imaged++; }
                       }
-                      if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
+                      if ( empty( $product->get_gallery_image_ids() ) && ! empty( $p['gallery'] ) ) {
+                          $attach_gallery( $pid, $p );
+                      }
+                      if ( ! empty( $cat_for( $p['category'] ?? '' ) ) ) {
                           $cats = wp_get_object_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) );
-                          if ( is_wp_error( $cats ) || ! in_array( $cat_by_name[ $p['category'] ], (array) $cats, true ) ) {
-                              // append=true on a plain re-run (never disturbs admin categories);
-                              // below, force replaces the terms exactly.
-                              wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', true );
+                          if ( is_wp_error( $cats ) || ! in_array( $cat_for( $p['category'] ?? '' ), (array) $cats, true ) ) {
+                              wp_set_object_terms( $pid, array( $cat_for( $p['category'] ?? '' ) ), 'product_cat', true );
                           }
                       }
-                      continue;
+                  } else {
+                      if ( $has_variations ) {
+                          $product = new WC_Product_Variable();
+                      } else {
+                          $product = new WC_Product_Simple();
+                          $product->set_regular_price( (string) ( $p['price'] ?? '0' ) );
+                          if ( ! empty( $p['sale_price'] ) ) { $product->set_sale_price( (string) $p['sale_price'] ); }
+                      }
+                      $product->set_name( (string) ( $p['name'] ?? $sku ) );
+                      $product->set_sku( $sku );
+                      $product->set_description( (string) ( $p['description'] ?? '' ) );
+                      $product->set_short_description( (string) ( $p['short_description'] ?? '' ) );
+                      $product->set_status( 'publish' );
+                      $apply_common( $product, $p );
+                      if ( $has_variations ) {
+                          $pos = 0;
+                          $wc_attrs = array();
+                          foreach ( $variation_attrs( $p['variations'] ) as $aname => $options ) {
+                              $a = new WC_Product_Attribute();
+                              $a->set_name( (string) $aname );
+                              $a->set_options( array_values( $options ) );
+                              $a->set_position( $pos++ );
+                              $a->set_visible( true );
+                              $a->set_variation( true );
+                              $wc_attrs[] = $a;
+                          }
+                          $product->set_attributes( $wc_attrs );
+                      }
+                      $pid = $product->save();
+                      if ( ! $pid || is_wp_error( $pid ) ) {
+                          echo "  create failed for $sku\n";
+                          continue;
+                      }
+                      $created++;
+                      echo "  created $sku (" . ( $p['name'] ?? '' ) . ") PID=$pid\n";
+                      if ( $attach_main( $pid, $p ) ) { $imaged++; }
+                      if ( ! empty( $p['gallery'] ) ) { $attach_gallery( $pid, $p ); }
+                      if ( ! empty( $cat_for( $p['category'] ?? '' ) ) ) {
+                          wp_set_object_terms( $pid, array( $cat_for( $p['category'] ?? '' ) ), 'product_cat', false );
+                      }
                   }
-
-                  $product = new WC_Product_Simple();
-                  $product->set_name( (string) ( $p['name'] ?? $sku ) );
-                  $product->set_sku( $sku );
-                  $product->set_regular_price( (string) ( $p['price'] ?? '0' ) );
-                  $product->set_description( (string) ( $p['description'] ?? '' ) );
-                  $product->set_short_description( (string) ( $p['short_description'] ?? '' ) );
-                  $product->set_status( 'publish' );
-                  $product->set_manage_stock( false );
-                  $product->set_stock_status( 'instock' );
-                  $product->set_featured( $is_new );
-                  $pid = $product->save();
-                  if ( ! $pid || is_wp_error( $pid ) ) {
-                      echo "  create failed for " . $sku . "\n";
-                      continue;
-                  }
-                  $created++;
-                  echo "  created " . $sku . " (" . ( $p['name'] ?? '' ) . ") PID=$pid\n";
-                  $attach_image( $pid, $p );
-                  $imaged++;
-                  if ( ! empty( $cat_by_name[ $p['category'] ?? '' ] ) ) {
-                      wp_set_object_terms( $pid, array( $cat_by_name[ $p['category'] ] ), 'product_cat', false );
+                  $mark_new( $pid, $p );
+              
+                  // Variations: create or force-update, matched by their own SKU.
+                  if ( $has_variations ) {
+                      foreach ( $p['variations'] as $v ) {
+                          $vsku = (string) ( $v['sku'] ?? '' );
+                          if ( '' === $vsku ) { continue; }
+                          $attr_map = array();
+                          foreach ( ( $v['attributes'] ?? array() ) as $n => $val ) {
+                              $attr_map[ sanitize_title( (string) $n ) ] = (string) $val;
+                          }
+                          $vid = wc_get_product_id_by_sku( $vsku );
+                          if ( $vid ) {
+                              $existing = wc_get_product( $vid );
+                              if ( ! $existing || (int) $existing->get_parent_id() !== (int) $pid ) {
+                                  echo "  variation $vsku exists outside $sku - skipped\n";
+                                  continue;
+                              }
+                              if ( ! $force ) { continue; }
+                              $vp = $existing;
+                          } else {
+                              $vp = new WC_Product_Variation();
+                              $vp->set_parent_id( (int) $pid );
+                              $vp->set_sku( $vsku );
+                          }
+                          $vp->set_regular_price( (string) ( $v['price'] ?? '0' ) );
+                          $vp->set_sale_price( ! empty( $v['sale_price'] ) ? (string) $v['sale_price'] : '' );
+                          $vp->set_manage_stock( true );
+                          $vstock = isset( $v['stock'] ) ? (int) $v['stock'] : 0;
+                          $vp->set_stock_quantity( $vstock );
+                          $vp->set_stock_status( $vstock > 0 ? 'instock' : 'outofstock' );
+                          $vp->set_attributes( $attr_map );
+                          $vp->set_status( 'publish' );
+                          $vid = $vp->save();
+                          if ( ! $vid || is_wp_error( $vid ) ) {
+                              echo "  variation save failed for $vsku\n";
+                              continue;
+                          }
+                          echo "  variation $vsku on $sku VID=$vid\n";
+                          $variations_created++;
+                      }
                   }
               }
-
+              
               wc_update_product_lookup_tables();
-              echo "seed summary: created=$created kept=$kept updated=$updated images=$imaged (force=" . ( $force ? '1' : '0' ) . ")\n";
+              echo "seed summary: created=$created kept=$kept updated=$updated images=$imaged variations_created=$variations_created (force=" . ( $force ? '1' : '0' ) . ")\n";
               PHP_EOF
               set +e
               SEED_OUT=$(STORE_PRODUCTS=/var/www/html/wp-content/store/products.json \
@@ -611,6 +758,11 @@ spec:
               fi
               echo "Theme urumi-store active."
 
+              # Storefront brand (ADR-070): the store layer owns the brand, so the
+              # blogname/description are re-pointed here, idempotently.
+              wp option update blogname "Loam & Ember" --allow-root --path=$WP_PATH
+              wp option update blogdescription "Slow-made goods for warm rooms and quiet desks." --allow-root --path=$WP_PATH
+
               # Front page + posts page. The front-page.html template renders the hero.
               echo "Ensuring front page and posts page..."
               HOME_ID=$(wp post list --post_type=page --name=home --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)
@@ -630,7 +782,7 @@ spec:
               echo "Ensuring About page..."
               if [ -z "$(wp post list --post_type=page --name=about --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)" ]; then
                 wp post create --post_type=page --post_status=publish --post_title="About" --post_name=about \
-                  --post_content="Urumi is a demo storefront built for a school project. We sell a small catalog of everyday goods. This store does not take payments online and does not ship real orders." \
+                  --post_content="Loam & Ember is a demo storefront built for a school project. We sell a small catalog of slow-made home and desk goods. This store does not take payments online and does not ship real orders." \
                   --allow-root --path=$WP_PATH
                 echo "  created About page."
               fi
@@ -648,7 +800,7 @@ spec:
               wp menu create "Primary" --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
               MENU_ID=$(wp menu list --fields=term_id,name --format=csv --allow-root --path=$WP_PATH 2>/dev/null | grep ',Primary' | head -n1 | cut -d, -f1)
               if [ -n "$MENU_ID" ]; then
-                for ITEM in "Shop|/shop/" "Apparel|/product-category/apparel/" "Home|/product-category/home/" "Accessories|/product-category/accessories/" "Stationery|/product-category/stationery/"; do
+                for ITEM in "Shop|/shop/" "Ceramics|/product-category/ceramics/" "Textiles|/product-category/textiles/" "Candles & Care|/product-category/candles-care/" "Desk & Paper|/product-category/desk-paper/" "Kitchen|/product-category/kitchen/" "Carry|/product-category/carry/"; do
                   TITLE="${ITEM%%|*}"; LINK="${ITEM#*|}"
                   if ! wp menu item list "$MENU_ID" --format=json --allow-root --path=$WP_PATH 2>/dev/null | grep -q "$LINK"; then
                     wp menu item add-custom "$MENU_ID" "$TITLE" "$LINK" --allow-root --path=$WP_PATH >/dev/null 2>&1 || true

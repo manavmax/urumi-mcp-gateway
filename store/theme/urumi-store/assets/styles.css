@@ -136,7 +136,7 @@ summary:focus-visible,
 	box-shadow: var(--wp--custom--shadow--lift);
 }
 
-/* NEW tag */
+/* NEW flag */
 .urumi-new-tag {
 	display: inline-flex;
 	align-items: center;
@@ -144,7 +144,7 @@ summary:focus-visible,
 	background: var(--wp--preset--color--ink);
 	color: var(--wp--preset--color--white);
 	font-family: var(--wp--preset--font-family--inter);
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 600;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -249,20 +249,60 @@ summary:focus-visible,
 	gap: 8px;
 }
 
+/* Header search: a real form (works without JS), pill style */
 .urumi-nav__search {
+	position: relative;
 	display: inline-flex;
 	align-items: center;
-	justify-content: center;
-	width: 40px;
-	height: 40px;
+	gap: 8px;
+	background: var(--wp--preset--color--card);
+	border: 1px solid var(--wp--custom--hairline-strong);
 	border-radius: var(--wp--custom--radius--pill);
-	color: var(--wp--preset--color--ink);
-	text-decoration: none;
-	transition: background-color var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease);
+	padding: 8px 16px;
+	transition: box-shadow var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease),
+		border-color var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease);
 }
 
-.urumi-nav__search:hover {
-	background: var(--wp--preset--color--tile);
+.urumi-nav__search:focus-within {
+	border-color: var(--wp--custom--ring);
+	box-shadow: 0 0 0 3px var(--wp--custom--ring);
+}
+
+.urumi-nav__search svg {
+	color: var(--wp--preset--color--muted);
+	flex: none;
+}
+
+.urumi-nav__search input[type="search"] {
+	border: 0;
+	background: transparent;
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 14px;
+	color: var(--wp--preset--color--ink);
+	width: 150px;
+	padding: 0;
+	outline: none;
+	appearance: none;
+}
+
+.urumi-nav__search input[type="search"]::placeholder {
+	color: var(--wp--preset--color--muted);
+}
+
+.urumi-nav__search input[type="search"]::-webkit-search-cancel-button {
+	-webkit-appearance: none;
+}
+
+.urumi-search-label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 
 /* Native WooCommerce mini-cart */
@@ -444,6 +484,8 @@ summary:focus-visible,
 .urumi-tint--peach { background: var(--wp--preset--color--peach); }
 .urumi-tint--lilac { background: var(--wp--preset--color--lilac); }
 .urumi-tint--sand { background: var(--wp--preset--color--sand); }
+.urumi-tint--sage { background: var(--wp--preset--color--sage); }
+.urumi-tint--clay { background: var(--wp--preset--color--clay-soft); }
 
 .urumi-cat-tile__img {
 	display: block;
@@ -613,8 +655,8 @@ summary:focus-visible,
 	box-shadow: var(--wp--custom--shadow--lift);
 }
 
-.urumi-tile .urumi-new-tag,
-.wc-block-product .urumi-new-tag {
+.urumi-tile .urumi-flags,
+.wc-block-product .urumi-flags {
 	position: absolute;
 	top: 20px;
 	left: 20px;
@@ -1300,4 +1342,450 @@ body.urumi-cat-stationery .urumi-archive-head { background: var(--wp--preset--co
 		transition-duration: 0.01ms !important;
 		transition-delay: 0ms !important;
 	}
+}
+
+/* ------------------------------------------------------------------ */
+/* Store v2 additions (ADR-070..074): flags, trust strip, newsletter,  */
+/* search form, 404 search, product meta, stock line, quantity select, */
+/* per-category pill active states.                                    */
+/* ------------------------------------------------------------------ */
+
+:root {
+	--urumi-accent: #A0522D;
+	--urumi-accent-ink: #7E3F22;
+}
+
+/* Tile + PDP flags: sale / new / sold out (colour never the only signal) */
+.urumi-flags {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.urumi-flag {
+	display: inline-flex;
+	align-items: center;
+	border-radius: var(--wp--custom--radius--pill);
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 4px 12px;
+	line-height: 1.4;
+}
+
+.urumi-flag--new {
+	background: var(--wp--preset--color--ink);
+	color: var(--wp--preset--color--white);
+}
+
+.urumi-flag--sale {
+	background: var(--urumi-accent);
+	color: #FFFFFF;
+}
+
+.urumi-flag--oos {
+	background: var(--wp--preset--color--tile);
+	color: var(--wp--preset--color--ink);
+	box-shadow: inset 0 0 0 1px var(--wp--custom--hairline-strong);
+}
+
+/* Block-grid flag host: the product-image block wrapper is the positioning
+   context; sold-out tiles dim their image. */
+.urumi-flags-host {
+	position: relative;
+	display: block;
+}
+
+.urumi-flags-host .wc-block-components-product-image {
+	margin: 0;
+}
+
+.wc-block-product:has(.urumi-flags--oos) img,
+.urumi-tile--oos img {
+	opacity: 0.55;
+}
+
+/* Sale price treatment (tiles + block price) */
+.urumi-tile__price del,
+.urumi-collection .wc-block-components-product-price del {
+	opacity: 0.55;
+	font-weight: 400;
+}
+
+.urumi-tile__price .urumi-price--sale,
+.urumi-collection .wc-block-components-product-price ins {
+	color: var(--urumi-accent);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.urumi-tile__from {
+	color: var(--wp--preset--color--muted);
+	font-size: 13px;
+}
+
+/* Hero extras */
+.urumi-hero__eyebrow {
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: rgba(20, 23, 28, 0.62);
+	margin: 0 0 12px;
+}
+
+.urumi-hero__caption {
+	display: inline-flex;
+	margin-top: 14px;
+	background: var(--wp--preset--color--card);
+	border-radius: var(--wp--custom--radius--pill);
+	padding: 8px 16px;
+	font-size: 13px;
+	color: var(--wp--preset--color--ink);
+	box-shadow: var(--wp--custom--shadow--card);
+}
+
+.urumi-hero__art a {
+	display: inline-block;
+	border-radius: var(--wp--custom--radius--hero);
+}
+
+/* Trust strip */
+.urumi-trust {
+	background: var(--wp--preset--color--ink);
+	color: var(--wp--preset--color--white);
+}
+
+.urumi-trust__list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px 40px;
+	justify-content: center;
+	align-items: center;
+	list-style: none;
+	margin: 0 auto;
+	padding: 16px 24px;
+	max-width: var(--wp--style--global--wide-size);
+}
+
+.urumi-trust__list li {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 14px;
+	letter-spacing: 0.01em;
+}
+
+.urumi-trust__dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: #D9C8DC;
+	flex: none;
+}
+
+/* Newsletter-style block (collects nothing; :target reveals the note) */
+.urumi-section--newsletter {
+	margin-top: 8px;
+}
+
+.urumi-newsletter {
+	background: var(--wp--preset--color--card);
+	border-radius: var(--wp--custom--radius--card);
+	box-shadow: var(--wp--custom--shadow--card);
+	padding: clamp(28px, 4vw, 48px);
+	display: grid;
+	grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+	gap: 24px 48px;
+	align-items: center;
+}
+
+.urumi-newsletter__text {
+	margin: 0;
+}
+
+.urumi-newsletter .urumi-section-title {
+	margin: 0 0 8px;
+}
+
+.urumi-newsletter .urumi-section-sub {
+	margin: 0;
+}
+
+.urumi-newsletter__form {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	flex-wrap: wrap;
+	position: relative;
+}
+
+.urumi-newsletter__form input[type="email"] {
+	flex: 1 1 220px;
+	min-width: 0;
+	border: 1px solid var(--wp--custom--hairline-strong);
+	border-radius: var(--wp--custom--radius--pill);
+	background: var(--wp--preset--color--tile);
+	padding: 14px 20px;
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 15px;
+	color: var(--wp--preset--color--ink);
+	transition: box-shadow var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease),
+		border-color var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease);
+}
+
+.urumi-newsletter__form input[type="email"]:focus-visible {
+	outline: none;
+	border-color: var(--wp--custom--ring);
+	box-shadow: 0 0 0 3px var(--wp--custom--ring);
+}
+
+.urumi-newsletter__note {
+	grid-column: 1 / -1;
+	margin: 0;
+	font-size: 13px;
+	color: var(--wp--preset--color--muted);
+	border-top: 1px solid var(--wp--custom--hairline);
+	padding-top: 14px;
+}
+
+.urumi-newsletter:target .urumi-newsletter__note {
+	color: var(--urumi-accent-ink);
+	font-weight: 500;
+}
+
+/* PDP meta + stock line */
+.urumi-pdp__meta {
+	font-size: 13px;
+	color: var(--wp--preset--color--muted);
+	margin: 4px 0 0;
+}
+
+.urumi-stock {
+	font-size: 14px;
+	margin: 0 0 14px;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.urumi-stock::before {
+	content: "";
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+	flex: none;
+}
+
+.urumi-stock--in {
+	color: #3D5A3F;
+}
+
+.urumi-stock--in::before {
+	background: #3D5A3F;
+}
+
+.urumi-stock--out {
+	color: var(--urumi-accent-ink);
+}
+
+.urumi-stock--out::before {
+	background: var(--urumi-accent);
+}
+
+/* PDP new badge sits inline (not absolute) above the title */
+.urumi-pdp__info .urumi-flags {
+	position: static;
+	margin-bottom: 10px;
+}
+
+/* 404 extras */
+.urumi-404__search {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	max-width: 440px;
+	margin: 24px auto 0;
+	position: relative;
+}
+
+.urumi-404__search input[type="search"] {
+	flex: 1;
+	min-width: 0;
+	border: 1px solid var(--wp--custom--hairline-strong);
+	border-radius: var(--wp--custom--radius--pill);
+	background: var(--wp--preset--color--card);
+	padding: 13px 20px;
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 15px;
+	color: var(--wp--preset--color--ink);
+	transition: box-shadow var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease),
+		border-color var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease);
+}
+
+.urumi-404__search input[type="search"]:focus-visible {
+	outline: none;
+	border-color: var(--wp--custom--ring);
+	box-shadow: 0 0 0 3px var(--wp--custom--ring);
+}
+
+.urumi-404__links {
+	display: flex;
+	gap: 12px;
+	justify-content: center;
+	flex-wrap: wrap;
+	margin-top: 20px;
+}
+
+/* Filter pills: active state follows the body category class (set in PHP) */
+.urumi-pill--all.urumi-pill--active,
+body:not([class*="urumi-cat-"]) .urumi-pill--all {
+	background: var(--wp--preset--color--ink);
+	color: var(--wp--preset--color--white);
+	border-color: var(--wp--preset--color--ink);
+}
+
+body.urumi-cat-ceramics .urumi-pill[data-cat="ceramics"],
+body.urumi-cat-textiles .urumi-pill[data-cat="textiles"],
+body.urumi-cat-candles-care .urumi-pill[data-cat="candles-care"],
+body.urumi-cat-desk-paper .urumi-pill[data-cat="desk-paper"],
+body.urumi-cat-kitchen .urumi-pill[data-cat="kitchen"],
+body.urumi-cat-carry .urumi-pill[data-cat="carry"] {
+	background: var(--wp--preset--color--ink);
+	color: var(--wp--preset--color--white);
+	border-color: var(--wp--preset--color--ink);
+}
+
+/* Block cart quantity selector: match the theme's pill inputs */
+.wc-block-components-quantity-selector {
+	display: inline-flex;
+	align-items: center;
+	border: 1px solid var(--wp--custom--hairline-strong);
+	border-radius: var(--wp--custom--radius--pill);
+	background: var(--wp--preset--color--card);
+	overflow: hidden;
+}
+
+.wc-block-components-quantity-selector::after {
+	display: none;
+}
+
+.wc-block-components-quantity-selector .wc-block-components-quantity-selector__button {
+	min-width: 38px;
+	height: 40px;
+	margin: 0;
+	border: 0;
+	background: transparent;
+	color: var(--wp--preset--color--ink);
+	font-weight: 500;
+}
+
+.wc-block-components-quantity-selector .wc-block-components-quantity-selector__button:hover,
+.wc-block-components-quantity-selector .wc-block-components-quantity-selector__button:focus-visible {
+	background: var(--wp--preset--color--tile);
+}
+
+.wc-block-components-quantity-selector input.wc-block-components-quantity-selector__input {
+	border: 0;
+	height: 40px;
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--wp--preset--color--ink);
+	background: transparent;
+	width: 40px;
+	padding: 0;
+	text-align: center;
+}
+
+/* Cart/checkout: qty selector inside line items */
+.wc-block-cart .wc-block-components-quantity-selector {
+	border-radius: var(--wp--custom--radius--pill);
+}
+
+/* Variation selects on the PDP */
+.urumi-pdp__form .variations {
+	width: 100%;
+	border: 0;
+	margin: 0 0 16px;
+}
+
+.urumi-pdp__form .variations th.label {
+	padding: 0 0 6px;
+	text-align: left;
+	vertical-align: middle;
+}
+
+.urumi-pdp__form .variations th.label label {
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--wp--preset--color--muted);
+}
+
+.urumi-pdp__form .variations td.value {
+	padding: 0 0 12px;
+}
+
+.urumi-pdp__form .variations select,
+.woocommerce-ordering select,
+.wc-block-components-select .wc-block-components-select__select {
+	appearance: none;
+	border: 1px solid var(--wp--custom--hairline-strong);
+	border-radius: var(--wp--custom--radius--pill);
+	background-color: var(--wp--preset--color--card);
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2314171C' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 16px center;
+	padding: 11px 40px 11px 18px;
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 14px;
+	color: var(--wp--preset--color--ink);
+	min-height: 44px;
+	cursor: pointer;
+	transition: box-shadow var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease),
+		border-color var(--wp--custom--motion--dur-fast) var(--wp--custom--motion--ease);
+}
+
+.urumi-pdp__form .variations select:focus-visible,
+.woocommerce-ordering select:focus-visible,
+.wc-block-components-select .wc-block-components-select__select:focus-visible {
+	outline: none;
+	border-color: var(--wp--custom--ring);
+	box-shadow: 0 0 0 3px var(--wp--custom--ring);
+}
+
+/* Reset button under variation selects */
+.urumi-pdp__form .reset_variations {
+	font-size: 13px;
+	color: var(--wp--preset--color--muted);
+	text-decoration: underline;
+}
+
+/* Variation availability message */
+.urumi-pdp__form .woocommerce-variation-availability .urumi-stock,
+.urumi-pdp__form .woocommerce-variation-availability p.stock {
+	font-size: 14px;
+	margin: 0 0 12px;
+}
+
+/* Single variation products show a hidden select; keep spacing sane */
+.urumi-pdp__form .variations_form {
+	margin: 0;
+}
+
+/* Mini-cart drawer polish: price + qty on one row */
+.wc-block-mini-cart__drawer .wc-block-components-quantity-selector {
+	margin-bottom: 0;
+}
+
+/* Cart/checkout page wrapper: keep the Woo white blocks on the page bg */
+.woocommerce-checkout .wp-block-post-content,
+.woocommerce-cart .wp-block-post-content {
+	background: var(--wp--preset--color--page);
 }

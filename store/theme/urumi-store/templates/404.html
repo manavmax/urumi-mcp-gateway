@@ -6,7 +6,13 @@
 		<p class="urumi-eyebrow">404</p>
 		<h1 class="wp-block-heading">Page not found</h1>
 		<p>The page you are looking for does not exist. Try the shop, or head back to the home page.</p>
-		<a class="urumi-btn urumi-btn--ink" href="/">Back home</a>
+		<form class="urumi-404__search" role="search" method="get" action="/">
+			<label class="urumi-search-label" for="urumi-404-search">Search products</label>
+			<input id="urumi-404-search" type="search" name="s" value="" placeholder="Search the shop" autocomplete="off" />
+			<input type="hidden" name="post_type" value="product" />
+			<button type="submit" class="urumi-btn urumi-btn--ink">Search</button>
+		</form>
+		<p class="urumi-404__links"><a class="urumi-btn urumi-btn--ink" href="/">Back home</a> <a class="urumi-btn urumi-btn--ghost" href="/shop/">Browse the shop</a></p>
 	</div>
 	<!-- /wp:html -->
 </main>
