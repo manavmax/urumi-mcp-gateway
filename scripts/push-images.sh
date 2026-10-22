@@ -21,6 +21,13 @@
 #
 # Security: no credential is ever hardcoded, echoed, redirected to a file or passed
 # on a command line; the token travels only via stdin to `docker login`.
+#
+# Platform gate: after every push the script verifies the pushed tag with
+# `docker buildx imagetools inspect` and FAILS unless linux/amd64 is present in
+# the remote manifest (plus every extra platform from PLATFORMS). A registry tag
+# that quietly lost its amd64 layer must not pass as a successful push - the VPS
+# pulls linux/amd64 only. Runs against the DEFAULT docker context (buildx talks
+# to the registry; no local node needed).
 set -eu
 
 OWNER="${GHCR_OWNER:?set GHCR_OWNER (ghcr.io owner, e.g. GHCR_OWNER=manavsharma make images-push)}"
@@ -48,6 +55,7 @@ printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --passw
 echo "logged in to ghcr.io as ${GHCR_USER} (token not echoed, not stored)"
 
 echo "building + pushing tag ${TAG} for PLATFORMS=${PLATFORMS}"
+RC=0
 for entry in $IMAGES; do
   name=${entry%%:*}; dir=${entry#*:}
   echo "== ${name} <- ${dir} =="
@@ -58,6 +66,24 @@ for entry in $IMAGES; do
     --push \
     "${dir}"
   echo "pushed ghcr.io/${GHCR_OWNER}/${name}:${TAG}"
+
+  # Verify what the registry ACTUALLY has (not what buildx reported): every
+  # expected platform must be present in the pushed manifest list.
+  REF="ghcr.io/${GHCR_OWNER}/${name}:${TAG}"
+  echo "== verifying remote platform(s) of ${REF} =="
+  seen="$(docker buildx imagetools inspect "${REF}" --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}} {{end}}' || true)"
+  echo "  remote platforms: ${seen:-<none>}"
+  for want in $PLATFORMS; do
+    case " ${seen} " in
+      *" ${want} "*) echo "  ok: ${want} present" ;;
+      *) echo "  ERROR: ${want} MISSING from pushed ${REF} (found: ${seen:-none})" >&2; RC=1 ;;
+    esac
+  done
 done
+
+if [ "${RC}" -ne 0 ]; then
+  echo "PLATFORM VERIFICATION FAILED: at least one pushed image does not carry the required platform(s): ${PLATFORMS}" >&2
+  exit "${RC}"
+fi
 
 echo "next: pin these tags in helm/values-prod.yaml (image.tag: ${TAG}) - never :latest"

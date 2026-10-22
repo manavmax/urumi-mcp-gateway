@@ -4,6 +4,14 @@ NAMESPACE ?= urumi
 RELEASE   ?= urumi
 CONTEXT   ?= kind-urumi
 
+# Docker context for the LOCAL kind build/load targets below: on this machine the
+# kind node container (urumi-control-plane) lives under colima, not the default
+# context, so builds/loads for kind must talk to colima while registry pushes
+# (images-push -> scripts/push-images.sh) go through the default context.
+# Override with DOCKER_CONTEXT=<name> when kind runs elsewhere.
+DOCKER_CONTEXT ?= colima
+DOCKER = docker --context $(DOCKER_CONTEXT)
+
 # helm 4 renamed --atomic to --rollback-on-failure (the old spelling still works
 # there but prints a deprecation warning; helm 3 only has --atomic). Pick the
 # spelling the INSTALLED helm understands so both versions keep working.
@@ -87,8 +95,8 @@ verify-store:
 # Build the Layer 2 image and import it into the kind node (kind load has digest
 # issues on this machine, so we pipe the image straight into containerd).
 woo-mcp-image:
-	docker build -t urumi/woo-mcp:0.1.0 src/woo-mcp
-	docker save urumi/woo-mcp:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/woo-mcp:0.1.0 src/woo-mcp
+	$(DOCKER) save urumi/woo-mcp:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/woo-mcp:0.1.0 into kind node"
 
 # Layer 2 verification: probes, MCP handshake + 6 tools, isolation, no public ingress.
@@ -104,13 +112,13 @@ verify-mcp:
 
 # Extra demo upstreams (Day 5-7 seeds): build + import into the kind node.
 demo-time-image:
-	docker build -t urumi/demo-mcp-time:0.1.0 src/demo-mcp-time
-	docker save urumi/demo-mcp-time:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/demo-mcp-time:0.1.0 src/demo-mcp-time
+	$(DOCKER) save urumi/demo-mcp-time:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/demo-mcp-time:0.1.0 into kind node"
 
 demo-notes-image:
-	docker build -t urumi/demo-mcp-notes:0.1.0 src/demo-mcp-notes
-	docker save urumi/demo-mcp-notes:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/demo-mcp-notes:0.1.0 src/demo-mcp-notes
+	$(DOCKER) save urumi/demo-mcp-notes:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/demo-mcp-notes:0.1.0 into kind node"
 
 demo-images: demo-time-image demo-notes-image
@@ -119,15 +127,15 @@ demo-images: demo-time-image demo-notes-image
 # listening on 8080, running as www-data (uid 33), no root. Build + import into
 # the kind node; `make helm-local` (or a rollout restart) lands it.
 wordpress-image:
-	docker build -t urumi/wordpress:6.6-php8.2-apache-hardened src/wordpress
-	docker save urumi/wordpress:6.6-php8.2-apache-hardened | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/wordpress:6.6-php8.2-apache-hardened src/wordpress
+	$(DOCKER) save urumi/wordpress:6.6-php8.2-apache-hardened | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/wordpress:6.6-php8.2-apache-hardened into kind node"
 
 # Hardened wp-cli runner for the wp-setup hook job (ADR-043): upstream
 # wordpress:cli-php8.2 with /var/www/html owned by www-data, job runs as uid 33.
 wp-cli-image:
-	docker build -t urumi/wp-cli:cli-php8.2-hardened src/wp-cli
-	docker save urumi/wp-cli:cli-php8.2-hardened | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/wp-cli:cli-php8.2-hardened src/wp-cli
+	$(DOCKER) save urumi/wp-cli:cli-php8.2-hardened | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/wp-cli:cli-php8.2-hardened into kind node"
 
 # Static storefront assets (theme + catalog + images). Local Kind: build and
@@ -135,8 +143,8 @@ wp-cli-image:
 # them onto the wp-content volume on pod start, so restart wordpress after a
 # rebuild (`kubectl rollout restart deployment/urumi-wordpress -n urumi`).
 store-assets-image:
-	docker build -t urumi/store-assets:0.1.0 store
-	docker save urumi/store-assets:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/store-assets:0.1.0 store
+	$(DOCKER) save urumi/store-assets:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/store-assets:0.1.0 into kind node"
 
 # Verify both demo servers with a real MCP SDK ClientSession: list tools, call each,
@@ -159,14 +167,14 @@ verify-demo:
 # target that rebuilds AND restarts; use it (not these two alone) when the fix is
 # in code, otherwise the running pod is silently stale (docs/DECISIONS.md ADR-028).
 gateway-image:
-	docker build -t urumi/gateway:0.1.0 src/gateway
-	docker save urumi/gateway:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/gateway:0.1.0 src/gateway
+	$(DOCKER) save urumi/gateway:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/gateway:0.1.0 into kind node"
 	@echo "REMINDER: pods are NOT restarted by an import - run 'make deploy' to restart"
 
 dashboard-image:
-	docker build -t urumi/dashboard:0.1.0 src/dashboard
-	docker save urumi/dashboard:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/dashboard:0.1.0 src/dashboard
+	$(DOCKER) save urumi/dashboard:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/dashboard:0.1.0 into kind node"
 	@echo "REMINDER: pods are NOT restarted by an import - run 'make deploy' to restart"
 
@@ -176,8 +184,8 @@ dashboard-image:
 provisioner-image:
 	rm -rf src/provisioner/chart
 	cp -R helm/store src/provisioner/chart
-	docker build -t urumi/provisioner:0.1.0 src/provisioner
-	docker save urumi/provisioner:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) build -t urumi/provisioner:0.1.0 src/provisioner
+	$(DOCKER) save urumi/provisioner:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	rm -rf src/provisioner/chart
 	@echo "loaded urumi/provisioner:0.1.0 into kind node"
 
