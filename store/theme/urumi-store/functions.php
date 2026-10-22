@@ -1,25 +1,29 @@
 <?php
 /**
- * Loam & Ember store theme bootstrap (store v2, ADR-070..074).
+ * Loam & Ember store theme bootstrap (store v3 theme, ADR-076..078).
  *
  * Standalone block theme. This file wires:
  *  - the theme stylesheet (assets/styles.css) on top of theme.json
- *  - self-hosted font preloads (display font + dynamic hero cutout, no externals)
+ *  - self-hosted font preloads (Newsreader + Hanken Grotesk variable, no externals)
  *  - removal of every third-party hook: emoji scripts, gravatars, oEmbed
  *  - dynamic blocks: urumi-store/hero, urumi-store/categories, urumi-store/featured-grid,
- *    urumi-store/new-in-grid, urumi-store/new-badge, urumi-store/split, urumi-store/faq
+ *    urumi-store/new-badge, urumi-store/editorial, urumi-store/product-meta
+ *  - a registered 600px image size so sideloaded 1200px photos get an exact
+ *    600px derivative and real srcset values
  *  - tile flags (sale / new / sold out) injected into WooCommerce block grids
  *  - a stock-state line injected above the add-to-cart form on the product page
- *  - body classes for per-category tinting on the taxonomy pages
  *
- * The catalog (wp-content/store/products.json) is the single source of truth for
- * hero product, category tiles and tint mapping. "New" is the _urumi_is_new
- * product meta (set by the wp-setup seed); "featured" is Woo's featured flag.
+ * The catalog (wp-content/store/products.json) is the single source of truth.
+ * The hero, editorial and category-tile photos come from catalog entries
+ * ("hero", "editorial", per-product "image"); until photos are curated every
+ * frame falls back to a plain beige block, never to a broken image. "New" is
+ * the _urumi_is_new product meta (set by the wp-setup seed); "featured" is
+ * Woo's featured flag.
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'URUMI_STORE_VERSION', '2.0.1' );
+define( 'URUMI_STORE_VERSION', '3.0.0' );
 define( 'URUMI_STORE_BRAND', 'Loam & Ember' );
 
 /**
@@ -81,27 +85,26 @@ function urumi_store_format_price( $price ) {
 	return '$' . number_format( $n, 2, '.', '' );
 }
 
-/** Lowest price in products.json, formatted. */
-function urumi_store_from_price() {
-	$min = null;
-	foreach ( urumi_store_products() as $p ) {
-		if ( isset( $p['price'] ) && is_numeric( $p['price'] ) ) {
-			$price = (float) $p['price'];
-			$min = ( null === $min || $price < $min ) ? $price : $min;
-		}
-	}
-	return urumi_store_format_price( $min ?? 0 );
-}
-
 /** URL to a store asset (image) inside wp-content/store. */
 function urumi_store_asset_url( $path ) {
 	return content_url( 'store/' . ltrim( $path, '/' ) );
 }
 
-/** Cutout URL for a catalog product entry. */
-function urumi_store_cutout_url( $p ) {
-	$name = isset( $p['image'] ) ? $p['image'] : ( $p['sku'] . '.png' );
-	return urumi_store_asset_url( 'images/' . str_replace( '.png', '-cutout.png', $name ) );
+/** Image URL for a catalog product entry (its main photo file). */
+function urumi_store_image_url( $p ) {
+	$name = isset( $p['image'] ) ? $p['image'] : ( $p['sku'] . '.webp' );
+	return urumi_store_asset_url( 'images/' . $name );
+}
+
+/** URL to a store image file, if it exists on disk. */
+function urumi_store_image_if_exists( $file ) {
+	if ( ! $file ) {
+		return '';
+	}
+	if ( file_exists( urumi_store_data_dir() . '/images/' . $file ) ) {
+		return urumi_store_asset_url( 'images/' . $file );
+	}
+	return '';
 }
 
 /**
@@ -130,9 +133,25 @@ function urumi_store_disable_third_party() {
 add_action( 'init', 'urumi_store_disable_third_party' );
 
 /**
+ * Register the urumi-600 derivative (600px long side of the 4:5 grid crop) so
+ * every sideloaded 1200px photo also ships a 600px derivative through srcset.
+ * Also registers the primary nav menu location used by the header part. The
+ * wp-setup job creates the "Primary" menu and assigns it.
+ * Must run before the wp-setup seed sideloads images.
+ */
+function urumi_store_menus_and_sizes() {
+	add_image_size( 'urumi-600', 600, 600, false );
+	register_nav_menus(
+		array(
+			'primary' => __( 'Primary', 'urumi-store' ),
+		)
+	);
+}
+
+/**
  * Enqueue the theme stylesheet. The block theme's theme.json handles the base
  * styles; assets/styles.css carries everything blocks cannot express (nav,
- * tile hover, block cart/checkout restyle, focus, motion).
+ * hero overlay, tile hover, block cart/checkout restyle, focus, motion).
  */
 function urumi_store_enqueue() {
 	wp_enqueue_style(
@@ -145,37 +164,20 @@ function urumi_store_enqueue() {
 add_action( 'wp_enqueue_scripts', 'urumi_store_enqueue' );
 
 /**
- * Register the primary nav menu location. The wp-setup job creates the "Primary"
- * menu (Shop + the six categories) and assigns it here.
- */
-function urumi_store_menus() {
-	register_nav_menus(
-		array(
-			'primary' => __( 'Primary', 'urumi-store' ),
-		)
-	);
-}
-add_action( 'after_setup_theme', 'urumi_store_menus' );
-
-/**
- * Preload the display font (used above the fold by every serif heading) and,
- * on the front page, the hero cutout. font-display: swap is set in theme.json.
+ * Preload the two fonts used above the fold on every page (serif display and
+ * sans interface). font-display: swap is set in theme.json.
  */
 function urumi_store_preloads() {
 	$uri = get_stylesheet_directory_uri();
-	echo '<link rel="preload" as="font" type="font/woff2" crossorigin href="' . esc_url( $uri . '/assets/fonts/instrument-serif-latin-400-normal.woff2' ) . '" />';
-	if ( is_front_page() ) {
-		$hero = urumi_store_hero_product();
-		if ( ! empty( $hero ) ) {
-			echo '<link rel="preload" as="image" href="' . esc_url( urumi_store_cutout_url( $hero ) ) . '" />';
-		}
-	}
+	echo '<link rel="preload" as="font" type="font/woff2" crossorigin href="' . esc_url( $uri . '/assets/fonts/newsreader-latin-wght-normal.woff2' ) . '" />';
+	echo '<link rel="preload" as="font" type="font/woff2" crossorigin href="' . esc_url( $uri . '/assets/fonts/hanken-grotesk-latin-wght-normal.woff2' ) . '" />';
 }
 add_action( 'wp_head', 'urumi_store_preloads', 1 );
 
 /**
- * Body classes: add the product-category term slug so taxonomy templates can
- * paint the tint behind the heading per category (CSS maps slug to tint).
+ * Body classes: add the product-category term slug so taxonomy pages can be
+ * selected in CSS without adding any colour per category (the new design keeps
+ * every surface neutral).
  */
 function urumi_store_body_class( $classes ) {
 	if ( is_tax( 'product_cat' ) ) {
@@ -196,19 +198,6 @@ function urumi_store_body_class( $classes ) {
 	return $classes;
 }
 add_filter( 'body_class', 'urumi_store_body_class' );
-
-/**
- * Map a category slug to its tint, straight from products.json (single source
- * of truth). Falls back to sand when the slug is unknown.
- */
-function urumi_store_tint_for_cat( $slug ) {
-	foreach ( ( urumi_store_catalog()['categories'] ?? array() ) as $c ) {
-		if ( ( $c['slug'] ?? '' ) === $slug ) {
-			return $c['tint'] ?? 'sand';
-		}
-	}
-	return 'sand';
-}
 
 /**
  * Is a product flagged as new? The seed mirrors products.json "new" into the
@@ -246,7 +235,8 @@ function urumi_store_tile_price_html( $product ) {
 }
 
 /**
- * Tile flags: sale / new / sold out, one row, colour never the only signal.
+ * Tile flags: sale / new / sold out, one row, plain tracked text. Colour is
+ * never the signal (STORE_DESIGN.md section 2).
  */
 function urumi_store_tile_flags( $product ) {
 	if ( ! $product instanceof WC_Product ) {
@@ -268,57 +258,48 @@ function urumi_store_tile_flags( $product ) {
 // Dynamic blocks
 // ---------------------------------------------------------------------------
 
-/** The hero product: the first featured catalog product, else the first one. */
-function urumi_store_hero_product() {
-	$by_sku = urumi_store_products_by_sku();
-	foreach ( urumi_store_products() as $p ) {
-		if ( ! empty( $p['featured'] ) && isset( $by_sku[ $p['sku'] ] ) ) {
-			return $p;
-		}
+/** Photo frame: an <img> when the file exists, else a quiet beige block. */
+function urumi_store_photo_img( $file, $alt, $w, $h, $eager = false ) {
+	$url = $file ? urumi_store_image_url_safe( $file ) : '';
+	if ( '' === $url ) {
+		return '<span class="urumi-photo urumi-photo--empty" aria-hidden="true"></span>';
 	}
-	$first = urumi_store_products();
-	return ! empty( $first ) ? $first[0] : array();
+	$cls = 'urumi-photo';
+	$out = '<img class="' . $cls . '" src="' . esc_url( $url ) . '" alt="' . esc_attr( $alt ) . '" loading="' . ( $eager ? 'eager' : 'lazy' ) . '" decoding="async" />';
+	return $out;
+}
+
+function urumi_store_image_url_safe( $file ) {
+	return urumi_store_asset_url( 'images/' . $file );
 }
 
 /**
- * Hero: Dusk gradient container with soft grain, headline, copy, Shop now pill,
- * "from $X" computed from products.json, and the featured product's cutout with
- * a contact shadow. The art links to the product page.
+ * Hero: one full-bleed lifestyle photograph with the warm 20 percent overlay,
+ * a short Newsreader display headline and one outline button. The photo comes
+ * from the catalog's "hero" entry (set during photo curation); without it the
+ * hero falls back to a taupe block so the page never breaks.
  */
 function urumi_store_hero_render() {
-	$hero = urumi_store_hero_product();
-	if ( empty( $hero ) ) {
-		return '';
-	}
-	$hero_img = urumi_store_cutout_url( $hero );
-	$hero_alt = isset( $hero['alt'] ) ? $hero['alt'] : $hero['name'];
-	$hero_url = get_permalink( wc_get_product_id_by_sku( $hero['sku'] ) ?: wc_get_page_id( 'shop' ) );
-
-	// Soft grain: inline SVG turbulence (feTurbulence) - no external file.
-	$noise = '<svg class="urumi-hero__noise" aria-hidden="true"><filter id="urumi-grain"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope="0.045"/></feComponentTransfer></filter><rect width="100%" height="100%" filter="url(#urumi-grain)"/></svg>';
-
-	$headline = 'Warm things for quiet rooms.';
-	$sub = 'Slow-made ceramics, textiles and desk goods in small batches - ordered today, paid in cash when they arrive.';
-	$from = urumi_store_from_price();
+	$cat = urumi_store_catalog();
+	$hero = $cat['hero'] ?? array();
+	$headline = $hero['headline'] ?? 'Warm things for quiet rooms.';
+	$sub = $hero['sub'] ?? 'Slow-made ceramics, textiles and desk goods. Ordered today, paid in cash when they arrive.';
+	$file = $hero['image'] ?? '';
+	$alt = $hero['alt'] ?? 'A quiet still life of ceramics and linen';
 
 	$out = '<section class="urumi-hero" aria-labelledby="urumi-hero-title">';
-	$out .= '<div class="urumi-hero__bg" aria-hidden="true"></div>' . $noise;
-	$out .= '<div class="urumi-hero__inner">';
+	$out .= '<div class="urumi-hero__media" aria-hidden="false">';
+	if ( $file && urumi_store_image_url( array( 'image' => $file ) ) && file_exists( urumi_store_data_dir() . '/images/' . $file ) ) {
+		$out .= '<img class="urumi-photo" src="' . esc_url( urumi_store_asset_url( 'images/' . $file ) ) . '" alt="' . esc_attr( $alt ) . '" fetchpriority="high" decoding="async" />';
+	} else {
+		$out .= '<span class="urumi-photo urumi-photo--fallback" aria-hidden="true"></span>';
+	}
+	$out .= '<div class="urumi-hero__veil" aria-hidden="true"></div>';
+	$out .= '</div>';
 	$out .= '<div class="urumi-hero__text">';
-	$out .= '<p class="urumi-hero__eyebrow">' . esc_html( URUMI_STORE_BRAND ) . '</p>';
-	$out .= '<h1 id="urumi-hero-title">' . esc_html( $headline ) . '</h1>';
+	$out .= '<h1 id="urumi-hero-title" class="urumi-hero__title">' . esc_html( $headline ) . '</h1>';
 	$out .= '<p class="urumi-hero__sub">' . esc_html( $sub ) . '</p>';
-	$out .= '<div class="urumi-hero__actions">';
-	$out .= '<a class="urumi-btn urumi-btn--ink" href="' . esc_url( get_permalink( wc_get_page_id( 'shop' ) ) ) . '">Shop now</a>';
-	$out .= '<span class="urumi-hero__from">from ' . esc_html( $from ) . '</span>';
-	$out .= '</div>';
-	$out .= '</div>';
-	$out .= '<div class="urumi-hero__art">';
-	$out .= '<a href="' . esc_url( $hero_url ) . '" aria-label="Shop ' . esc_attr( $hero['name'] ) . '">';
-	$out .= '<img class="urumi-hero__cutout" src="' . esc_url( $hero_img ) . '" alt="' . esc_attr( $hero_alt ) . '" width="960" height="960" loading="eager" decoding="async" />';
-	$out .= '</a>';
-	$out .= '<span class="urumi-hero__caption">' . esc_html( $hero['name'] ) . '</span>';
-	$out .= '</div>';
+	$out .= '<a class="urumi-btn urumi-btn--outline urumi-btn--invert" href="' . esc_url( get_permalink( wc_get_page_id( 'shop' ) ) ) . '">Shop the collection</a>';
 	$out .= '</div>';
 	$out .= '</section>';
 	return $out;
@@ -328,8 +309,9 @@ register_block_type( 'urumi-store/hero', array(
 ) );
 
 /**
- * Category tiles: six rounded tiles in their category tints with the cutout of
- * the category's first product, label and product count (from products.json).
+ * Category tiles: six photo tiles in a 3 by 2 grid (2 by 3 on mobile). Each is
+ * the category's first product photo; the category name sits below in
+ * label-caps. Without photos the tile is a beige block.
  */
 function urumi_store_categories_render() {
 	$json = urumi_store_catalog();
@@ -337,7 +319,6 @@ function urumi_store_categories_render() {
 	foreach ( $json['categories'] ?? array() as $c ) {
 		$cats[ $c['slug'] ] = array(
 			'name' => $c['name'],
-			'tint' => $c['tint'] ?? 'sand',
 			'count' => 0,
 			'img' => '',
 			'alt' => '',
@@ -348,7 +329,7 @@ function urumi_store_categories_render() {
 		if ( isset( $cats[ $slug ] ) ) {
 			$cats[ $slug ]['count']++;
 			if ( '' === $cats[ $slug ]['img'] && isset( $p['image'] ) ) {
-				$cats[ $slug ]['img'] = urumi_store_cutout_url( $p );
+				$cats[ $slug ]['img'] = $p['image'];
 				$cats[ $slug ]['alt'] = $p['alt'] ?? $p['name'];
 			}
 		}
@@ -360,14 +341,11 @@ function urumi_store_categories_render() {
 		if ( is_wp_error( $link ) ) {
 			$link = get_permalink( wc_get_page_id( 'shop' ) );
 		}
-		$out .= '<a class="urumi-cat-tile urumi-tint--' . esc_attr( $c['tint'] ) . '" href="' . esc_url( $link ) . '" role="listitem">';
-		$out .= '<span class="urumi-cat-tile__img">';
-		if ( $c['img'] ) {
-			$out .= '<img src="' . esc_url( $c['img'] ) . '" alt="' . esc_attr( $c['alt'] ?: $c['name'] ) . '" width="420" height="420" loading="lazy" decoding="async" />';
-		}
+		$out .= '<a class="urumi-cat-tile" href="' . esc_url( $link ) . '" role="listitem">';
+		$out .= '<span class="urumi-cat-tile__media urumi-frame">';
+		$out .= urumi_store_photo_img( $c['img'], $c['alt'] ? $c['alt'] : $c['name'], 480, 600 );
 		$out .= '</span>';
 		$out .= '<span class="urumi-cat-tile__label">' . esc_html( $c['name'] ) . '</span>';
-		$out .= '<span class="urumi-cat-tile__count">' . esc_html( $c['count'] ) . ( 1 === $c['count'] ? ' product' : ' products' ) . '</span>';
 		$out .= '</a>';
 	}
 	$out .= '</div>';
@@ -394,40 +372,37 @@ register_block_type( 'urumi-store/new-badge', array(
 
 /**
  * Shared product tile markup for the grids (same DOM as the shop grid so one
- * stylesheet block styles all of them): tile background, image, name,
- * descriptor line, price and an add-to-cart pill revealed on hover and focus.
+ * stylesheet block styles all of them): 4:5 photo frame, name in Newsreader,
+ * price in Hanken Grotesk. No card fill, no border, no radius.
  */
 function urumi_store_tile( $product ) {
 	$id = $product->get_id();
 	$url = $product->get_permalink();
 	$name = $product->get_name();
-	$desc = $product->get_short_description();
 
 	$img = '';
 	$img_id = $product->get_image_id();
 	if ( $img_id ) {
-		$img = wp_get_attachment_image( $img_id, 'full', false, array(
+		$img = wp_get_attachment_image( $img_id, 'large', false, array(
 			'loading' => 'lazy',
 			'decoding' => 'async',
+			'class' => 'urumi-photo',
 		) );
 	} else {
-		$img = '<span class="urumi-tile__placeholder" aria-hidden="true"></span>';
+		$img = '<span class="urumi-photo urumi-photo--empty" aria-hidden="true"></span>';
 	}
 
 	$flags = urumi_store_tile_flags( $product );
 
 	$out = '<li class="urumi-tile' . ( urumi_store_product_is_sold_out( $product ) ? ' urumi-tile--oos' : '' ) . '" data-product-id="' . esc_attr( $id ) . '">';
 	$out .= $flags;
-	$out .= '<a class="urumi-tile__media" href="' . esc_url( $url ) . '" tabindex="-1" aria-hidden="true">' . $img . '</a>';
+	$out .= '<a class="urumi-tile__media urumi-frame" href="' . esc_url( $url ) . '" tabindex="-1" aria-hidden="true">' . $img . '</a>';
 	$out .= '<a class="urumi-tile__name" href="' . esc_url( $url ) . '">' . esc_html( $name ) . '</a>';
-	if ( $desc ) {
-		$out .= '<p class="urumi-tile__desc">' . esc_html( wp_strip_all_tags( $desc ) ) . '</p>';
-	}
 	$out .= '<div class="urumi-tile__row">';
 	$out .= '<span class="urumi-tile__price">' . urumi_store_tile_price_html( $product ) . '</span>';
 	$out .= '<span class="urumi-tile__add">';
 	if ( urumi_store_product_is_sold_out( $product ) ) {
-		$out .= '<a class="urumi-pill-btn" href="' . esc_url( $url ) . '">View</a>';
+		$out .= '<a class="urumi-btn-text" href="' . esc_url( $url ) . '">View</a>';
 	} else {
 		ob_start();
 		woocommerce_template_loop_add_to_cart();
@@ -441,7 +416,7 @@ function urumi_store_tile( $product ) {
 
 /**
  * Run a product query and render the shared tile grid. Shared by the featured
- * and new-in blocks.
+ * block.
  */
 function urumi_store_render_grid( $args, $limit = 8 ) {
 	$args = array_merge( array(
@@ -470,7 +445,7 @@ function urumi_store_render_grid( $args, $limit = 8 ) {
 	return $out;
 }
 
-/** Featured products grid (home "Featured"). */
+/** Featured products grid (home "New and featured", 8 products). */
 function urumi_store_featured_render() {
 	return urumi_store_render_grid( array(
 		'tax_query' => array(
@@ -480,106 +455,50 @@ function urumi_store_featured_render() {
 				'terms'    => 'featured',
 			),
 		),
-	), 6 );
+	), 8 );
 }
 register_block_type( 'urumi-store/featured-grid', array(
 	'render_callback' => 'urumi_store_featured_render',
 ) );
 
 /**
- * New in: the 8 most recent products carrying the catalog's new flag.
+ * Editorial split: one photograph on one side, a short materials-and-care text
+ * block on the other, outline button. Photo comes from the catalog's
+ * "editorial" entry; fallback is a beige block.
  */
-function urumi_store_new_in_render() {
-	return urumi_store_render_grid( array(
-		'meta_query' => array(
-			array(
-				'key'   => '_urumi_is_new',
-				'value' => '1',
-			),
-		),
-	), 8 );
-}
-register_block_type( 'urumi-store/new-in-grid', array(
-	'render_callback' => 'urumi_store_new_in_render',
-) );
-
-/**
- * Split section: an illustrated panel (a catalog product's cutout on a tint)
- * and three short true benefits. Cash on delivery and the returns page link
- * are both claims this storefront actually honours.
- */
-function urumi_store_split_render() {
-	$returns_page = get_page_by_path( 'shipping-and-returns' );
-	$returns_url = $returns_page ? get_permalink( $returns_page ) : home_url( '/shipping-and-returns/' );
-
-	$by_sku = urumi_store_products_by_sku();
-	$p = isset( $by_sku['LOAM-TEX-001'] ) ? $by_sku['LOAM-TEX-001'] : ( urumi_store_products() ? urumi_store_products()[0] : array() );
-	$img = ! empty( $p ) ? urumi_store_cutout_url( $p ) : '';
-	$alt = ! empty( $p['alt'] ) ? $p['alt'] : 'Wool Throw';
-
-	$out = '<div class="urumi-split">';
-	$out .= '<div class="urumi-split__panel urumi-tint--lilac">';
-	if ( $img ) {
-		$out .= '<img class="urumi-split__img" src="' . esc_url( $img ) . '" alt="' . esc_attr( $alt ) . '" width="480" height="480" loading="lazy" decoding="async" />';
+function urumi_store_editorial_render() {
+	$cat = urumi_store_catalog();
+	$ed = $cat['editorial'] ?? array();
+	$file = $ed['image'] ?? '';
+	$alt = $ed['alt'] ?? 'Materials photograph';
+	$heading = $ed['heading'] ?? 'Materials and care';
+	$body = $ed['body'] ?? 'Every piece is photographed exactly as it is. Care notes ship with each order.';
+	$button = $ed['button'] ?? 'Read the shop notes';
+	$target = $ed['url'] ?? '/about/';
+	$returns_page = get_page_by_path( 'about' );
+	if ( $returns_page && '/about/' === $target ) {
+		$target = get_permalink( $returns_page );
 	}
+
+	$out = '<div class="urumi-editorial urumi-band--alt">';
+	$out .= '<div class="urumi-editorial__media urumi-frame">';
+	$out .= urumi_store_photo_img( $file, $alt, 720, 900 );
 	$out .= '</div>';
-	$out .= '<div class="urumi-split__text">';
-	$out .= '<h2 class="urumi-section-title">Why shop with us</h2>';
-	$out .= '<ul class="urumi-benefits">';
-	$out .= '<li><strong>Cash on delivery</strong><span>Pay with cash when your order arrives.</span></li>';
-	$out .= '<li><strong>Simple returns</strong><span>Read the <a href="' . esc_url( $returns_url ) . '">shipping and returns</a> policy before you buy.</span></li>';
-	$out .= '<li><strong>Guest checkout</strong><span>Check out quickly without creating an account.</span></li>';
-	$out .= '</ul>';
+	$out .= '<div class="urumi-editorial__text">';
+	$out .= '<h2 class="urumi-editorial__heading">' . esc_html( $heading ) . '</h2>';
+	$out .= '<div class="urumi-editorial__body"><p>' . esc_html( $body ) . '</p></div>';
+	$out .= '<a class="urumi-btn urumi-btn--outline" href="' . esc_url( $target ) . '">' . esc_html( $button ) . '</a>';
 	$out .= '</div>';
 	$out .= '</div>';
 	return $out;
 }
-register_block_type( 'urumi-store/split', array(
-	'render_callback' => 'urumi_store_split_render',
+register_block_type( 'urumi-store/editorial', array(
+	'render_callback' => 'urumi_store_editorial_render',
 ) );
 
 /**
- * FAQ accordions. Every answer matches the real policy pages (cash on delivery
- * only, no carrier integration, demo store).
- */
-function urumi_store_faq_render() {
-	$returns_page = get_page_by_path( 'shipping-and-returns' );
-	$returns_url = $returns_page ? get_permalink( $returns_page ) : home_url( '/shipping-and-returns/' );
-
-	$items = array(
-		array(
-			'q' => 'How do I pay?',
-			'a' => 'We accept cash on delivery only. You pay in cash when your order arrives. No cards and no online payment.',
-		),
-		array(
-			'q' => 'How long does delivery take?',
-			'a' => 'This is a demo storefront with no carrier integration, so delivery times are illustrative only and orders are not fulfilled.',
-		),
-		array(
-			'q' => 'Can I return an item?',
-			'a' => 'Yes. Read the shipping and returns policy for the full process before you buy.',
-		),
-		array(
-			'q' => 'Is this a real store?',
-			'a' => 'No. Loam & Ember is a fictional demo storefront for a school project. Orders are not fulfilled and payment is not collected.',
-		),
-	);
-
-	$out = '<div class="urumi-faq">';
-	$out .= '<h2 class="urumi-section-title">Frequently asked questions</h2>';
-	foreach ( $items as $item ) {
-		$out .= '<details class="urumi-faq__item" name="urumi-faq"><summary>' . esc_html( $item['q'] ) . '</summary><div class="urumi-faq__a">' . esc_html( $item['a'] ) . '</div></details>';
-	}
-	$out .= '</div>';
-	return $out;
-}
-register_block_type( 'urumi-store/faq', array(
-	'render_callback' => 'urumi_store_faq_render',
-) );
-
-/**
- * Product meta line for the PDP: SKU, tags and category, so the page carries
- * the full catalog data (ADR-070).
+ * Product meta line for the PDP: SKU and tags, so the page carries the full
+ * catalog data.
  */
 function urumi_store_product_meta_render() {
 	$product = wc_get_product( get_the_ID() );
@@ -638,7 +557,7 @@ add_filter( 'render_block', 'urumi_store_block_flags', 10, 2 );
 
 /**
  * Stock state line above the add-to-cart form on the product page: honest,
- * plain-language availability (manage-stock quantity when tracked).
+ * plain-language availability. Words and weight only, never a colour signal.
  */
 function urumi_store_stock_line( $block_content, $block ) {
 	if ( 'woocommerce/add-to-cart-form' !== $block['blockName'] || ! $block_content ) {
@@ -650,7 +569,7 @@ function urumi_store_stock_line( $block_content, $block ) {
 	}
 	$line = '';
 	if ( ! $product->is_in_stock() ) {
-		$line = '<p class="urumi-stock urumi-stock--out">Out of stock - back after the next batch.</p>';
+		$line = '<p class="urumi-stock urumi-stock--out">Sold out - back after the next batch.</p>';
 	} elseif ( $product->is_type( 'variable' ) ) {
 		$line = '<p class="urumi-stock">Choose an option to see availability.</p>';
 	} elseif ( $product->get_manage_stock() && $product->get_stock_quantity() ) {
@@ -670,14 +589,12 @@ function urumi_store_register_patterns() {
 	$base = get_stylesheet_directory() . '/patterns';
 
 	$patterns = array(
-		'new-in'     => array( 'title' => __( 'New in', 'urumi-store' ) ),
-		'trust'      => array( 'title' => __( 'Trust strip', 'urumi-store' ) ),
-		'newsletter' => array( 'title' => __( 'Newsletter', 'urumi-store' ) ),
-		'split'      => array( 'title' => __( 'Why shop with us', 'urumi-store' ) ),
-		'faq'        => array( 'title' => __( 'Frequently asked questions', 'urumi-store' ) ),
+		'intro'        => array( 'title' => __( 'Intro statement', 'urumi-store' ) ),
+		'new-featured' => array( 'title' => __( 'New and featured', 'urumi-store' ) ),
+		'details-strip' => array( 'title' => __( 'Details strip', 'urumi-store' ) ),
 	);
 	foreach ( $patterns as $slug => $meta ) {
-		$file = $base . '/' . $slug . '.html';
+		$file = get_stylesheet_directory() . '/patterns/' . $slug . '.html';
 		$content = file_exists( $file ) ? (string) file_get_contents( $file ) : '';
 		if ( '' === $content ) {
 			$content = '<!-- wp:paragraph --><p>' . esc_html( $meta['title'] ) . '</p><!-- /wp:paragraph -->';

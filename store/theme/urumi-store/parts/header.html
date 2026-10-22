@@ -1,35 +1,37 @@
 <!-- wp:group {"tagName":"header","area":"header","className":"urumi-site-header","layout":{"type":"constrained"}} -->
 <header class="wp-block-group urumi-site-header">
-	<!-- wp:html -->
-	<div class="urumi-announce" role="note">
-		<p>Cash on delivery at checkout &middot; small-batch goods, shipped from the studio</p>
-	</div>
-	<!-- /wp:html -->
-
 	<!-- wp:group {"className":"urumi-nav","layout":{"type":"constrained"}} -->
 	<div class="wp-block-group urumi-nav">
 		<!-- wp:html -->
-		<a class="urumi-nav__logo" href="/" aria-label="Loam & Ember home">
-			<span class="urumi-nav__logo-mark" aria-hidden="true">L</span>
-			<span class="urumi-nav__logo-word">Loam <em>&</em> Ember</span>
+		<a class="urumi-nav__logo" href="/" aria-label="Loam &amp; Ember home">
+			<span class="urumi-nav__logo-word">Loam &amp; Ember</span>
 		</a>
 
 		<nav class="urumi-nav__links" aria-label="Primary">
 			<a href="/shop/">Shop</a>
-			<a href="/product-category/ceramics/">Ceramics</a>
-			<a href="/product-category/textiles/">Textiles</a>
-			<a href="/product-category/candles-care/">Candles & Care</a>
-			<a href="/product-category/desk-paper/">Desk & Paper</a>
-			<a href="/product-category/kitchen/">Kitchen</a>
-			<a href="/product-category/carry/">Carry</a>
+			<details class="urumi-nav__dropdown">
+				<summary>Collections</summary>
+				<div class="urumi-nav__dropdown-menu">
+					<a href="/product-category/ceramics/">Ceramics</a>
+					<a href="/product-category/textiles/">Textiles</a>
+					<a href="/product-category/candles-care/">Candles &amp; Care</a>
+					<a href="/product-category/desk-paper/">Desk &amp; Paper</a>
+					<a href="/product-category/kitchen/">Kitchen</a>
+					<a href="/product-category/carry/">Carry</a>
+				</div>
+			</details>
+			<a href="/about/">About</a>
+			<a href="/shipping-and-returns/">Shipping</a>
 		</nav>
 
-		<form class="urumi-nav__search" role="search" method="get" action="/">
-			<label class="urumi-search-label" for="urumi-search-input">Search products</label>
-			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-			<input id="urumi-search-input" type="search" name="s" value="" placeholder="Search the shop" autocomplete="off" />
-			<input type="hidden" name="post_type" value="product" />
-		</form>
+		<div class="urumi-nav__actions">
+			<form class="urumi-nav__search" role="search" method="get" action="/">
+				<label class="urumi-search-label" for="urumi-search-input">Search products</label>
+				<input id="urumi-search-input" type="search" name="s" value="" placeholder="Search" autocomplete="off" />
+				<input type="hidden" name="post_type" value="product" />
+			</form>
+			<a class="urumi-nav__icon urumi-nav__account" href="/my-account/">Account</a>
+		</div>
 		<!-- /wp:html -->
 
 		<!-- wp:woocommerce/mini-cart {"addToCartBehaviour":"open_drawer"} /-->
@@ -49,8 +51,8 @@
 			<a href="/shop/">Shop</a>
 			<a href="/product-category/ceramics/">Ceramics</a>
 			<a href="/product-category/textiles/">Textiles</a>
-			<a href="/product-category/candles-care/">Candles & Care</a>
-			<a href="/product-category/desk-paper/">Desk & Paper</a>
+			<a href="/product-category/candles-care/">Candles &amp; Care</a>
+			<a href="/product-category/desk-paper/">Desk &amp; Paper</a>
 			<a href="/product-category/kitchen/">Kitchen</a>
 			<a href="/product-category/carry/">Carry</a>
 			<a href="/about/">About</a>
