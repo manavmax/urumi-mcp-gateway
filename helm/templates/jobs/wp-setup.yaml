@@ -533,7 +533,7 @@ spec:
               };
               
               $attach_main = function ( $pid, $p ) use ( $sideload ) {
-                  $name = (string) ( $p['image'] ?? ( $p['sku'] . '.png' ) );
+                  $name = (string) ( $p['image'] ?? ( $p['sku'] . '.webp' ) );
                   $att  = $sideload( $name, $pid, (string) ( $p['alt'] ?? $p['name'] ) );
                   if ( ! $att ) { return false; }
                   set_post_thumbnail( $pid, $att );

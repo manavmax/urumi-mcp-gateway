@@ -1,43 +1,37 @@
 {
   "brand": "Loam & Ember",
   "tagline": "Slow-made goods for warm rooms and quiet desks.",
-  "note": "Single source of truth for the storefront catalog. The wp-setup seed (helm/templates/jobs/wp-setup.yaml) creates products by SKU, idempotently: running twice creates nothing and resets nothing. 'kind' and 'tint' drive scripts/gen-store-images.py (original generated artwork; see docs/IMAGE_CREDITS.md). 'new' and 'featured' are distinct flags; 'sale_price' makes the product (or variation) on sale; 'stock' enables manage-stock with that quantity; weight is kg, dimensions are cm.",
+  "note": "Single source of truth for the storefront catalog. The wp-setup seed (helm/templates/jobs/wp-setup.yaml) creates products by SKU, idempotently: running twice creates nothing and resets nothing. Product photos are real Unsplash photographs processed by scripts/process-photos.py (4:5, 1200px webp); see docs/STORE_DESIGN.md and docs/IMAGE_CREDITS.md. 'image' and 'gallery' name files in store/images/ (webp). 'new' and 'featured' are distinct flags; 'sale_price' makes the product (or variation) on sale; 'stock' enables manage-stock with that quantity; weight is kg, dimensions are cm. NOTE (photo-first pass): the image files this catalog references are pending photo curation (docs/REVIEW_NEEDED_STORE.md); until then the seed attaches no images and the theme shows neutral placeholders.",
   "categories": [
     {
       "name": "Ceramics",
       "slug": "ceramics",
-      "tint": "periwinkle",
       "description": "Stoneware and porcelain thrown in small batches, glazed in quiet colours."
     },
     {
       "name": "Textiles",
       "slug": "textiles",
-      "tint": "lilac",
-      "description": "Wool, linen and cotton woven by mills we visit, in colours that settle a room."
+      "description": "Wool, linen and cotton in weights that settle a room."
     },
     {
       "name": "Candles & Care",
       "slug": "candles-care",
-      "tint": "peach",
-      "description": "Slow-burning candles and gentle soaps, poured and cut in our studio."
+      "description": "Slow-burning candles and plain soaps for the kitchen shelf."
     },
     {
       "name": "Desk & Paper",
       "slug": "desk-paper",
-      "tint": "sand",
       "description": "Notebooks, pens and small organisers for a calmer desk."
     },
     {
       "name": "Kitchen",
       "slug": "kitchen",
-      "tint": "sage",
-      "description": "Boards, jars and towels that make cooking feel unhurried."
+      "description": "Boards, spoons and towels for unhurried cooking."
     },
     {
       "name": "Carry",
       "slug": "carry",
-      "tint": "clay",
-      "description": "Bags and baskets in waxed canvas and heavy cotton, built to last."
+      "description": "Bags and baskets in waxed canvas and heavy cotton."
     }
   ],
   "products": [
