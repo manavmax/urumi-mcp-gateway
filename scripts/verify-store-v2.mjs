@@ -88,8 +88,8 @@ async function pageWeight(page) {
 const PAGES = (slugMap) => [
   ["home", "/"],
   ["shop", "/shop/"],
-  ["category", slugMap.category || "/product-category/apparel/"],
-  ["product", slugMap.product || "/product/urumi-classic-tee/"],
+  ["category", slugMap.category || "/product-category/ceramics/"],
+  ["product", slugMap.product || "/product/stoneware-mug-12-oz/"],
   ["cart", "/cart/"],
   ["checkout", "/checkout/"],
   ["search", `/?s=${encodeURIComponent(process.env.V2_SEARCH_QUERY || "candle")}&post_type=product`],
@@ -104,14 +104,16 @@ async function shootPage(ctx, out, name, url, width, height) {
   attachWatchers(page, thirdParty, consoleErrors);
   const resp = await page.goto(`${STORE}${url}`, { waitUntil: "domcontentloaded", timeout: 45000 });
   await sleep(1800);
-  check(`${name} ${width} HTTP`, resp ? resp.status() === 200 : false, resp ? `status=${resp.status()}` : "no response");
+  const wantStatus = name === "404" ? 404 : 200;
+  check(`${name} ${width} HTTP`, resp ? resp.status() === wantStatus : false, resp ? `status=${resp.status()}` : "no response");
   const brokenImgs = await page.evaluate(() =>
     [...document.images].filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.src.split("/").pop())
   );
   if (brokenImgs.length) check(`${name} ${width} images loaded`, false, `broken: ${brokenImgs.slice(0, 3).join(", ")}`);
   else check(`${name} ${width} images loaded`, true, "");
   check(`${name} ${width} zero third-party requests`, thirdParty.length === 0, thirdParty.slice(0, 2).join(" "));
-  check(`${name} ${width} no console errors`, consoleErrors.length === 0, consoleErrors.slice(0, 1).join(" "));
+  const realErrors = name === "404" ? consoleErrors.filter((e) => !e.includes("404")) : consoleErrors;
+  check(`${name} ${width} no console errors`, realErrors.length === 0, realErrors.slice(0, 1).join(" "));
   const ov = await overflowX(page);
   check(`${name} ${width} no horizontal overflow`, ov <= 0, `scrollWidth-clientWidth=${ov}px`);
 
@@ -130,9 +132,42 @@ async function cmdScreenshots(out) {
   const slugMap = {};
   const pages = PAGES(slugMap);
   const browser = await chromium.launch({ headless: true });
+  const fillCart = async (ctx) => {
+    // Pick a SIMPLE in-stock product via REST (a variable product would need
+    // option selection), add it with the classic add-to-cart endpoint.
+    let pid = null;
+    try {
+      const r = await fetch(`${STORE}/wp-json/wc/v3/products?type=simple&stock_status=instock&per_page=1`, { headers: { Authorization: wooAuthHeader() } });
+      if (r.ok) {
+        const list = await r.json();
+        if (Array.isArray(list) && list[0]) pid = list[0].id;
+      }
+    } catch {}
+    const page = await ctx.newPage();
+    if (pid) {
+      await page.goto(`${STORE}/?add-to-cart=${pid}`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(2000);
+    } else {
+      // fallback: click the first product's add-to-cart
+      const shop = await ctx.newPage();
+      await shop.goto(`${STORE}/shop/`, { waitUntil: "domcontentloaded" });
+      await shop.waitForTimeout(1200);
+      const href = await shop.locator("a[href*='/product/']").first().getAttribute("href");
+      await shop.close();
+      if (href) {
+        await page.goto(href, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(1200);
+        const add = page.locator(".single_add_to_cart_button, form.cart button[type=submit]").first();
+        if (await add.count()) await add.click();
+        await page.waitForTimeout(2000);
+      }
+    }
+    await page.close();
+  };
   try {
     for (const [width, height] of [[1440, 900], [390, 844]]) {
       const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+      await fillCart(ctx);
       for (const [name, url] of pages) {
         console.log(` [${width}] ${name} ${url}`);
         await shootPage(ctx, out, name, url, width, height);
@@ -188,12 +223,24 @@ async function cmdCheckout(out) {
 
     let product = process.env.V2_PRODUCT_SIMPLE;
     if (!product) {
-      const shop = await ctx.newPage();
-      await shop.goto(`${STORE}/shop/`, { waitUntil: "domcontentloaded" });
-      await sleep(1500);
-      product = await shop.locator(".urumi-collection a[href*='/product/'], a[href*='/product/']").first().getAttribute("href");
-      await shop.close();
-      check("found a product URL on /shop/", !!product, product || "");
+      try {
+        const r = await fetch(`${STORE}/wp-json/wc/v3/products?type=simple&stock_status=instock&per_page=1`, { headers: { Authorization: wooAuthHeader() } });
+        if (r.ok) {
+          const list = await r.json();
+          if (Array.isArray(list) && list[0]) product = list[0].permalink;
+        }
+      } catch {}
+      if (!product) {
+        const shop = await ctx.newPage();
+        await shop.goto(`${STORE}/shop/`, { waitUntil: "domcontentloaded" });
+        await sleep(1500);
+        product = await shop.locator(".urumi-collection a[href*='/product/'], a[href*='/product/']").first().getAttribute("href");
+        await shop.close();
+      }
+      // The hardened wordpress image reports HTTPS=on, so REST-built permalinks
+      // may come back https:// while the compose store serves http://.
+      if (product && STORE.startsWith("http:")) product = product.replace(/^https:/, "http:");
+      check("found a simple product URL for checkout", !!product, product || "");
     }
 
     console.log(`   opening product: ${product}`);

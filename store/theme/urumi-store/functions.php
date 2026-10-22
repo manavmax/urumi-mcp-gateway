@@ -19,7 +19,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'URUMI_STORE_VERSION', '2.0.0' );
+define( 'URUMI_STORE_VERSION', '2.0.1' );
 define( 'URUMI_STORE_BRAND', 'Loam & Ember' );
 
 /**

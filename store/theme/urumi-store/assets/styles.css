@@ -1218,6 +1218,12 @@ body.urumi-cat-stationery .urumi-archive-head { background: var(--wp--preset--co
 		display: none;
 	}
 
+	/* The header search form lives in the mobile overlay instead. */
+	.urumi-nav > .urumi-nav__search,
+	.urumi-nav__search:not(.urumi-menu-overlay__search) {
+		display: none;
+	}
+
 	.urumi-menu-toggle,
 	.urumi-menu-button {
 		display: inline-flex;
@@ -1788,4 +1794,30 @@ body.urumi-cat-carry .urumi-pill[data-cat="carry"] {
 .woocommerce-checkout .wp-block-post-content,
 .woocommerce-cart .wp-block-post-content {
 	background: var(--wp--preset--color--page);
+}
+
+/* Mobile overlay search form */
+.urumi-menu-overlay__search {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	margin: 8px 0 18px;
+}
+
+.urumi-menu-overlay__search input[type="search"] {
+	flex: 1;
+	min-width: 0;
+	border: 1px solid var(--wp--custom--hairline-strong);
+	border-radius: var(--wp--custom--radius--pill);
+	background: var(--wp--preset--color--card);
+	padding: 13px 20px;
+	font-family: var(--wp--preset--font-family--inter);
+	font-size: 16px;
+	color: var(--wp--preset--color--ink);
+}
+
+.urumi-menu-overlay__search input[type="search"]:focus-visible {
+	outline: none;
+	border-color: var(--wp--custom--ring);
+	box-shadow: 0 0 0 3px var(--wp--custom--ring);
 }

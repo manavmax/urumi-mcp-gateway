@@ -575,7 +575,6 @@ spec:
                       $product->set_height( (string) ( $d['height'] ?? '' ) );
                   }
                   if ( ! empty( $p['tags'] ) && is_array( $p['tags'] ) ) {
-                      wp_set_object_terms( $product->get_id(), array_map( 'sanitize_text_field', $p['tags'] ), 'product_tag' );
                   }
                   $product->set_featured( ! empty( $p['featured'] ) );
               };
@@ -590,6 +589,14 @@ spec:
                   }
               };
               
+              // Tags are catalog-owned; they must be set AFTER the product exists
+              // (wp_set_object_terms needs a real post id).
+              $set_tags = function ( $pid, $p ) {
+                  if ( $pid && ! empty( $p['tags'] ) && is_array( $p['tags'] ) ) {
+                      wp_set_object_terms( (int) $pid, array_map( 'sanitize_text_field', $p['tags'] ), 'product_tag' );
+                  }
+              };
+
               // name => ordered unique options, from the variations' attribute maps.
               $variation_attrs = function ( $variations ) {
                   $names = array();
@@ -622,6 +629,7 @@ spec:
                           $product->set_status( 'publish' );
                           $apply_common( $product, $p );
                           $product->save();
+                          $set_tags( $pid, $p );
                           // Force re-attaches the catalog image (the previous attachment is
                           // left as orphan media for the media reset). Gallery is NOT
                           // re-attached (it would duplicate attachments).
@@ -681,6 +689,7 @@ spec:
                       }
                       $created++;
                       echo "  created $sku (" . ( $p['name'] ?? '' ) . ") PID=$pid\n";
+                      $set_tags( $pid, $p );
                       if ( $attach_main( $pid, $p ) ) { $imaged++; }
                       if ( ! empty( $p['gallery'] ) ) { $attach_gallery( $pid, $p ); }
                       if ( ! empty( $cat_for( $p['category'] ?? '' ) ) ) {
