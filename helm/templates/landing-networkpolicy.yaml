@@ -1,0 +1,29 @@
+{{- if and .Values.landing.enabled .Values.networkPolicy.enabled }}
+{{- /* Landing NetworkPolicy (ADR-083): the default-deny still applies, so this
+        is the ONLY rule that opens the landing pod, and it allows ingress ONLY
+        from the ingress-controller namespace, on the landing pod's real
+        container port from values (ADR-045: port matches evaluate against the
+        POD port). No egress rule: a static nginx needs nothing, not even DNS,
+        so egress stays default-deny. Same-namespace pods deliberately get no
+        path in (unlike the shared public-tier policy), per the brief. Kubelet
+        probes are unaffected: they do not traverse CNI NetworkPolicy. */ -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-ingress-to-landing
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: landing
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace | default "ingress-nginx" | quote }}
+      ports:
+        - port: {{ .Values.landing.port | default 8080 }}
+{{- end }}

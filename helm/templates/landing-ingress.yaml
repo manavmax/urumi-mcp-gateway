@@ -1,0 +1,39 @@
+{{- if and .Values.landing.enabled .Values.landing.host }}
+{{- /* Landing Ingress on the APEX host (ADR-083). Separate Ingress object in a
+        separate file so the existing store/dashboard ingress never conflicts.
+        The host comes from the landing.host value — never hardcoded. TLS
+        follows the existing cert-manager pattern: the same annotations
+        (the cluster-issuer is set there) and the same tlsEnabled gate, but a
+        DEDICATED secretName so cert-manager issues one certificate per
+        Ingress instead of two Certificate objects fighting over one Secret.
+        Rendered only when landing.host is set: an empty host would create a
+        catch-all rule that steals traffic from the other Ingress. The apex A
+        record must point at this server BEFORE enabling (README). */ -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "urumi.fullname" . }}-landing
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.global.ingressClass }}
+  {{- if .Values.global.tlsEnabled }}
+  tls:
+    - hosts:
+        - {{ .Values.landing.host | quote }}
+      secretName: {{ .Values.landing.tlsSecret | default "urumi-landing-tls" | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.landing.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "urumi.fullname" . }}-landing
+                port:
+                  number: {{ .Values.landing.servicePort | default 80 }}
+{{- end }}

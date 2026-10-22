@@ -1,0 +1,22 @@
+{{- if .Values.landing.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "urumi.fullname" . }}-landing
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: landing
+spec:
+  type: ClusterIP
+  ports:
+    # Service stays on servicePort (80); targetPort follows the named container
+    # port, which the image listens on at the unprivileged 8080 (same shape as
+    # the dashboard, ADR-043).
+    - port: {{ .Values.landing.servicePort | default 80 }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: landing
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

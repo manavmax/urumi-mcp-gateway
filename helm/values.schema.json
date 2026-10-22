@@ -67,6 +67,14 @@
     "gateway": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
     "wooMcp": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
     "dashboard": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+    "landing": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string" },
+        "tlsSecret": { "type": "string" }
+      }
+    },
     "networkPolicy": {
       "type": "object",
       "properties": {
