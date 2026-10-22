@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Urumi, an MCP Gateway on Kubernetes</title>
+  <meta name="description" content="One MCP endpoint for a whole team: a WooCommerce store and three MCP servers behind a single gateway with per-user keys, per-tool permissions and a full audit log. A take-home project built for the Urumi AI FDE internship, not a product of Urumi.">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <script src="/theme-init.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <!-- a. Announcement bar -->
+  <div class="announce" role="note">
+    <p>Take-home project, live demo <span aria-hidden="true">·</span>
+      <a data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">view the source</a>
+    </p>
+  </div>
+
+  <!-- b. Nav -->
+  <header class="nav">
+    <a class="wordmark" href="#top" aria-label="Urumi, back to top">
+      <span class="wordmark-name">Urumi</span>
+      <span class="wordmark-sub">MCP Gateway</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#tour">How a call travels</a>
+      <a href="#control">Control</a>
+      <a href="#security">Security</a>
+      <a href="#kubernetes">Kubernetes</a>
+    </nav>
+    <div class="nav-actions">
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch colour theme">
+        <svg class="ic ic-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.2A8.5 8.5 0 0 1 9.8 3.6a8.5 8.5 0 1 0 10.6 10.6Z"/></svg>
+        <svg class="ic ic-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></svg>
+      </button>
+      <a class="btn btn-outlined" data-link-dashboard href="#main">Open dashboard</a>
+      <a class="btn btn-primary" data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- c. Hero -->
+    <section class="hero" id="top">
+      <h1>One MCP endpoint for the whole team, on your own cluster.</h1>
+      <p class="hero-sub">A WooCommerce store and three MCP servers behind a single gateway: per-user API keys, per-tool permissions, a full audit log, and a chat agent that calls tools as the signed-in user.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" data-link-dashboard href="#main">Open dashboard</a>
+        <a class="btn btn-outlined btn-lg" data-link-store href="#main">Visit the store</a>
+      </div>
+      <p class="hero-note">A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
+
+      <div class="code-card" aria-label="MCP client configuration example">
+        <div class="code-head">
+          <span class="code-title">MCP client config</span>
+          <span class="chip chip-neutral">streamable HTTP</span>
+        </div>
+        <pre class="code-block"><code>{
+  <span class="tok-key">"mcpServers"</span>: {
+    <span class="tok-key">"urumi"</span>: {
+      <span class="tok-key">"url"</span>: <span class="tok-str" data-gateway-url>"https://dashboard.example.com/mcp"</span>,
+      <span class="tok-key">"headers"</span>: {
+        <span class="tok-key">"Authorization"</span>: <span class="tok-str">"Bearer <your-api-key>"</span>
+      }
+    }
+  }
+}</code></pre>
+        <div class="code-tools">
+          <p class="code-tools-label">One URL, 13 namespaced tools</p>
+          <ul class="tool-chips" aria-label="Namespaced tool names">
+            <li>woo__list_products</li>
+            <li>woo__get_product</li>
+            <li>woo__create_product</li>
+            <li>woo__list_product_images</li>
+            <li>woo__add_product_image</li>
+            <li>woo__list_orders</li>
+            <li>woo__get_order</li>
+            <li>woo__update_order_status</li>
+            <li>time__get_current_time</li>
+            <li>time__convert_time</li>
+            <li>notes__create_note</li>
+            <li>notes__list_notes</li>
+            <li>notes__search_notes</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- d. Built with row -->
+    <section class="built-with" aria-label="Built with">
+      <h2 class="visually-hidden">Built with</h2>
+      <ul class="marks">
+        <li>Kubernetes</li>
+        <li>Helm</li>
+        <li>FastAPI</li>
+        <li>Postgres</li>
+        <li>React</li>
+        <li>MCP</li>
+        <li>WooCommerce</li>
+      </ul>
+    </section>
+
+    <!-- e. Three-column features -->
+    <section class="section" id="features">
+      <header class="section-head">
+        <h2>What is in the box</h2>
+        <p>Everything below is implemented on this branch and verified by the test suite and live checks.</p>
+      </header>
+      <div class="cols3">
+        <article class="feature">
+          <h3>Gateway</h3>
+          <ul class="feature-list">
+            <li><strong>One MCP endpoint.</strong> Every upstream answers on <code>POST /mcp</code>.</li>
+            <li><strong>Namespaced tools.</strong> <code>woo__list_products</code>, so servers never collide.</li>
+            <li><strong>Failure isolation.</strong> Per-server timeouts, a circuit breaker and a health loop.</li>
+            <li><strong>Stable tool lists.</strong> A slow upstream serves its last known tools, marked stale.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <h3>Store and tools</h3>
+          <ul class="feature-list">
+            <li><strong>A real store.</strong> WooCommerce with a 12-product catalog and cash on delivery.</li>
+            <li><strong>8 store tools.</strong> Products, orders and images over the WooCommerce REST API.</li>
+            <li><strong>Three servers.</strong> woo, time and notes prove aggregation across upstreams.</li>
+            <li><strong>Cross-server replies.</strong> One chat prompt can span two servers in one answer.</li>
+          </ul>
+        </article>
+        <article class="feature">
+          <h3>Team and control</h3>
+          <ul class="feature-list">
+            <li><strong>Per-user API keys.</strong> Hashed, shown once, revocable in a click.</li>
+            <li><strong>Tool permissions.</strong> Admins restrict individual tools for the member role.</li>
+            <li><strong>Audit log and admin trail.</strong> Every call attributed, every admin action recorded.</li>
+            <li><strong>Chat as yourself.</strong> The agent calls tools with the signed-in user's permissions.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <!-- f. Numbered steps -->
+    <section class="section" id="steps">
+      <header class="section-head">
+        <h2>From zero to a tool call</h2>
+        <p>Three steps, all in the dashboard. No YAML for day-to-day use.</p>
+      </header>
+      <ol class="steps">
+        <li>
+          <span class="step-num" aria-hidden="true">01</span>
+          <div>
+            <h3>Register servers once</h3>
+            <p>The admin adds each MCP server with its URL and credentials. Credentials are encrypted at rest and never sent to a client.</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-num" aria-hidden="true">02</span>
+          <div>
+            <h3>Issue keys</h3>
+            <p>Invite members, then create one API key per person or client. Keys are shown once and stored as argon2id hashes.</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-num" aria-hidden="true">03</span>
+          <div>
+            <h3>Use it from any client</h3>
+            <p>One URL in any MCP client, or the built-in chat. Every call is permission-checked and audited under its caller.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- g. How a tool call travels -->
+    <section class="section" id="tour">
+      <header class="section-head">
+        <h2>How a tool call travels</h2>
+        <p>A call enters through one endpoint, is checked and audited, then reaches the store with credentials the caller never sees.</p>
+      </header>
+
+      <div class="diagram diagram-wide" role="img" aria-label="Flow: an MCP client or the chat agent calls POST /mcp with a Bearer key. The gateway verifies the key hash, checks tool permissions and writes an audit row. It forwards the call in-cluster to the woo MCP server, which calls the WooCommerce store over REST with its own consumer key and secret held server-side. The result returns along the same path and is audited.">
+        <svg viewBox="0 0 960 290" aria-hidden="true" focusable="false">
+          <g class="flow-lines">
+            <path class="flow" d="M198 84 H252"/>
+            <path class="flow" d="M448 84 H502"/>
+            <path class="flow" d="M698 84 H752"/>
+            <path class="flow flow-back" d="M842 150 C842 214 744 216 620 216 C420 216 220 216 118 216 C110 216 110 160 112 138"/>
+          </g>
+          <g class="flow-heads" aria-hidden="true">
+            <polygon points="252,84 242,78 242,90"/>
+            <polygon points="502,84 492,78 492,90"/>
+            <polygon points="752,84 742,78 742,90"/>
+            <polygon points="112,138 106,150 118,150"/>
+          </g>
+          <g class="node">
+            <rect x="28" y="44" width="170" height="80" rx="14"/>
+            <text class="node-title" x="113" y="76">MCP client</text>
+            <text class="node-title node-alt" x="113" y="76">or chat agent</text>
+            <text class="node-sub" x="113" y="98">your key, your tools</text>
+          </g>
+          <g class="node">
+            <rect x="252" y="44" width="196" height="80" rx="14"/>
+            <text class="node-title" x="350" y="70">Gateway</text>
+            <text class="node-sub" x="350" y="88">verify key, check permissions</text>
+            <text class="node-sub" x="350" y="104">write audit row</text>
+          </g>
+          <g class="node">
+            <rect x="502" y="44" width="196" height="80" rx="14"/>
+            <text class="node-title" x="600" y="70">MCP server: woo</text>
+            <text class="node-sub" x="600" y="88">namespaced tools</text>
+            <text class="node-sub" x="600" y="104">slug prefix per server</text>
+          </g>
+          <g class="node">
+            <rect x="752" y="44" width="180" height="80" rx="14"/>
+            <text class="node-title" x="842" y="70">WooCommerce</text>
+            <text class="node-sub" x="842" y="88">REST wc/v3</text>
+            <text class="node-sub" x="842" y="104">creds injected server-side</text>
+          </g>
+          <g class="edge-labels" aria-hidden="true">
+            <text class="edge-label" x="225" y="72">Bearer key</text>
+            <text class="edge-label" x="475" y="72">in-cluster</text>
+            <text class="edge-label" x="725" y="72">CK/CS</text>
+            <text class="edge-label" x="480" y="238">result returns, audited under the caller</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="diagram diagram-compact" role="img" aria-label="Same flow, vertical: client to gateway to woo MCP server to WooCommerce store and back, audited.">
+        <svg viewBox="0 0 360 560" aria-hidden="true" focusable="false">
+          <g class="flow-lines">
+            <path class="flow" d="M180 96 V148"/>
+            <path class="flow" d="M180 240 V292"/>
+            <path class="flow" d="M180 384 V436"/>
+            <path class="flow flow-back" d="M300 436 C300 500 240 502 180 502 C120 502 60 500 60 470 C60 300 60 200 62 150"/>
+          </g>
+          <g class="flow-heads" aria-hidden="true">
+            <polygon points="180,148 172,136 188,136"/>
+            <polygon points="180,292 172,280 188,280"/>
+            <polygon points="180,436 172,424 188,424"/>
+            <polygon points="62,150 56,138 68,140"/>
+          </g>
+          <g class="node">
+            <rect x="40" y="20" width="280" height="76" rx="14"/>
+            <text class="node-title" x="180" y="50">MCP client or chat agent</text>
+            <text class="node-sub" x="180" y="72">your key, your tools</text>
+          </g>
+          <g class="node">
+            <rect x="40" y="148" width="280" height="92" rx="14"/>
+            <text class="node-title" x="180" y="180">Gateway</text>
+            <text class="node-sub" x="180" y="200">verify key, check permissions</text>
+            <text class="node-sub" x="180" y="216">write audit row</text>
+          </g>
+          <g class="node">
+            <rect x="40" y="292" width="280" height="92" rx="14"/>
+            <text class="node-title" x="180" y="324">MCP server: woo</text>
+            <text class="node-sub" x="180" y="344">namespaced tools</text>
+            <text class="node-sub" x="180" y="360">slug prefix per server</text>
+          </g>
+          <g class="node">
+            <rect x="40" y="436" width="280" height="92" rx="14"/>
+            <text class="node-title" x="180" y="466">WooCommerce store</text>
+            <text class="node-sub" x="180" y="486">REST wc/v3, creds injected</text>
+          </g>
+        </svg>
+      </div>
+      <p class="diagram-note">Animation is off when your system asks for reduced motion.</p>
+    </section>
+
+    <!-- h. Control -->
+    <section class="section" id="control">
+      <div class="two-col">
+        <div class="col-text">
+          <h2>Control without ceremony</h2>
+          <p>The controls that matter for a team are one click each, and every change lands in a trail you can read later.</p>
+          <ul class="feature-list">
+            <li><strong>Revoke a key</strong> and the next call gets 401.</li>
+            <li><strong>Disable a server</strong> and its tools vanish from every client's list.</li>
+            <li><strong>Restrict a tool</strong> for members and it disappears for them everywhere, including chat.</li>
+            <li><strong>Kill a pod</strong> and the other servers keep answering while the dashboard flags it.</li>
+          </ul>
+        </div>
+        <div class="col-panel">
+          <div class="panel">
+            <div class="panel-head">
+              <span class="panel-title">Audit log</span>
+              <span class="chip chip-sample">sample data</span>
+            </div>
+            <div class="mock-scroll">
+            <table class="mock-table">
+              <thead>
+                <tr><th scope="col">Time</th><th scope="col">User</th><th scope="col">Tool</th><th scope="col">Outcome</th></tr>
+              </thead>
+              <tbody>
+                <tr><td class="mono">14:02:11</td><td>aisha</td><td class="mono">woo__list_orders</td><td><span class="badge badge-ok"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5 10-11"/></svg>ok</span></td></tr>
+                <tr><td class="mono">14:01:48</td><td>ben</td><td class="mono">notes__create_note</td><td><span class="badge badge-ok"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5 10-11"/></svg>ok</span></td></tr>
+                <tr><td class="mono">14:00:59</td><td>ben</td><td class="mono">woo__update_order_status</td><td><span class="badge badge-deny"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>permission_denied</span></td></tr>
+                <tr><td class="mono">13:58:20</td><td>aisha</td><td class="mono">time__get_current_time</td><td><span class="badge badge-ok"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5 10-11"/></svg>ok</span></td></tr>
+              </tbody>
+            </table>
+            </div>
+            <p class="panel-note">The live Audit page reads <code>GET /api/audit</code>: every call with user, tool, server and outcome. Admins can export a CSV, capped at 5000 rows. Rows above are sample data.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- i. Observability -->
+    <section class="section" id="observability">
+      <header class="section-head">
+        <h2>See the fleet at a glance</h2>
+        <p>The Overview page computes these from <code>GET /api/stats</code> over a 14-day window. The values below are sample data.</p>
+      </header>
+      <div class="panel observ-panel">
+        <div class="panel-head">
+          <span class="panel-title">Overview</span>
+          <span class="chip chip-sample">sample data</span>
+        </div>
+        <div class="stat-grid">
+          <div class="stat">
+            <span class="stat-label">Tool calls, 14 days</span>
+            <span class="stat-num">4,812</span>
+            <svg class="spark" viewBox="0 0 120 28" role="img" aria-label="Sample calls per day, rising slightly"><polyline points="0,22 12,20 24,21 36,16 48,17 60,12 72,14 84,9 96,10 108,6 120,7"/></svg>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Success rate</span>
+            <span class="stat-num">98.9%</span>
+            <svg class="spark" viewBox="0 0 120 28" role="img" aria-label="Sample success rate per day, flat near 99 percent"><polyline points="0,8 12,7 24,9 36,7 48,8 60,6 72,8 84,7 96,8 108,6 120,7"/></svg>
+          </div>
+          <div class="stat">
+            <span class="stat-label">p95 latency</span>
+            <span class="stat-num">240 ms</span>
+            <svg class="spark" viewBox="0 0 120 28" role="img" aria-label="Sample latency per day, flat"><polyline points="0,14 12,15 24,13 36,16 48,14 60,15 72,13 84,15 96,14 108,16 120,14"/></svg>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Servers connected</span>
+            <span class="stat-num">3 of 3</span>
+            <svg class="spark" viewBox="0 0 120 28" role="img" aria-label="Sample connected server count per day, flat at three"><polyline points="0,10 12,10 24,10 36,10 48,10 60,10 72,10 84,10 96,10 108,10 120,10"/></svg>
+          </div>
+        </div>
+        <p class="panel-note">Members see the same page scoped to their own calls. Both views read the same endpoint, filtered server-side.</p>
+      </div>
+    </section>
+
+    <!-- j. Security -->
+    <section class="section" id="security">
+      <header class="section-head">
+        <h2>Security posture, stated plainly</h2>
+        <p>Two auth domains: your key opens the gateway, the gateway holds the upstream credentials. They never meet.</p>
+      </header>
+      <div class="cols2">
+        <div class="allow-card">
+          <h3>A member can</h3>
+          <ul class="feature-list">
+            <li>Call every tool not denied by policy, with their own key.</li>
+            <li>See their own keys, their own activity and the tools they may use.</li>
+            <li>Use chat, which acts with exactly their permissions.</li>
+          </ul>
+        </div>
+        <div class="allow-card allow-deny">
+          <h3>A member cannot</h3>
+          <ul class="feature-list">
+            <li>See an upstream credential. Not in any API response, ever.</li>
+            <li>See another member's keys or activity.</li>
+            <li>Call a denied tool: rejected before any upstream contact, audited as <code>permission_denied</code>.</li>
+            <li>Manage servers, members or permissions.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="cols3 sec-grid">
+        <article class="mini"><h4>Hashed keys</h4><p>argon2id with a SHA lookup hash. Shown once at creation, never stored in the clear.</p></article>
+        <article class="mini"><h4>Server-side credentials</h4><p>Fernet-encrypted in Postgres, injected at proxy time only.</p></article>
+        <article class="mini"><h4>SSRF guard</h4><p>Upstream URLs validated at save and re-resolved at connect. Redirects are never followed.</p></article>
+        <article class="mini"><h4>Default-deny network</h4><p>Every allow rule is explicit, selector-driven and values-fed. Throwaway probes are blocked.</p></article>
+        <article class="mini"><h4>Non-root containers</h4><p>Explicit uids, all capabilities dropped, read-only roots where the image allows.</p></article>
+        <article class="mini"><h4>Login lockout</h4><p>5 failures in 300 seconds per username and per IP, then 429. Transitions are audited.</p></article>
+      </div>
+    </section>
+
+    <!-- k. Kubernetes and Helm -->
+    <section class="section" id="kubernetes">
+      <header class="section-head">
+        <h2>One Helm chart, two worlds</h2>
+        <p>The same chart deploys to a local kind cluster and to a single-node k3s VPS. Only values change.</p>
+      </header>
+      <div class="two-col">
+        <div class="col-text">
+          <h3>What runs where</h3>
+          <ul class="feature-list">
+            <li><strong>Public tier.</strong> Ingress, then the gateway, the dashboard and this landing page.</li>
+            <li><strong>Private tier.</strong> The three MCP servers, WordPress with WooCommerce and MariaDB, Postgres.</li>
+            <li><strong>State.</strong> Postgres keeps users, keys, servers and audit. MariaDB keeps the store.</li>
+            <li><strong>Delivery.</strong> One umbrella chart, no Kustomize, upgrade in one line with automatic rollback.</li>
+          </ul>
+          <p class="k8s-line"><code>helm upgrade --install urumi ./helm --timeout 15m --atomic</code> rolls itself back on failure; <code>helm rollback urumi <rev></code> returns to any revision. Rehearsed in <code>docs/UPGRADE_ROLLBACK.md</code>.</p>
+        </div>
+        <div class="col-panel">
+          <div class="panel">
+            <div class="panel-head">
+              <span class="panel-title">values-local vs values-prod</span>
+            </div>
+            <div class="mock-scroll">
+            <table class="mock-table">
+              <thead>
+                <tr><th scope="col">Setting</th><th scope="col">local (kind)</th><th scope="col">prod (k3s)</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Hosts</td><td class="mono">*.127.0.0.1.nip.io</td><td>real domain, values only</td></tr>
+                <tr><td>TLS</td><td>self-signed test cert</td><td>Let's Encrypt via cert-manager</td></tr>
+                <tr><td>Images</td><td>node-local, pullPolicy Never</td><td>pinned GHCR tags</td></tr>
+                <tr><td>Storage</td><td class="mono">standard</td><td class="mono">local-path</td></tr>
+              </tbody>
+            </table>
+            </div>
+            <p class="panel-note">Prod keeps no hostname in git: the domain arrives by <code>--set</code> or an uncommitted overlay.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- l. Beyond the brief (features.js drives this; hidden until an item is enabled) -->
+    <section class="section" id="beyond" hidden>
+      <header class="section-head">
+        <h2>Beyond the brief</h2>
+        <p>Ideas queued past the assignment. Each ships switched off in <code>src/landing/features.js</code> and renders here only after its branch merges.</p>
+      </header>
+      <div class="cols3" id="beyond-list"></div>
+    </section>
+
+    <!-- m. Demo video (hidden until landing.videoUrl is set in features.js) -->
+    <section class="section" id="video" hidden>
+      <header class="section-head">
+        <h2>Watch the demo</h2>
+        <p>A short walkthrough: store, chat, permissions, revocation and a pod kill.</p>
+      </header>
+      <div class="panel video-panel" id="video-slot"></div>
+    </section>
+
+    <!-- n. Closing CTA -->
+    <section class="cta">
+      <h2>See it running</h2>
+      <p>The dashboard and the store are live on this cluster, and every claim on this page has a command behind it.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" data-link-dashboard href="#main">Open dashboard</a>
+        <a class="btn btn-outlined btn-lg" data-link-store href="#main">Visit the store</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-cols">
+      <div class="footer-brand">
+        <span class="wordmark-name">Urumi</span>
+        <span class="wordmark-sub">MCP Gateway</span>
+        <p>A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
+      </div>
+      <nav aria-label="Explore">
+        <h3>Explore</h3>
+        <a data-link-dashboard href="#main">Open dashboard</a>
+        <a data-link-store href="#main">Visit the store</a>
+        <a data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+      </nav>
+      <nav aria-label="Documentation">
+        <h3>Docs</h3>
+        <a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/README.md" target="_blank" rel="noopener noreferrer">README</a>
+        <a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/docs/DECISIONS.md" target="_blank" rel="noopener noreferrer">Design decisions</a>
+        <a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/THREAT_MODEL.md" target="_blank" rel="noopener noreferrer">Threat model</a>
+        <a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/SYSTEM_DESIGN_AND_TRADEOFFS.md" target="_blank" rel="noopener noreferrer">System design</a>
+      </nav>
+      <nav aria-label="Stack">
+        <h3>Stack</h3>
+        <span>Kubernetes, Helm</span>
+        <span>FastAPI, Postgres</span>
+        <span>React, MCP</span>
+        <span>WooCommerce</span>
+      </nav>
+    </div>
+    <div class="footer-base">
+      <p>Sample data is labelled sample data. No analytics, no trackers, no external requests from this page.</p>
+      <p>A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
+    </div>
+  </footer>
+
+  <script src="/features.js"></script>
+  <script src="/main.js"></script>
+</body>
+</html>
