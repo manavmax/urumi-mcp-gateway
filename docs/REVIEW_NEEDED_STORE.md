@@ -1,79 +1,112 @@
-# Review needed (store v2) - for Manav
+# Review needed (store v2 photo-first pass) - for Manav
 
-Branch `store-v2`, worktree `Urumi_AI-store`. Decisions logged as ADR-070..075
-in docs/DECISIONS.md. Nothing pushed, nothing merged, main untouched.
+## READ THIS FIRST: I could not view images this session
 
-## 1. One file outside the store layer was edited (flagged per your instruction)
+The model running this pass cannot view images (the read tool rejects image
+input for it). Per your instruction ("if you cannot, build everything except
+the photo selection, say so at the top of your report, and stop. Do not pick
+photos blindly"), I:
 
-`helm/templates/jobs/wp-setup.yaml` - the seed PHP lives inline there and
-there is no hook for it. Supporting the full product model (sale price,
-manage-stock/out-of-stock, weight/dimensions, tags, gallery sideloads, variable
-products with per-variation SKU/price/stock) required extending that seed. All
-wp-setup changes are in that ONE file: seed extension (idempotent semantics
-unchanged), About/Shipping page copy for the new brand, blogname +
-blogdescription, and the Primary menu items (now the six new categories). No
-other helm file, no src/gateway, src/dashboard or src/woo-mcp change. Please
-review the diff of that file carefully; the verification ran the exact
-rendered script from it (ADR-075).
+- did NOT choose any photograph,
+- did NOT rebuild product names/descriptions from photos,
+- did NOT eyeball any screenshot or candidate sheet.
 
-## 2. The audit is DOM-based, not eyeballed
+Everything else is built, committed in small steps on `store-v2`, and
+verified with real runs (details below and in docs/STORE_VERIFY.md). The
+photo step is prepared end to end and should take a photo-capable session (or
+you) under an hour.
 
-I cannot view images in this environment (model limitation), so
-docs/STORE_AUDIT.md findings come from computed styles, geometry, network and
-console evidence; the contrast gate and 93 screenshot checks pass. The
-screenshots are saved (both before and after) - a quick human pass over
-`artifacts/store-final/` would confirm the "looks" side. Worth a look:
-home hero balance, product-art style consistency, checkout spacing.
+## 1. What is ready for photo curation
 
-## 3. Brand and catalog: your call to keep
+- `artifacts/store-photos/cache/search-*.json`: 10 cached Unsplash searches
+  (ceramics x3, textiles x2, candles, desk, kitchen board, carry, lifestyle),
+  30 portrait, high-content-filter results each. Cached = no API budget spent
+  on re-runs (50 req/h demo limit).
+- `artifacts/store-photos/sheets/sheet-*.jpg`: candidate sheets, 24 per query
+  with index numbers ([NN]) and descriptions.
+- `scripts/fetch-unsplash.py`: reads `.unsplash_key` only inside the script
+  (never printed; the file is gitignored in .gitignore AND .git/info/exclude).
+- Curation workflow: pick per category from the sheets, write
+  `artifacts/store-photos/choices.json` (format documented at the top of
+  `scripts/process-photos.py`), then run
+  `python3 scripts/process-photos.py` (needs Pillow; a venv with it lives at
+  /var/folders/wp/mfjhmzgj5vx35659rm6y4v2m0000gn/T/kilo/venv-img or pip install pillow).
+  It downloads at w=1600 with the download_location ping, crops 4:5 at
+  1200px, encodes webp q80 <=150KB, writes the gallery detail crops, the
+  manifest (artifacts + committed store/photos-manifest.json),
+  docs/IMAGE_CREDITS.md rows and the contact sheet at
+  artifacts/store-photos/contact-sheet.png.
+- After curation: rebuild products.json FROM the photos (names for what the
+  photo shows, 24-32 products, 4 variable), run
+  `python3 scripts/regen-demo-seeds.py`, then the seed picks the .webp files
+  up automatically (defaults to <SKU>.webp).
 
-Invented brand **Loam & Ember** (fictional, no real store copied), niche
-"slow-made home and desk goods", six categories, 36 products. The old
-URUMI-* products are NOT deleted by the seed (idempotent by design) - they
-fall out of a live catalog via `make demo-reset` (its keep-manifest is now the
-36 LOAM-* SKUs) or vanish on any fresh install. If you'd rather keep Urumi as
-the store brand, the rename points are: products.json brand field, theme
-header/footer wordmarks, functions.php brand constant, and the wp-setup page
-copy (same one file).
+## 2. Interim state you will see at http://localhost:18088 (compose stack left running)
 
-## 4. wp-setup details worth knowing
+- 36 products (old v2 names/copy, one invented origin claim removed), no
+  photographs: neutral beige tile frames, dark warm hero ground with the
+  white headline, all-AA verified.
+- Theme fully rebuilt to docs/STORE_DESIGN.md: warm neutrals, Newsreader
+  Variable + Hanken Grotesk Variable (self-hosted, OFL, docs/FONT_CREDITS.md),
+  sharp corners, no shadows, no accent colour, hairlines, outline/solid/text
+  buttons, 44px inputs, vertical PDP thumbs, mobile full-screen menu overlay,
+  reduced-motion support, 4/3/2 responsive grids, sticky header with
+  Collections dropdown.
+- Footer: four columns, "A demo store. No real orders are shipped.",
+  "Photography from Unsplash." -> /image-credits/ (200, licence copy; fills
+  from store/photos-manifest.json after curation).
 
-- Every wp-setup run in an environment WITHOUT the woo-secrets Secret rotates
-  the Woo API key (deletes existing keys). In-cluster the Secret prevents
-  this; in the compose harness the harness re-creates its verify key after
-  each run.
-- `show_avatars` logs "Error: Could not update option" on re-runs after the
-  theme is active - the theme forces avatars off via a filter, so the option
-  update is a no-op. Benign; the effective setting is what we want.
-- Force mode (`STORE_SEED_FORCE=1`) re-attaches main images, leaving the old
-  attachments as orphans for `make demo-reset` media cleanup (by design).
+## 3. Real-run verification results (docs/STORE_VERIFY.md has the table)
 
-## 5. Remaining imperfections (honest list)
+- Fresh wp-setup 54 s; second run idempotent: created=0 kept=36, 45 s.
+- e2e COD checkout green through the block checkout; order visible via REST
+  with payment_method=cod.
+- 91/93 harness checks pass. The 2 fails are the known cosmetic Woo
+  ResizeObserver console warnings (block cart/checkout), unchanged from the
+  previous pass.
+- WCAG gate passes every rest/hover/focus sample after fixes (ADR-080 logs
+  the two token deviations: neutral-4 for struck prices and sold-out flags;
+  dark hero ground before photos).
+- Zero third-party requests on every page; no horizontal overflow; home
+  470 KB (gate: 800 KB) without photos; demo-reset dry-run: 36 KEEP,
+  0 product deletions.
+- 19 screenshots at 1440 + 390 in artifacts/store-v2-shots (gitignored) -
+  UNREVIEWED BY EYE by me; a human pass over them would confirm the "looks"
+  side.
 
-- Product art is flat illustration in the established style; it is consistent
-  but simple - a human eye should confirm it reads as "premium-minimal" at
-  1440 (the generator is parametric; art tweaks are cheap).
-- The newsletter block is honest-by-design (GET to the same page + note), but
-  if you want it to look fully functional without the note, say so and I'll
-  wire it to a fake success state instead.
-- Single-match product search 302-redirects to the product (core WooCommerce).
-  The search template renders properly for multi-match queries.
-- Checkout is the WooCommerce block checkout with theme styling; its
-  "ResizeObserver loop" console warning is a known Woo SPA artifact (cosmetic).
-- Order-received is verified at 1440 and 390 via the real checkout flow, but I
-  have not restyled Woo's order-details table exhaustively (it uses the
-  order-confirmation block with theme tokens).
+## 4. Watch-outs after photos land
 
-## 6. Suggested image tag for the store-assets image
+- Re-measure home weight with tiles fetching real variants; if it drifts
+  over 800 KB, tighten the WP image quality filter (functions.php) or encode
+  the 600px variants harder (pipeline ceiling is a one-line change).
+- Re-run the contrast gate: the hero headline will sit on a real photograph
+  plus the 20 percent veil; verify AA on the chosen hero (spec requires it).
+- The harness rotates the Woo key on every wp-setup run (no K8s Secret in
+  compose); in-cluster the woo-secrets Secret prevents this - unchanged.
 
-`urumi/store-assets:2.0.0-<sha of this branch head>` (built from store/ with
-`make store-assets-image`; 155 PNG files, 1.9 MB total). The theme version
-constant is bumped to 2.0.1 for cache busting.
+## 5. Files touched outside the store layer (flagged per your instruction)
 
-## 7. Compose harness (throwaway, gitignored)
+- helm/templates/jobs/wp-setup.yaml (the ONE file, ADR-071 pattern): image
+  fallback .png -> .webp; new Photography credits page. Idempotency verified.
+- helm/templates/deployment-wordpress.yaml: one added `cp` line in the
+  store-assets initContainer (photos-manifest.json), same ADR-038 semantics.
+- No src/gateway, src/dashboard, src/woo-mcp change. Nothing pushed, nothing
+  merged, main untouched, no cluster/kubectl/helm-release touched (only
+  read-only `helm template` for the harness render).
 
-`artifacts/store-compose/` holds the harness (compose.yml, rendered
-wp-setup.sh, scripts, .env with local-only secrets chmod 600). It is not part
-of the repo. Left running on port 18088 for you to poke at:
-`docker compose -f artifacts/store-compose/compose.yml -p store-v2-verify ps`.
-Tear down with `down -v` when done.
+## 6. Suggested image tag for the store-assets image (current, photo-less)
+
+`urumi/store-assets:3.0.0-<sha of this branch head>` (built from store/ with
+the usual make target; ships theme + fonts + products.json + photos-manifest).
+After curation, rebuild as `urumi/store-assets:3.1.0-<sha>` (photos included)
+- do not reuse the 3.0.0 tag for a different content set.
+
+## 7. Honest remaining weaknesses
+
+- Product copy still describes the v2 objects; it will be rewritten FROM the
+  chosen photos (that step is inherently photo-dependent).
+- The 36-product interim catalogue means categories carry uneven tile counts
+  after the rebuild to 24-32; re-run regen-demo-seeds.py then.
+- The contact sheet script exists but has no real photos to compose yet.
+- Two cosmetic Woo console warnings remain (item 3 above); not fixable
+  without patching Woo block internals.
