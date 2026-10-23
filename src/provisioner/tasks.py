@@ -146,6 +146,13 @@ current-context: incluster
             "--set", f"global.ingressClass={s.ingress_class}",
             "--set", f"global.storageClass={s.storage_class}",
             "--set", f"global.nodeCIDR={s.node_cidr}",
+            # per-store TLS (ADR-064): stores.tls.enabled from the MAIN
+            # release becomes the store release's global.tlsEnabled; the
+            # issuer NAME travels from stores.tls.clusterIssuer (never
+            # hardcoded). tlsEnabled=false renders no tls block and no
+            # cluster-issuer annotation - flags-off output is unchanged.
+            "--set", f"global.tlsEnabled={str(s.store_tls_enabled).lower()}",
+            "--set", f"ingress.clusterIssuer={s.store_tls_cluster_issuer}",
             # same images as the main release (repos/tags forwarded by the chart)
             "--set", f"wordpress.image.repository={s.store_image_wordpress_repo}",
             "--set", f"wordpress.image.tag={s.store_image_wordpress_tag}",

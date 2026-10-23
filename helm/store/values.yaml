@@ -6,7 +6,8 @@
 
 global:
   # set by the provisioner with --set global.ingressClass / global.storageClass
-  # taken from the MAIN release's values at deploy time.
+  # / global.nodeCIDR / global.tlsEnabled, taken from the MAIN release's values
+  # at deploy time (tlsEnabled comes from the MAIN release's stores.tls.enabled).
   ingressClass: nginx
   storageClass: standard
   tlsEnabled: false
@@ -21,6 +22,13 @@ ingress:
     # ALWAYS set by the provisioner: <slug>.<stores.baseDomain>
     store: store.example.invalid
   tls: []
+  # cert-manager ClusterIssuer NAME for the store Ingress's cert-manager.io/
+  # cluster-issuer annotation when global.tlsEnabled is on (per-store HTTP-01,
+  # ADR-064). Set by the provisioner from the MAIN release's
+  # stores.tls.clusterIssuer; never hardcoded so staging/prod issuers switch
+  # by values only. Empty = no annotation (plain http, or a Secret pre-created
+  # out of band).
+  clusterIssuer: ""
 
 podSecurity:
   workloads:

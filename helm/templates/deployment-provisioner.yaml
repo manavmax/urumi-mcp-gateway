@@ -47,6 +47,15 @@ spec:
               value: {{ .Values.global.storageClass | quote }}
             - name: NODE_CIDR
               value: {{ .Values.global.nodeCIDR | quote }}
+            {{- /* Per-store TLS (ADR-064): stores.tls.* from the MAIN release
+                    propagate to each store release as global.tlsEnabled +
+                    ingress.clusterIssuer (the cert-manager ClusterIssuer name,
+                    never hardcoded). Default off/empty in committed values;
+                    the private prod overlay enables them. */}}
+            - name: STORE_TLS_ENABLED
+              value: {{ .Values.stores.tls.enabled | quote }}
+            - name: STORE_TLS_CLUSTER_ISSUER
+              value: {{ .Values.stores.tls.clusterIssuer | default "" | quote }}
             - name: MAX_CONCURRENT
               value: {{ .Values.stores.maxConcurrent | default 2 | quote }}
             - name: PROVISION_TIMEOUT_SECONDS

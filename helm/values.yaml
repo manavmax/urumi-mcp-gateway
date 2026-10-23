@@ -346,13 +346,26 @@ provisioner:
 
 stores:
   # <slug>.<baseDomain> per-store ingress hosts. Local uses *.localhost (browsers
-  # resolve it to 127.0.0.1); PROD REQUIRES a wildcard DNS record + wildcard TLS
-  # (documented in DEPLOY notes).
+  # resolve it to 127.0.0.1). Prod needs a wildcard DNS record *.<baseDomain> (or
+  # per-store A records) pointing at the VPS - but NOT a wildcard CERTIFICATE:
+  # the DNS host has no API, so DNS-01 (the only ACME challenge type that can
+  # issue wildcards) is unavailable, and each store Ingress gets its own
+  # certificate via cert-manager HTTP-01 instead (stores.tls below; ADR-064).
   baseDomain: localhost
   maxPerUser: 2
   globalMax: 12
   maxConcurrent: 2
   provisionTimeoutSeconds: 600
+  # Per-store TLS via cert-manager HTTP-01 (prod). Default OFF/EMPTY everywhere:
+  # the committed values never enable it; the private prod overlay turns it on.
+  # When enabled, the provisioner propagates it to each store release as
+  # global.tlsEnabled=true + ingress.clusterIssuer, so the store Ingress gets
+  # the cert-manager cluster-issuer annotation and its own per-store TLS secret
+  # (<slug>-store-tls in the store namespace). The issuer NAME comes from this
+  # value - never hardcoded - so staging/prod issuers switch by values only.
+  tls:
+    enabled: false
+    clusterIssuer: ""
 
 oauth:
   # Phase 7 (ADR-063): MCP authorization (OAuth 2.1, minimal correct). Default

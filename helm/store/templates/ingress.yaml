@@ -1,7 +1,17 @@
 {{- if and .Values.ingress.enabled .Values.wordpress.enabled }}
 {{- /* One rule: <slug>.<stores.baseDomain> -> this store's WordPress. The
-       provisioner always sets ingress.hosts.store. TLS only when the main
-       release's global.tlsEnabled is propagated (prod wildcard certificate). */}}
+        provisioner always sets ingress.hosts.store. TLS when the MAIN release
+        has stores.tls.enabled (propagated as global.tlsEnabled): the Ingress
+        gets the cert-manager cluster-issuer annotation (name from
+        ingress.clusterIssuer, never hardcoded) and its OWN per-store TLS
+        secret <slug>-store-tls, issued by cert-manager HTTP-01. A wildcard
+        certificate is NOT an option here: it would need DNS-01 and the DNS
+        host has no API (ADR-064). */}}
+{{- $annotations := deepCopy (.Values.ingress.annotations | default dict) }}
+{{- if and .Values.global.tlsEnabled .Values.ingress.clusterIssuer }}
+{{- /* dedicated value wins over any copy of the key in ingress.annotations */}}
+{{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.ingress.clusterIssuer }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -9,14 +19,14 @@ metadata:
   labels:
     {{- include "urumi.labels" . | nindent 4 }}
   annotations:
-    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    {{- toYaml $annotations | nindent 4 }}
 spec:
   ingressClassName: {{ .Values.global.ingressClass }}
   {{- if .Values.global.tlsEnabled }}
   tls:
     - hosts:
         - {{ .Values.ingress.hosts.store | quote }}
-      secretName: urumi-store-wildcard
+      secretName: {{ include "urumi.fullname" . }}-store-tls
   {{- end }}
   rules:
     - host: {{ .Values.ingress.hosts.store | quote }}

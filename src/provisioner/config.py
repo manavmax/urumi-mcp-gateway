@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     ingress_class: str = "nginx"
     storage_class: str = "standard"
     node_cidr: str = "172.18.0.0/16"
+    # per-store TLS (prod): forwarded to each store release as
+    # global.tlsEnabled + ingress.clusterIssuer (ADR-064). Default off/empty;
+    # the private prod overlay turns it on via the MAIN chart's stores.tls.*.
+    store_tls_enabled: bool = False
+    store_tls_cluster_issuer: str = ""
     # overall provisioning budget per store (the brief's provisionTimeoutSeconds)
     provision_timeout_seconds: int = 600
     # how many stores may provision at once (protects the laptop node)

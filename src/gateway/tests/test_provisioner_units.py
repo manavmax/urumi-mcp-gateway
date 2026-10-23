@@ -168,6 +168,27 @@ def test_store_image_defaults_match_chart():
     assert s.store_image_mariadb_repo == "mariadb"
 
 
+def test_store_tls_env_forwarded(monkeypatch):
+    """Per-store TLS (ADR-064): stores.tls.* from the MAIN release travel to
+    the provisioner as STORE_TLS_* env and on to every store release
+    (global.tlsEnabled + ingress.clusterIssuer). Default off/empty."""
+    prov_config = _load_provisioner_config()
+    monkeypatch.setenv("STORE_TLS_ENABLED", "true")
+    monkeypatch.setenv("STORE_TLS_CLUSTER_ISSUER", "letsencrypt-prod")
+    s = prov_config.Settings()
+    assert s.store_tls_enabled is True
+    assert s.store_tls_cluster_issuer == "letsencrypt-prod"
+    # pydantic parses the chart's quoted Go booleans ("true"/"false")
+    monkeypatch.setenv("STORE_TLS_ENABLED", "false")
+    assert prov_config.Settings().store_tls_enabled is False
+    # no env at all: off/empty (committed values default)
+    monkeypatch.delenv("STORE_TLS_ENABLED", raising=False)
+    monkeypatch.delenv("STORE_TLS_CLUSTER_ISSUER", raising=False)
+    s2 = prov_config.Settings()
+    assert s2.store_tls_enabled is False
+    assert s2.store_tls_cluster_issuer == ""
+
+
 # ---- Phase 6 (ADR-062): hosted servers -------------------------------------
 
 def _load_provisioner_hosted():
