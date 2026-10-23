@@ -190,7 +190,15 @@
     if (!url) return;
     $$ (sel).forEach(function (n) { n.href = url; });
   }
-  if (cfg.repoUrl) setHrefs("[data-repo]", cfg.repoUrl);
+  if (cfg.repoUrl) {
+    setHrefs("[data-repo]", cfg.repoUrl);
+    // doc links: repo/blob/main/<path>; the path list lives in the HTML only
+    var repoBase = cfg.repoUrl.replace(/\/+$/, "");
+    $$("[data-repo-path]").forEach(function (a) {
+      var path = a.getAttribute("data-repo-path");
+      if (path) a.href = repoBase + "/blob/main/" + path;
+    });
+  }
   setHrefs("[data-link-dashboard]", dashUrl);
   setHrefs("[data-link-store]", storeUrl);
 
@@ -375,7 +383,7 @@
   // 01: typing URL field
   var typeUrl = $("#typeUrl");
   if (typeUrl) {
-    var urlText = gwUrl || "https://dashboard.example.com/mcp";
+    var urlText = gwUrl || "https://dashboard.<apex>/mcp"; // shown only when no host is derivable
     if (reduced) typeUrl.textContent = urlText;
     else onStart(typeUrl, function () {
       var i = 0;

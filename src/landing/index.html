@@ -17,7 +17,7 @@
 
   <!-- 1. Announcement bar -->
   <div class="announce" id="announce" role="note">
-    <p>A take-home project, live demo. <a data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">View the source</a></p>
+    <p>A take-home project, live demo. <a data-repo href="#main" target="_blank" rel="noopener noreferrer">View the source</a></p>
     <button class="announce-close" id="announceClose" type="button" aria-label="Dismiss announcement">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
@@ -43,7 +43,7 @@
     </nav>
     <div class="nav-actions">
       <a class="btn btn-secondary" data-link-dashboard href="#main">Open dashboard</a>
-      <a class="btn btn-primary" data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">View on GitHub<span class="arrow" aria-hidden="true">→</span></a>
+      <a class="btn btn-primary" data-repo href="#main" target="_blank" rel="noopener noreferrer">View on GitHub<span class="arrow" aria-hidden="true">→</span></a>
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch colour theme">
         <svg class="ic ic-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.2A8.5 8.5 0 0 1 9.8 3.6a8.5 8.5 0 1 0 10.6 10.6Z"/></svg>
         <svg class="ic ic-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></svg>
@@ -69,7 +69,7 @@
     </nav>
     <div class="nav-sheet-actions">
       <a class="btn btn-secondary" data-link-dashboard href="#main">Open dashboard</a>
-      <a class="btn btn-primary" data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">View on GitHub<span class="arrow" aria-hidden="true">→</span></a>
+      <a class="btn btn-primary" data-repo href="#main" target="_blank" rel="noopener noreferrer">View on GitHub<span class="arrow" aria-hidden="true">→</span></a>
     </div>
   </div>
 
@@ -91,7 +91,7 @@
 
       <div class="hero-actions">
         <a class="btn btn-primary" data-link-dashboard href="#main">Open dashboard<span class="arrow" aria-hidden="true">→</span></a>
-        <a class="btn btn-secondary" data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+        <a class="btn btn-secondary" data-repo href="#main" target="_blank" rel="noopener noreferrer">View on GitHub</a>
       </div>
       <p class="hero-note">A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
 
@@ -313,7 +313,7 @@
             <pre class="code-block"><code>{
   <span class="tok-key">"mcpServers"</span>: {
     <span class="tok-key">"urumi"</span>: {
-      <span class="tok-key">"url"</span>: <span class="tok-str">"<span data-gateway-url>https://dashboard.example.com/mcp</span>"</span>,
+      <span class="tok-key">"url"</span>: <span class="tok-str">"<span data-gateway-url>https://dashboard.&lt;apex&gt;/mcp</span>"</span>,
       <span class="tok-key">"headers"</span>: {
         <span class="tok-key">"Authorization"</span>: <span class="tok-str">"Bearer &lt;your-api-key&gt;"</span>
       }
@@ -326,7 +326,7 @@
               <button class="copy-btn" data-copy="claude" type="button" aria-label="Copy the Claude Code command"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span class="copy-label">Copy</span></button>
             </div>
             <pre class="code-block"><code>claude mcp add --transport http urumi \
-  <span class="tok-str"><span data-gateway-url>https://dashboard.example.com/mcp</span></span> \
+  <span class="tok-str"><span data-gateway-url>https://dashboard.&lt;apex&gt;/mcp</span></span> \
   --header <span class="tok-str">"Authorization: Bearer &lt;your-api-key&gt;"</span></code></pre>
           </div>
           <div class="snippet" id="pane-inspector" role="tabpanel" aria-labelledby="tab-inspector" data-pane="inspector" hidden>
@@ -334,7 +334,7 @@
               <button class="copy-btn" data-copy="inspector" type="button" aria-label="Copy the MCP Inspector command"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span class="copy-label">Copy</span></button>
             </div>
             <pre class="code-block"><code>npx @modelcontextprotocol/inspector
-<span class="tok-cmt"># URL: <span data-gateway-url>https://dashboard.example.com/mcp</span></span>
+<span class="tok-cmt"># URL: <span data-gateway-url>https://dashboard.&lt;apex&gt;/mcp</span></span>
 <span class="tok-cmt"># Header: Authorization: Bearer &lt;your-api-key&gt;</span></code></pre>
           </div>
           <p class="config-note">The URL is this deployment's real gateway endpoint; the key is the visible placeholder <code>Bearer &lt;your-api-key&gt;</code>, never a real key.</p>
@@ -612,15 +612,15 @@
       <div class="cols3 notes-grid">
         <blockquote class="card note-card" data-io data-spot>
           <p>"Client keys are never forwarded upstream. The gateway uses its own credential."</p>
-          <cite><a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/SYSTEM_DESIGN_AND_TRADEOFFS.md" target="_blank" rel="noopener noreferrer">System design and tradeoffs</a></cite>
+          <cite><a data-repo-path="SYSTEM_DESIGN_AND_TRADEOFFS.md" href="#main" target="_blank" rel="noopener noreferrer">System design and tradeoffs</a></cite>
         </blockquote>
         <blockquote class="card note-card" data-io data-spot>
           <p>"One dead server never takes down the rest."</p>
-          <cite><a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/SYSTEM_DESIGN_AND_TRADEOFFS.md" target="_blank" rel="noopener noreferrer">System design and tradeoffs</a></cite>
+          <cite><a data-repo-path="SYSTEM_DESIGN_AND_TRADEOFFS.md" href="#main" target="_blank" rel="noopener noreferrer">System design and tradeoffs</a></cite>
         </blockquote>
         <blockquote class="card note-card" data-io data-spot>
           <p>"Revoking a key takes effect on the very next call."</p>
-          <cite><a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/THREAT_MODEL.md" target="_blank" rel="noopener noreferrer">Threat model</a></cite>
+          <cite><a data-repo-path="THREAT_MODEL.md" href="#main" target="_blank" rel="noopener noreferrer">Threat model</a></cite>
         </blockquote>
       </div>
     </section>
@@ -633,17 +633,17 @@
         <p>Every claim on this page traces to one of these.</p>
       </header>
       <div class="cols3 docs-grid">
-        <a class="card doc-card" data-io data-spot data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/SYSTEM_DESIGN_AND_TRADEOFFS.md" target="_blank" rel="noopener noreferrer">
+        <a class="card doc-card" data-io data-spot data-repo-path="SYSTEM_DESIGN_AND_TRADEOFFS.md" href="#main" target="_blank" rel="noopener noreferrer">
           <span class="doc-tag">design</span>
           <h3>System design and tradeoffs</h3>
           <span class="doc-arrow" aria-hidden="true">→</span>
         </a>
-        <a class="card doc-card" data-io data-spot data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/THREAT_MODEL.md" target="_blank" rel="noopener noreferrer">
+        <a class="card doc-card" data-io data-spot data-repo-path="THREAT_MODEL.md" href="#main" target="_blank" rel="noopener noreferrer">
           <span class="doc-tag">security</span>
           <h3>Threat model</h3>
           <span class="doc-arrow" aria-hidden="true">→</span>
         </a>
-        <a class="card doc-card" data-io data-spot data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/docs/UPGRADE_ROLLBACK.md" target="_blank" rel="noopener noreferrer">
+        <a class="card doc-card" data-io data-spot data-repo-path="docs/UPGRADE_ROLLBACK.md" href="#main" target="_blank" rel="noopener noreferrer">
           <span class="doc-tag">operations</span>
           <h3>Upgrade and rollback</h3>
           <span class="doc-arrow" aria-hidden="true">→</span>
@@ -676,7 +676,7 @@
       <h2 class="display" data-io>See it running.</h2>
       <div class="closing-actions" data-io>
         <a class="btn-mono" data-link-dashboard href="#main">Open the dashboard<span class="btn-mono-sub">live on this cluster</span></a>
-        <a class="btn-mono" data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">View the repository<span class="btn-mono-sub">every claim has a command</span></a>
+        <a class="btn-mono" data-repo href="#main" target="_blank" rel="noopener noreferrer">View the repository<span class="btn-mono-sub">every claim has a command</span></a>
       </div>
       <a class="btn btn-primary" data-link-store href="#main">Open the store<span class="arrow" aria-hidden="true">→</span></a>
       <p class="hero-note closing-note">The demo includes a live WooCommerce store (a <span data-store-catalog>12-product</span> catalog) and three MCP servers behind the gateway.</p>
@@ -690,14 +690,14 @@
         <h3>Explore</h3>
         <a data-link-dashboard href="#main">Dashboard</a>
         <a data-link-store href="#main">Store</a>
-        <a data-repo href="https://github.com/urumi-ai/mcp-gateway" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a data-repo href="#main" target="_blank" rel="noopener noreferrer">GitHub</a>
       </nav>
       <nav aria-label="Docs">
         <h3>Docs</h3>
-        <a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/README.md" target="_blank" rel="noopener noreferrer">README</a>
-        <a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/docs/DECISIONS.md" target="_blank" rel="noopener noreferrer">Design decisions</a>
-        <a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/THREAT_MODEL.md" target="_blank" rel="noopener noreferrer">Threat model</a>
-        <a data-repo href="https://github.com/urumi-ai/mcp-gateway/blob/landing/SYSTEM_DESIGN_AND_TRADEOFFS.md" target="_blank" rel="noopener noreferrer">System design</a>
+        <a data-repo-path="README.md" href="#main" target="_blank" rel="noopener noreferrer">README</a>
+        <a data-repo-path="docs/DECISIONS.md" href="#main" target="_blank" rel="noopener noreferrer">Design decisions</a>
+        <a data-repo-path="THREAT_MODEL.md" href="#main" target="_blank" rel="noopener noreferrer">Threat model</a>
+        <a data-repo-path="SYSTEM_DESIGN_AND_TRADEOFFS.md" href="#main" target="_blank" rel="noopener noreferrer">System design</a>
       </nav>
       <nav aria-label="Stack">
         <h3>Stack</h3>
@@ -719,6 +719,7 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="/features.js"></script>
+  <script src="/landing-config.js"></script>
   <script src="/main.js"></script>
 </body>
 </html>

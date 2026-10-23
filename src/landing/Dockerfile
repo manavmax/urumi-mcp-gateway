@@ -3,7 +3,7 @@
 # nginx runs as uid 101 via the chart podSecurity and listens on 8080; no root,
 # no CAP_NET_BIND_SERVICE needed.
 FROM nginx:1.27-alpine
-COPY index.html styles.css main.js theme-init.js features.js favicon.svg /usr/share/nginx/html/
+COPY index.html styles.css main.js theme-init.js features.js landing-config.js favicon.svg /usr/share/nginx/html/
 COPY fonts/ /usr/share/nginx/html/fonts/
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8080

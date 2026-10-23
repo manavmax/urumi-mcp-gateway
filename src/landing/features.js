@@ -1,8 +1,10 @@
 // Landing page configuration (ADR-082). The ONLY file you edit to change what
 // the landing page claims about the project. Rebuild the image after editing.
 //
-// repoUrl   shown in the announcement bar and the nav (defaults to the repo URL
-//           from helm/Chart.yaml home; confirm it points at the public repo).
+// repoUrl   EMPTY here on purpose (ADR-088): the repo URL lives in ONE place,
+//           landing.repoUrl in the chart values (defaulted there), which the
+//           landing-config ConfigMap injects into the page as /landing-config.js.
+//           Plain `docker run` (no chart) gets the image default landing-config.js.
 // videoUrl  the optional demo video. EMPTY = the video block stays hidden. When
 //           set, the block renders as a link OUT to the video (never an embed:
 //           the page makes zero external requests by design, ADR-080).
@@ -11,7 +13,7 @@
 //           section is hidden. Flip an item after it actually lands in the
 //           demo, never before: the page must only claim what exists there.
 window.LANDING = {
-  repoUrl: "https://github.com/urumi-ai/mcp-gateway",
+  repoUrl: "",
   // The real gateway URL shown in the hero MCP config. EMPTY (default) = main.js
   // derives it from the page host by prefixing the apex with "dashboard."
   // (dashboard.<apex>/mcp, the same convention the Helm values use), so the
