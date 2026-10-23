@@ -97,6 +97,8 @@ const CONTRAST_SELECTS = [
   ".note-card p", ".note-card cite a", ".doc-tag", ".doc-card h3",
   ".btn-mono", ".footer h3", ".footer nav a", ".footer-project p", ".footer-base p",
   ".node-title", ".node-sub", ".edge-label", ".badge-num",
+  // navigation pills and links, both themes (ADR-087: the nav was the bug report)
+  ".nav .btn-primary", ".nav .btn-secondary", ".nav-links a", ".wordmark",
 ];
 
 const WIDTHS = [
@@ -202,6 +204,56 @@ try {
       c._contrast = `${checked.filter((r) => r.pass).length}/${checked.length}`;
     }
 
+    // nav sheet gate: never visible, never takes space, cannot open on desktop
+    const navState = await page.evaluate(() => {
+      const sheet = document.getElementById("navSheet");
+      const cs = getComputedStyle(sheet);
+      const nav = document.querySelector(".nav").getBoundingClientRect();
+      const first = document.querySelector("main .hero").getBoundingClientRect();
+      return {
+        sheetDisplay: cs.display,
+        sheetAttrHidden: sheet.hidden,
+        sheetH: sheet.getBoundingClientRect().height,
+        contentStartsUnderBar: Math.abs(first.top - nav.bottom) < 2,
+        navH: Math.round(nav.height),
+      };
+    });
+    if (navState.sheetDisplay !== "none" || !navState.sheetAttrHidden || navState.sheetH > 0) {
+      problems(c.name, `nav sheet visible on load: ${JSON.stringify(navState)}`);
+      caseFails++;
+    }
+    if (!navState.contentStartsUnderBar) {
+      problems(c.name, `page content does not start under the bar: hero.top=${navState.contentStartsUnderBar}`);
+      caseFails++;
+    }
+    if (c.width >= 900 && navState.navH !== 64) {
+      problems(c.name, `desktop nav height ${navState.navH}, expected 64`);
+      caseFails++;
+    }
+
+    // hero visibility gates (ADR-087): >=45% of the graphic visible at 1440x900;
+    // headline, buttons and the hero card visible at 390
+    if (c.name === "desktop-dark" || c.name === "desktop-light") {
+      const vis = await page.evaluate(() => {
+        const r = document.getElementById("heroVisual").getBoundingClientRect();
+        return { top: r.top, h: r.height, visible: Math.max(0, window.innerHeight - r.top) / r.height };
+      });
+      if (vis.visible < 0.45) {
+        problems(c.name, `hero graphic only ${(vis.visible * 100).toFixed(1)}% visible at load (top=${vis.top} h=${vis.h})`);
+        caseFails++;
+      }
+    }
+    if (c.name === "mobile-dark" || c.name === "mobile-light") {
+      const mvis = await page.evaluate(() => ({
+        actionsBottom: document.querySelector(".hero-actions").getBoundingClientRect().bottom,
+        terminalTop: document.getElementById("terminal").getBoundingClientRect().top,
+      }));
+      if (mvis.actionsBottom > 844 || mvis.terminalTop > 844) {
+        problems(c.name, `mobile hero: actions bottom=${mvis.actionsBottom}, terminal top=${mvis.terminalTop} (viewport 844)`);
+        caseFails++;
+      }
+    }
+
     // sticky nav: stuck at top and visually scrolled while at 1600px
     await page.evaluate(() => window.scrollTo(0, 1600));
     await page.waitForTimeout(350);
@@ -223,6 +275,21 @@ try {
       caseFails++;
     }
 
+    // dismissing the announcement bar must not break the sticky offset
+    await page.evaluate(() => document.getElementById("announceClose").click());
+    await page.evaluate(() => window.scrollTo(0, 2400));
+    await page.waitForTimeout(250);
+    const sticky2 = await page.evaluate(() => {
+      const h = document.querySelector(".nav");
+      const r = h.getBoundingClientRect();
+      return { top: r.top, announceHidden: document.getElementById("announce").hidden, scrollY: window.scrollY };
+    });
+    if (!sticky2.announceHidden || (sticky2.scrollY > 0 && Math.abs(sticky2.top) > 1)) {
+      problems(c.name, `sticky broken after announcement dismiss: ${JSON.stringify(sticky2)}`);
+      caseFails++;
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+
     // screenshots (reveal everything first: scroll through, settle, return)
     if (c.shots) {
       await page.evaluate(async () => {
@@ -235,6 +302,137 @@ try {
     }
 
     console.log(`${caseFails === 0 ? "OK" : "FAIL"} ${c.name}: theme=${applied} requests=${requests.length} external=${external.length}${c._contrast ? " contrast=" + c._contrast : ""} consoleErrors=${consoleErrors.length}`);
+    fail += caseFails;
+    await ctx.close();
+  }
+
+  // ---------- navigation: sheet routes, trap, lock, contrast (both themes) ----------
+  for (const theme of ["dark", "light"]) {
+    const c = { name: "nav-375-" + theme, width: 375, height: 812, theme };
+    const { ctx, page } = await newCase(c);
+    let caseFails = 0;
+    const sheetClosed = async (label) => {
+      await page.waitForTimeout(420);
+      const st = await page.evaluate(() => {
+        const sheet = document.getElementById("navSheet");
+        return {
+          attr: sheet.hidden,
+          display: getComputedStyle(sheet).display,
+          openClass: sheet.classList.contains("open"),
+          expanded: document.getElementById("navToggle").getAttribute("aria-expanded"),
+          lock: document.documentElement.classList.contains("nav-open"),
+        };
+      });
+      if (!st.attr || st.display !== "none" || st.openClass || st.expanded !== "false" || st.lock) {
+        problems(c.name, `sheet not closed via ${label}: ${JSON.stringify(st)}`);
+        caseFails++;
+      }
+    };
+    // open via the menu button
+    await page.click("#navToggle");
+    await page.waitForTimeout(450);
+    const open = await page.evaluate(() => {
+      const sheet = document.getElementById("navSheet");
+      return {
+        expanded: document.getElementById("navToggle").getAttribute("aria-expanded"),
+        display: getComputedStyle(sheet).display,
+        opacity: getComputedStyle(sheet).opacity,
+        lock: document.documentElement.classList.contains("nav-open"),
+        focusIn: sheet.contains(document.activeElement),
+      };
+    });
+    if (open.expanded !== "true" || open.display === "none" || open.opacity !== "1" || !open.lock || !open.focusIn) {
+      problems(c.name, `open state wrong: ${JSON.stringify(open)}`);
+      caseFails++;
+    }
+    // body scroll is locked while open
+    await page.evaluate(() => window.scrollTo(0, 300));
+    const scrollY = await page.evaluate(() => window.scrollY);
+    if (scrollY !== 0) { problems(c.name, `scroll lock failed: scrollY=${scrollY}`); caseFails++; }
+    // contrast of the pills inside the OPEN sheet
+    const sheetChecked = await page.evaluate(`(() => { ${EVAL_SRC}; return window.__check(${JSON.stringify([".nav-sheet-actions .btn-primary", ".nav-sheet-actions .btn-secondary", ".sheet-links a"])}); })()`);
+    const badSheet = sheetChecked.filter((r) => !r.pass);
+    if (badSheet.length) {
+      problems(c.name + " contrast", "open sheet: " + badSheet.map((b) => `${b.sel} ${b.ratio}<${b.need}`).join(", "));
+      caseFails++;
+    }
+    // focus trap: 12 tabs stay inside
+    for (let i = 0; i < 12; i++) await page.keyboard.press("Tab");
+    const trapOk = await page.evaluate(() => document.getElementById("navSheet").contains(document.activeElement));
+    if (!trapOk) { problems(c.name, "focus escaped the sheet while tabbing"); caseFails++; }
+    // close via Escape, focus returns to the menu button
+    await page.keyboard.press("Escape");
+    await sheetClosed("Escape");
+    const focusBack = await page.evaluate(() => document.activeElement === document.getElementById("navToggle"));
+    if (!focusBack) { problems(c.name, "focus did not return to the menu button"); caseFails++; }
+    // close via the close button
+    await page.click("#navToggle");
+    await page.waitForTimeout(450);
+    await page.click("#navSheetClose");
+    await sheetClosed("close button");
+    // close via choosing a link, which also scrolls to the section
+    await page.click("#navToggle");
+    await page.waitForTimeout(450);
+    await page.click('.sheet-links a[href="#security"]');
+    await page.waitForTimeout(700);
+    await sheetClosed("link click");
+    const sec = await page.evaluate(() => document.getElementById("security").getBoundingClientRect().top);
+    if (Math.abs(sec) > 90) { problems(c.name, `sheet link did not scroll: #security top=${sec}`); caseFails++; }
+    // close by resizing to desktop, where the sheet can never render
+    await page.click("#navToggle");
+    await page.waitForTimeout(450);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(250);
+    const desktopState = await page.evaluate(() => ({
+      attr: document.getElementById("navSheet").hidden,
+      display: getComputedStyle(document.getElementById("navSheet")).display,
+      lock: document.documentElement.classList.contains("nav-open"),
+      menuBtnGone: document.getElementById("navToggle").offsetParent === null,
+    }));
+    if (!desktopState.attr || desktopState.display !== "none" || desktopState.lock || !desktopState.menuBtnGone) {
+      problems(c.name, `resize to desktop did not close/hide: ${JSON.stringify(desktopState)}`);
+      caseFails++;
+    }
+    console.log(`${caseFails === 0 ? "OK" : "FAIL"} ${c.name}: sheet routes, trap, lock, contrast ${sheetChecked.filter((r) => r.pass).length}/${sheetChecked.length}`);
+    fail += caseFails;
+    await ctx.close();
+  }
+
+  // ---------- scroll-spy: sliding highlight follows the section in view ----------
+  {
+    const c = { name: "nav-spy", width: 1440, height: 900, theme: "dark" };
+    const { ctx, page } = await newCase(c);
+    let caseFails = 0;
+    await page.evaluate(() => document.getElementById("security").scrollIntoView({ behavior: "instant" }));
+    await page.waitForTimeout(900);
+    const s1 = await page.evaluate(() => {
+      const active = document.querySelector(".nav-links a.active");
+      const glide = document.getElementById("navGlide");
+      const cs = getComputedStyle(glide);
+      const link = document.querySelector('.nav-links a[data-spy="security"]');
+      const m = /matrix\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*([^,]+)/.exec(cs.transform);
+      return {
+        active: active ? active.getAttribute("data-spy") : null,
+        current: active ? active.getAttribute("aria-current") : null,
+        glideW: parseFloat(glide.style.width),
+        glideX: m ? Math.round(parseFloat(m[1])) : null,
+        linkLeft: link.offsetLeft,
+        glideOpacity: cs.opacity,
+      };
+    });
+    if (s1.active !== "security" || s1.current !== "true" || !s1.glideW || s1.glideX === null ||
+        Math.abs(s1.glideX - s1.linkLeft) > 2 || s1.glideOpacity !== "1") {
+      problems(c.name, `security not highlighted: ${JSON.stringify(s1)}`);
+      caseFails++;
+    }
+    await page.evaluate(() => document.getElementById("kubernetes").scrollIntoView({ behavior: "instant" }));
+    await page.waitForTimeout(900);
+    const s2 = await page.evaluate(() => {
+      const active = document.querySelector(".nav-links a.active");
+      return { active: active ? active.getAttribute("data-spy") : null };
+    });
+    if (s2.active !== "kubernetes") { problems(c.name, `kubernetes not highlighted: ${JSON.stringify(s2)}`); caseFails++; }
+    console.log(`${caseFails === 0 ? "OK" : "FAIL"} nav-spy: security->${s1.active} kubernetes->${s2.active} glideX=${s1.glideX}`);
     fail += caseFails;
     await ctx.close();
   }
@@ -367,11 +565,43 @@ try {
     } else {
       problems(c.name, `hero visual box unusable: ${JSON.stringify(hero)}`);
     }
+
+    // packet visibility regression gate: packets must actually paint (the CSS
+    // opacity:0 rule used to override the per-frame opacity attribute)
+    let maxOp = 0, halos = 0, cores = 0;
+    for (let i = 0; i < 6; i++) {
+      const s = await page.evaluate(() => {
+        let mx = 0, h = 0, c = 0;
+        document.querySelectorAll("#hvPackets circle").forEach((el) => {
+          const op = parseFloat(el.getAttribute("opacity") || "0");
+          if (op > mx) mx = op;
+          if (el.classList.contains("pkt-halo")) h++; else c++;
+        });
+        return { mx, h, c };
+      });
+      maxOp = Math.max(maxOp, s.mx); halos = s.h; cores = s.c;
+      await page.waitForTimeout(300);
+    }
+    if (cores === 0 || maxOp < 0.5) { problems(c.name, `packets not painting: cores=${cores} maxOpacity=${maxOp}`); }
+    if (halos !== cores) { problems(c.name, `packet halo trail missing: cores=${cores} halos=${halos}`); }
+
+    // hero decor gates: planes subdued, dashed lines strong enough to see
+    const decor = await page.evaluate(() => {
+      const a = getComputedStyle(document.querySelector(".hv-plane-a rect")).opacity;
+      const b = getComputedStyle(document.querySelector(".hv-plane-b rect")).opacity;
+      const stroke = getComputedStyle(document.querySelector(".hv-path")).stroke;
+      const m = /rgba?\([^)]*?,\s*([\d.]+)\)/.exec(stroke);
+      return { a: parseFloat(a), b: parseFloat(b), strokeAlpha: m ? parseFloat(m[1]) : 0 };
+    });
+    if (decor.a > 0.35 || decor.b > 0.35) { problems(c.name, `planes too strong: ${JSON.stringify(decor)}`); }
+    if (decor.strokeAlpha < 0.25) { problems(c.name, `hero lines too faint: strokeAlpha=${decor.strokeAlpha}`); }
+    console.log(`hero decor: planeA=${decor.a} planeB=${decor.b} strokeAlpha=${decor.strokeAlpha} packets(maxOp=${maxOp.toFixed(2)}, cores=${cores}, halos=${halos})`);
     await ctx.close();
   }
 
   // ---------- reduced motion: animations stop, final values appear ----------
   {
+    const failBefore = fail;
     const c = { name: "reduced-motion", width: 1440, height: 900, theme: "dark" };
     const { ctx, page, requests, consoleErrors } = await newCase(c, { reducedMotion: "reduce" });
     const external = requests.filter((u) => !u.startsWith(URL_BASE));
@@ -395,7 +625,24 @@ try {
     if (rm.termCall !== "visible" || rm.termAnswer !== "visible") problems(c.name, `terminal final values hidden: ${rm.termCall}/${rm.termAnswer}`);
     if (rm.lit < rm.nodes) problems(c.name, `diagram not fully lit: ${rm.lit}/${rm.nodes}`);
     if (rm.url === "") problems(c.name, "typing url widget empty under reduced motion");
-    console.log(`${fail === 0 ? "OK" : "FAIL"} reduced-motion: packets=${rm.packets} marquee=${rm.marquee} stat="${rm.stat}" lit=${rm.lit}/${rm.nodes}`);
+
+    // sliding highlight: no animation under reduced motion, still positioned
+    await page.evaluate(() => document.getElementById("security").scrollIntoView());
+    await page.waitForTimeout(500);
+    const rmSpy = await page.evaluate(() => {
+      const g = document.getElementById("navGlide");
+      const active = document.querySelector(".nav-links a.active");
+      return {
+        dur: getComputedStyle(g).transitionDuration,
+        transform: getComputedStyle(g).transform,
+        active: active ? active.getAttribute("data-spy") : null,
+      };
+    });
+    if (!(parseFloat(rmSpy.dur) < 0.001)) problems(c.name, `glide transition not disabled: ${rmSpy.dur}`);
+    if (rmSpy.active !== "security" || rmSpy.transform === "none") {
+      problems(c.name, `glide not positioned without animation: ${JSON.stringify(rmSpy)}`);
+    }
+    console.log(`${fail === failBefore ? "OK" : "FAIL"} reduced-motion: packets=${rm.packets} marquee=${rm.marquee} stat="${rm.stat}" lit=${rm.lit}/${rm.nodes} glideDur=${rmSpy.dur}`);
     await ctx.close();
   }
 } finally {
