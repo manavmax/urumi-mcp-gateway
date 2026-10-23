@@ -158,3 +158,41 @@ STORE_URL=http://localhost:18088 node scripts/verify-store-contrast.mjs
 - Post-photo re-measurement of page weight (tiles will add ~300-600 KB
   fetched; the 800 KB home budget needs re-checking then - see
   docs/REVIEW_NEEDED_STORE.md).
+
+## What ran on the LOCAL KIND CLUSTER after the photo pass (2026-10-23)
+
+Real runs against `http://store.127.0.0.1.nip.io` (context kind-urumi only):
+
+| Check | Result |
+| --- | --- |
+| Photo pipeline (scripts/process-photos.py) | 37 Unsplash photos downloaded at w=1600 with the download_location ping; 66 files shipped (29 mains + 29 detail crops + hero + editorial + 6 banners); every product file <= 150 KB (webp q80..q60); manifest + docs/IMAGE_CREDITS.md + two contact sheets written |
+| store-assets image rebuilt + imported (make store-assets-image, DOCKER_CONTEXT=colima) | loaded into urumi-control-plane; WordPress rollout restarted |
+| helm upgrade (make helm-local) | wp-setup hook re-ran: backfilled images to the 29 catalog products (create-only; the 7 removed SKUs were never re-created because products.json no longer lists them) |
+| make demo-reset CONFIRM=yes (after fixing the confirmed-run media-step bug, `run_media` arg) | 42 -> 29 products: deleted the 7 photo-cut SKUs + 6 legacy URUMI-* products, 1 test order, 14 orphan media, non-admin demo users/keys; kept = exactly the 29 manifest SKUs + 58 media |
+| REST catalog (verify-store-v2.mjs rest --expect 28) | 10/10 PASS: count=29, every product has >= 1 image, 29/29 have 2+ images, sale present, OOS SKUs match catalog (new catalog-driven check), weight/dims/tags 29/29, 6 variable with 15 variations |
+| WCAG contrast gate over the photo hero (verify-store-contrast.mjs) | PASS on all sampled pages/states - the lifestyle-08 hero with the 20 percent veil meets AA, so the designated backup (lifestyle 02) stays unused |
+| /image-credits/ page | 200 with 66 per-photo credit rows from the committed manifest |
+| Hero + category banner rendering | home serves images/hero.webp (no beige fallback); ceramics archive serves banner-ceramics.webp via the new urumi-store/category-banner block |
+| Shop grid | tiles serve the sideloaded webp with WP-generated 300/150/100 srcset derivatives |
+| Home doc weight | 88 KB HTML (doc only; the browser-measured full-weight re-check is pending the eyeball pass) |
+| demo-reset final 3-upstream verification | FAILS on the bonus multi-store upstreams: gate-alpha/gate-bravo MCP + WordPress time out at connect level from the urumi gateway pod while their pods report Running (20h). Pre-existing cross-namespace networking issue in those namespaces - this pass touched no NetworkPolicy and only LOWERED cpu requests. Store-side reset (products/media/users) completed before that check. |
+
+Known issue fixed on the way: Kubernetes defaults a container's unspecified
+request to its LIMIT, so the wp-setup job's "memory-only request + 300m cpu
+limit" shape still requested 300m cpu and the hook pod could never schedule on
+this 2-CPU node (99% requested by all namespaces incl. the bonus stores).
+helm/values-local.yaml now states explicit 10m requests for the job (and for
+the WordPress pod, whose 100m request could not roll a surge pod either). The
+stuck pending-upgrade release was completed with a no-hook rollback to the
+same revision, then the upgrade re-ran to deployed (rev 38).
+
+Reproduce:
+
+```sh
+kubectl config use-context kind-urumi
+make store-assets-image && kubectl rollout restart deployment/urumi-wordpress -n urumi
+make helm-local
+make demo-reset CONFIRM=yes
+V2_CK=... V2_CS=... STORE_URL=http://store.127.0.0.1.nip.io node scripts/verify-store-v2.mjs rest --expect 28
+STORE_URL=http://store.127.0.0.1.nip.io node scripts/verify-store-contrast.mjs
+```
