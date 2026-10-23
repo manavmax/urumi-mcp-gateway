@@ -1,39 +1,45 @@
-# Image credits - Loam & Ember store (store v2)
+# Image credits - Loam & Ember store
 
-**Every image in `store/images/` is original artwork generated for this
-project** by `scripts/gen-store-images.py` (Pillow). There are no third-party
-assets, no stock photography, no AI-upscaled or scraped images, no logos, no
-photographs of people, and no likenesses of identifiable people.
+**Status: photography pending curation.** The previous pass shipped original
+generated artwork; that artwork is retired (docs/DECISIONS.md ADR-076) and
+every product photograph is now sourced from **Unsplash** under the
+**Unsplash License** (free to use, commercial and non-commercial, no
+permission needed; https://unsplash.com/license).
 
-## How the artwork is made
+The session that rebuilt this theme could not view images, so per its brief
+it did NOT choose photographs (docs/DECISIONS.md ADR-078). Until curation
+runs:
 
-- Flat illustrated product renders drawn programmatically with Pillow:
-  parametric shape functions (vessels, bowls, plates, folded textiles, candles,
-  bags, boards and so on) composed in a 0-100 unit space at 1000x1000 px.
-- Palettes are derived from the theme's category tints (docs/STORE_DESIGN.md);
-  light direction, contact shadow and a subtle vignette are applied uniformly.
-- Per SKU the generator writes:
-  - `<SKU>.png` main tile,
-  - `<SKU>-2.png` alternate composition on a tinted ground,
-  - `<SKU>-3.png` detail crop (quantised PNG-8),
-  - `<SKU>-4.png` context scene (featured/new products only),
-  - `<SKU>-cutout.png` transparent cutout for the hero and category tiles.
-- Existing files are never regenerated unless `--force` is passed.
+- `store/images/` contains no photographs (the seed attaches no images and
+  the storefront shows neutral placeholder frames), and
+- this file and the storefront `/image-credits/` page carry the licence and
+  sourcing rules only, no per-photo rows.
 
-## License
+## How credits are produced (after curation)
 
-Original work created for this repository. To the extent any copyright can
-subsist in programmatically generated flat illustration, it is held by this
-project and the repository's license applies. No attribution is required
-beyond this note.
+1. `scripts/fetch-unsplash.py` caches API searches (gitignored) and never
+   prints the Access Key (`.unsplash_key`, gitignored, read only inside
+   scripts).
+2. A curator picks photos from the candidate sheets
+   (`artifacts/store-photos/sheets/`), writing
+   `artifacts/store-photos/choices.json` (gitignored).
+3. `scripts/process-photos.py` downloads each chosen photo (calling its
+   `links.download_location` endpoint first, as Unsplash requires), crops
+   4:5 at 1200px, encodes webp q80 under 150KB, and then rewrites:
+   - `artifacts/store-photos/manifest.json` (working copy, gitignored)
+   - `store/photos-manifest.json` (committed copy; ships in the store-assets
+     image and renders the `/image-credits/` page)
+   - this file, `docs/IMAGE_CREDITS.md`, with one row per shipped file
+   - `artifacts/store-photos/contact-sheet.png` (gitignored) for review
 
-## Budgets (verified 2026-10-22)
+## Per-photo table
 
-- 155 PNG files, longest side 1000 px (<= the 1000 px cap).
-- Total 1.9 MB (<= the 12 MB cap); no single file over 120 KB.
-- Images ship inside the store-assets image and are sideloaded from local
-  files by the wp-setup seed; the storefront makes zero external image
-  requests (offline at runtime, verified by the zero-third-party gate).
+| File | SKU | Photographer | Photo | Licence |
+| --- | --- | --- | --- | --- |
 
-To regenerate: `python3 scripts/gen-store-images.py [--force]` (needs Pillow;
-the repo's usual venv has it).
+(Empty until curation. Every shipped photograph will carry: no identifiable
+faces, no visible text or logos, no brand names, no watermarks -
+docs/STORE_DESIGN.md section 6.)
+
+The storefront footer links "Photography from Unsplash." to
+`/image-credits/`.

@@ -7,5 +7,6 @@
 FROM alpine:3.20
 RUN mkdir -p /assets/themes
 COPY products.json /assets/products.json
+COPY photos-manifest.json /assets/photos-manifest.json
 COPY images /assets/images
 COPY theme/urumi-store /assets/themes/urumi-store

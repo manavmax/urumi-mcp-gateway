@@ -802,6 +802,13 @@ spec:
                   --allow-root --path=$WP_PATH
                 echo "  created Shipping and returns page."
               fi
+              echo "Ensuring Photography credits page..."
+              if [ -z "$(wp post list --post_type=page --name=image-credits --field=ID --format=ids --allow-root --path=$WP_PATH 2>/dev/null)" ]; then
+                wp post create --post_type=page --post_status=publish --post_title="Photography credits" --post_name=image-credits \
+                  --post_content="Photography credits" \
+                  --allow-root --path=$WP_PATH
+                echo "  created Photography credits page."
+              fi
 
               # Primary menu: Shop + the four categories, assigned to the `primary`
               # location (registered in the theme's functions.php).

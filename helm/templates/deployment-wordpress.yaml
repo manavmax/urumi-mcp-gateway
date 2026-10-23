@@ -50,6 +50,7 @@ spec:
               # this copy is mandatory on every pod start.
               cp -rf /assets/themes/urumi-store/. /var/www/html/wp-content/themes/urumi-store/
               cp -f /assets/products.json /var/www/html/wp-content/store/products.json
+              cp -f /assets/photos-manifest.json /var/www/html/wp-content/store/photos-manifest.json
               cp -rf /assets/images/. /var/www/html/wp-content/store/images/
               echo "store assets copied."
           volumeMounts:
