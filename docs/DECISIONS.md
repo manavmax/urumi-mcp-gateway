@@ -1083,3 +1083,65 @@ been chosen yet (ADR-078).
 page rendered from a committed manifest keeps credits in sync with the shipped
 image without a second seeding path, and makes the curation pass purely
 mechanical: run the pipeline, commit the manifest, rebuild the image.
+
+## 2026-10-23: Photo pass applied; catalogue cut to 29 products (ADR-082)
+
+**Decision.** The reviewer's sheet selections (artifacts/store-photos/choices.json,
+gitignored) are applied verbatim: hero = lifestyle 08 (backup lifestyle 02, held for
+the contrast gate), editorial = lifestyle 04, six category banners, and 29 product
+photos - every chosen photo used exactly once (38 unique Unsplash photo ids; banner
+photos are never product photos; flagship products get the first photo of their
+category list). The catalogue is cut from 36 to 29 products because the photo
+selection cannot fill every product honestly. Exactly these 7 products are REMOVED
+(live-store migration: a fresh seed never creates them; the regenerated
+scripts/demo-seeds.json keep-manifest, ADR-073, makes the next `make demo-reset`
+delete them from the live store along with their orphaned media):
+
+- LOAM-CER-005 Stoneware Teapot - no teapot photograph exists in the reviewer's
+  ceramics selection (mug/bowl/vase sheets only); showing another ceramic as a
+  teapot would break the "never show a different product than the one named" rule.
+- LOAM-CER-006 Spoon Rest - same: no spoon-rest photo; it was also one of the two
+  out-of-stock products, so the catalogue no longer carries a sold-out example.
+- LOAM-CND-004 Hand Soap Bar and LOAM-CND-006 Incense Holder - the candle pool has
+  exactly 4 usable photos (5 selected minus the banner) and the brief caps candles
+  at 3-4 products; the two jar candles and the scent-line extras (wax melts, room
+  mist) keep the strongest photo-product fit.
+- LOAM-DSK-003 Pencil Pouch and LOAM-DSK-004 Desk Tray - the desk pool has only 3
+  product photos after the banner (4 selected minus the banner), and all desk
+  photos are cropped to the notebook/pen area per the reviewer note; a waxed-canvas
+  pouch and an ash tray have no matching content in them.
+- LOAM-DSK-006 Letter Writing Set - the third desk drop (only 3 desk photos); it
+  was the other out-of-stock product.
+
+The wp-setup seed needs no code change for the removal: it creates exactly what
+products.json lists. Desk photos carry a 1.3x centre zoom crop (and the desk banner
+a tighter wide crop) to obey "crop to notebook/pen only; crop out laptops, earbuds,
+phones" - applied blind (that pass could not view images) and flagged for an eyeball
+check on artifacts/store-photos/contact-sheet-products.png. products.json now
+references <SKU>.webp + one <SKU>-2.webp detail crop per product, carries the
+hero/editorial entries, and each category carries "image": banner-<slug>.webp.
+verify-store-v2.mjs's out-of-stock check is now catalog-driven (live OOS SKUs must
+equal products.json OOS SKUs) instead of requiring >= 1 OOS product, which the cut
+made false.
+
+**Why.** Every removed product is one the reviewer's selection cannot photograph
+honestly; filling the gaps by reusing photos would break the one-photo-once rule
+and the "never show a different product" design rule. 29 products sits inside the
+28-32 target with 6 variable, 6 featured, 6 new and 4 on-sale products.
+
+## 2026-10-23: Category banners ship as files + one theme block (ADR-083)
+
+**Decision.** Each products.json category carries "image": banner-<slug>.webp
+(processed wide crop, 1600x640 target, <=220KB, gitignored choices -> committed
+manifest/credits). A new dynamic block urumi-store/category-banner renders it at
+the top of taxonomy-product_cat.html (align full, eager, honest alt from the
+catalog), falling back to the previous archive head when a category has no image
+file. No seed change: like the hero and editorial photos, banners are read from
+wp-content/store/images/ files by the theme, so they ship entirely inside the
+store-assets image (ADR-081 path). Theme version bumped to 3.1.0 for cache
+busting; the store-assets image keeps its 0.1.0 local tag (import + pod restart
+lands the new content, per the Makefile comment).
+
+**Why.** The six banners are static files, so the one-image, one-file theme
+pattern (hero/editorial) extends with zero new seeding or REST surface; the
+idempotent seed contract stays untouched.

@@ -1,112 +1,77 @@
-# Review needed (store v2 photo-first pass) - for Manav
+# Store photo pass - applied, ready for your eyeball review
 
-## READ THIS FIRST: I could not view images this session
+The reviewer's selections (index numbers on `artifacts/store-photos/sheets/`)
+have been applied end to end on `store-v2`: curation file, pipeline run,
+catalogue cut, banner support, local kind deploy. **The session that applied
+them could not view images** (the read tool rejects image input for this
+model), so the mechanical work is done and verified, but three things below
+genuinely need your eyes.
 
-The model running this pass cannot view images (the read tool rejects image
-input for it). Per your instruction ("if you cannot, build everything except
-the photo selection, say so at the top of your report, and stop. Do not pick
-photos blindly"), I:
+## 1. What was applied (no photo choices made by the machine)
 
-- did NOT choose any photograph,
-- did NOT rebuild product names/descriptions from photos,
-- did NOT eyeball any screenshot or candidate sheet.
+- `artifacts/store-photos/choices.json` (gitignored) records the selection
+  verbatim: your index numbers per sheet, hero = lifestyle 08, banners per
+  category, and the product assignment (flagship gets the first photo of its
+  list; banner photos never used as product photos; 38 unique Unsplash photo
+  ids, zero duplicates, zero banner/product overlap).
+- `scripts/process-photos.py` ran for real: 37 photos downloaded at w=1600
+  with the Unsplash `download_location` ping (cached flags make re-runs
+  ping-free), 4:5 grid crops at 960x1200, webp q80->q60 under 150 KB per
+  product file, hero.webp wide crop, 6 banner-<slug>.webp wide crops,
+  editorial.webp, `store/photos-manifest.json`, `docs/IMAGE_CREDITS.md`, and
+  TWO review sheets (item 2).
+- The catalogue is cut from 36 to 29 products (target 28-32; candles capped at
+  4): ceramics 4, textiles 6, candles-care 4, desk-paper 3, kitchen 6, carry 6.
+  The 7 removed products and the reasons are in docs/DECISIONS.md (ADR-082) -
+  exactly: LOAM-CER-005, LOAM-CER-006, LOAM-CND-004, LOAM-CND-006,
+  LOAM-DSK-003, LOAM-DSK-004, LOAM-DSK-006.
+- `scripts/demo-seeds.json` regenerated (29 parent SKUs): the next
+  `make demo-reset` deletes the removed products from the live store; a fresh
+  seed never creates them.
+- Category banners: new `urumi-store/category-banner` theme block renders
+  `banner-<slug>.webp` at the top of each category archive (ADR-083); no seed
+  change - banners are files like the hero.
+- Deployed to the LOCAL kind cluster (context kind-urumi only): store-assets
+  image rebuilt, WordPress rolled, wp-setup re-attached images, demo reset
+  removed the 7 SKUs. Nothing pushed; main untouched.
 
-Everything else is built, committed in small steps on `store-v2`, and
-verified with real runs (details below and in docs/STORE_VERIFY.md). The
-photo step is prepared end to end and should take a photo-capable session (or
-you) under an hour.
+## 2. REVIEW WITH YOUR EYES (the machine could not see)
 
-## 1. What is ready for photo curation
+1. **Desk crops**: every desk product photo and the desk banner carry a
+   centre zoom crop (1.3x main, tighter for the banner) intended to satisfy
+   "crop to notebook/pen only; crop out laptops, earbuds, phones" - applied
+   blind. Check `artifacts/store-photos/contact-sheet-products.png`
+   (LOAM-DSK-001/002/005) and `contact-sheet-hero-banners.png` (desk banner).
+   If a crop still shows tech, adjust the "zoom" value in choices.json and
+   re-run the pipeline (cached downloads make this cheap).
+2. **Hero AA contrast**: the headline now sits on the lifestyle-08 photograph
+   behind the 20 percent veil. Run the contrast gate
+   (`node scripts/verify-store-contrast.mjs` against the store URL); if it
+   fails, switch the hero to the designated backup (lifestyle 02) by editing
+   choices.json's "hero" and re-running.
+3. **Photo/product matches the alt text flagged**: Unsplash alt text is often
+   wrong, and the reviewer selected from the sheets, not the alt text - but
+   three pairings looked odd on paper and are worth a glance on the products
+   sheet: KIT-001 Serving Board (kitchen 00), CAR-005/006 (carry 20/18), and
+   DSK-001 Notebook (desk 11). Swap only if the photo truly shows the wrong
+   object; swap within the same category pool to keep one-photo-once.
 
-- `artifacts/store-photos/cache/search-*.json`: 10 cached Unsplash searches
-  (ceramics x3, textiles x2, candles, desk, kitchen board, carry, lifestyle),
-  30 portrait, high-content-filter results each. Cached = no API budget spent
-  on re-runs (50 req/h demo limit).
-- `artifacts/store-photos/sheets/sheet-*.jpg`: candidate sheets, 24 per query
-  with index numbers ([NN]) and descriptions.
-- `scripts/fetch-unsplash.py`: reads `.unsplash_key` only inside the script
-  (never printed; the file is gitignored in .gitignore AND .git/info/exclude).
-- Curation workflow: pick per category from the sheets, write
-  `artifacts/store-photos/choices.json` (format documented at the top of
-  `scripts/process-photos.py`), then run
-  `python3 scripts/process-photos.py` (needs Pillow; a venv with it lives at
-  /var/folders/wp/mfjhmzgj5vx35659rm6y4v2m0000gn/T/kilo/venv-img or pip install pillow).
-  It downloads at w=1600 with the download_location ping, crops 4:5 at
-  1200px, encodes webp q80 <=150KB, writes the gallery detail crops, the
-  manifest (artifacts + committed store/photos-manifest.json),
-  docs/IMAGE_CREDITS.md rows and the contact sheet at
-  artifacts/store-photos/contact-sheet.png.
-- After curation: rebuild products.json FROM the photos (names for what the
-  photo shows, 24-32 products, 4 variable), run
-  `python3 scripts/regen-demo-seeds.py`, then the seed picks the .webp files
-  up automatically (defaults to <SKU>.webp).
+## 3. Pipeline notes
 
-## 2. Interim state you will see at http://localhost:18088 (compose stack left running)
+- Re-running: `pip` env with Pillow at
+  /var/folders/wp/mfjhmzgj5vx35659rm6y4v2m0000gn/T/kilo/venv-img/bin/python,
+  then `/…/python scripts/process-photos.py`. Downloads are cached in
+  `artifacts/store-photos/cache/grabs-full/`; the ping fires once per photo.
+- One pre-existing bug fixed on the way: `write_credits()` read a key
+  (`photo_page`) that entries never carried - the credits writer had never
+  actually run before this pass.
+- The desk "zoom" support is generic: any choices.json entry (product, banner,
+  hero, editorial) accepts `"zoom": <float>` for a tighter centre crop.
 
-- 36 products (old v2 names/copy, one invented origin claim removed), no
-  photographs: neutral beige tile frames, dark warm hero ground with the
-  white headline, all-AA verified.
-- Theme fully rebuilt to docs/STORE_DESIGN.md: warm neutrals, Newsreader
-  Variable + Hanken Grotesk Variable (self-hosted, OFL, docs/FONT_CREDITS.md),
-  sharp corners, no shadows, no accent colour, hairlines, outline/solid/text
-  buttons, 44px inputs, vertical PDP thumbs, mobile full-screen menu overlay,
-  reduced-motion support, 4/3/2 responsive grids, sticky header with
-  Collections dropdown.
-- Footer: four columns, "A demo store. No real orders are shipped.",
-  "Photography from Unsplash." -> /image-credits/ (200, licence copy; fills
-  from store/photos-manifest.json after curation).
+## 4. Watch-outs that still stand (from the previous pass)
 
-## 3. Real-run verification results (docs/STORE_VERIFY.md has the table)
-
-- Fresh wp-setup 54 s; second run idempotent: created=0 kept=36, 45 s.
-- e2e COD checkout green through the block checkout; order visible via REST
-  with payment_method=cod.
-- 91/93 harness checks pass. The 2 fails are the known cosmetic Woo
-  ResizeObserver console warnings (block cart/checkout), unchanged from the
-  previous pass.
-- WCAG gate passes every rest/hover/focus sample after fixes (ADR-080 logs
-  the two token deviations: neutral-4 for struck prices and sold-out flags;
-  dark hero ground before photos).
-- Zero third-party requests on every page; no horizontal overflow; home
-  470 KB (gate: 800 KB) without photos; demo-reset dry-run: 36 KEEP,
-  0 product deletions.
-- 19 screenshots at 1440 + 390 in artifacts/store-v2-shots (gitignored) -
-  UNREVIEWED BY EYE by me; a human pass over them would confirm the "looks"
-  side.
-
-## 4. Watch-outs after photos land
-
-- Re-measure home weight with tiles fetching real variants; if it drifts
-  over 800 KB, tighten the WP image quality filter (functions.php) or encode
-  the 600px variants harder (pipeline ceiling is a one-line change).
-- Re-run the contrast gate: the hero headline will sit on a real photograph
-  plus the 20 percent veil; verify AA on the chosen hero (spec requires it).
-- The harness rotates the Woo key on every wp-setup run (no K8s Secret in
-  compose); in-cluster the woo-secrets Secret prevents this - unchanged.
-
-## 5. Files touched outside the store layer (flagged per your instruction)
-
-- helm/templates/jobs/wp-setup.yaml (the ONE file, ADR-071 pattern): image
-  fallback .png -> .webp; new Photography credits page. Idempotency verified.
-- helm/templates/deployment-wordpress.yaml: one added `cp` line in the
-  store-assets initContainer (photos-manifest.json), same ADR-038 semantics.
-- No src/gateway, src/dashboard, src/woo-mcp change. Nothing pushed, nothing
-  merged, main untouched, no cluster/kubectl/helm-release touched (only
-  read-only `helm template` for the harness render).
-
-## 6. Suggested image tag for the store-assets image (current, photo-less)
-
-`urumi/store-assets:3.0.0-<sha of this branch head>` (built from store/ with
-the usual make target; ships theme + fonts + products.json + photos-manifest).
-After curation, rebuild as `urumi/store-assets:3.1.0-<sha>` (photos included)
-- do not reuse the 3.0.0 tag for a different content set.
-
-## 7. Honest remaining weaknesses
-
-- Product copy still describes the v2 objects; it will be rewritten FROM the
-  chosen photos (that step is inherently photo-dependent).
-- The 36-product interim catalogue means categories carry uneven tile counts
-  after the rebuild to 24-32; re-run regen-demo-seeds.py then.
-- The contact sheet script exists but has no real photos to compose yet.
-- Two cosmetic Woo console warnings remain (item 3 above); not fixable
-  without patching Woo block internals.
+- Re-measure home weight with real photos; the 800 KB gate held in the
+  post-deploy check (see docs/STORE_VERIFY.md for the run numbers).
+- The 2 cosmetic Woo ResizeObserver console warnings remain (block cart).
+- The harness rotates the Woo key on every wp-setup run in compose; in-cluster
+  the woo-secrets Secret prevents this - unchanged.
