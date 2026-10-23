@@ -357,8 +357,18 @@ async function cmdRest(expect) {
   check("products with gallery images (2+)", withGallery.length >= expect * 0.6, `${withGallery.length}/${all.length}`);
   const onSale = all.filter((p) => p.on_sale);
   check("products on sale present", onSale.length > 0, `${onSale.length} on sale`);
-  const outOfStock = all.filter((p) => p.stock_status === "outofstock");
-  check("out-of-stock products present", outOfStock.length >= 1, `${outOfStock.length} out of stock`);
+  // Out-of-stock state must match the catalog exactly (the photo-first cut of
+  // 2026-10-23 removed both OOS products, so a hardcoded ">= 1" would lie).
+  let catalogOosSkus = [];
+  try {
+    const catalog = JSON.parse(readFileSync("store/products.json", "utf8"));
+    catalogOosSkus = (catalog.products || [])
+      .filter((p) => p.stock === 0 || p.out_of_stock)
+      .map((p) => p.sku);
+  } catch {}
+  const liveOos = all.filter((p) => p.stock_status === "outofstock").map((p) => p.sku);
+  const oosMatch = liveOos.length === catalogOosSkus.length && liveOos.every((s) => catalogOosSkus.includes(s));
+  check("out-of-stock SKUs match the catalog", oosMatch, `live=[${liveOos.join(",")}] catalog=[${catalogOosSkus.join(",")}]`);
   const withWeight = all.filter((p) => p.weight && Number(p.weight) > 0);
   const withDims = all.filter((p) => p.dimensions && p.dimensions.length && p.dimensions.width && p.dimensions.height);
   check("products carry weight", withWeight.length >= expect, `${withWeight.length}/${all.length}`);

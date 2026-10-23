@@ -1,221 +1,180 @@
 {
-  "note": "Keep manifest for make demo-reset (ADR-032, regenerated for the Loam & Ember catalog per ADR-073). Any product whose SKU is NOT in this list is deleted; orders are always removed. Edit deliberately, together with store/products.json.",
+  "note": "Keep-manifest for make demo-reset (ADR-032/073). Regenerate with scripts/regen-demo-seeds.py after rebuilding products.json. Any product NOT listed here is deleted by the demo reset; the media rule keeps thumbnails and gallery images of kept products.",
+  "brand": "Loam & Ember",
   "products": [
     {
       "sku": "LOAM-CER-001",
       "name": "Stoneware Mug 12 oz",
-      "type": "variable",
-      "price": "24.00"
+      "price": "24.00",
+      "type": "variable"
     },
     {
       "sku": "LOAM-CER-002",
       "name": "Ramen Bowl",
-      "type": "simple",
-      "price": "32.00"
+      "price": "32.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CER-003",
       "name": "Dinner Plates, Set of 4",
-      "type": "simple",
-      "price": "68.00"
+      "price": "68.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CER-004",
       "name": "Bud Vase",
-      "type": "simple",
-      "price": "19.00"
-    },
-    {
-      "sku": "LOAM-CER-005",
-      "name": "Stoneware Teapot 750 ml",
-      "type": "simple",
-      "price": "54.00"
-    },
-    {
-      "sku": "LOAM-CER-006",
-      "name": "Spoon Rest",
-      "type": "simple",
-      "price": "16.00"
+      "price": "19.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-TEX-001",
       "name": "Wool Throw",
-      "type": "variable",
-      "price": "64.00"
+      "price": "64.00",
+      "type": "variable"
     },
     {
       "sku": "LOAM-TEX-002",
       "name": "Linen Cushion Cover 18 in",
-      "type": "variable",
-      "price": "28.00"
+      "price": "28.00",
+      "type": "variable"
     },
     {
       "sku": "LOAM-TEX-003",
       "name": "Linen Napkins, Set of 6",
-      "type": "simple",
-      "price": "42.00"
+      "price": "42.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-TEX-004",
       "name": "Waffle Hand Towels, Set of 2",
-      "type": "simple",
-      "price": "24.00"
+      "price": "24.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-TEX-005",
       "name": "Table Runner 14 x 72",
-      "type": "simple",
-      "price": "38.00"
+      "price": "38.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-TEX-006",
       "name": "Cotton Bath Mat",
-      "type": "simple",
-      "price": "32.00"
+      "price": "32.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CND-001",
       "name": "Cedar & Smoke Candle",
-      "type": "simple",
-      "price": "24.00"
+      "price": "24.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CND-002",
       "name": "Fig & Fern Candle",
-      "type": "simple",
-      "price": "24.00"
+      "price": "24.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CND-003",
       "name": "Wax Melts, Set of 6",
-      "type": "simple",
-      "price": "14.00"
-    },
-    {
-      "sku": "LOAM-CND-004",
-      "name": "Hand Soap Bar",
-      "type": "simple",
-      "price": "12.00"
+      "price": "14.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CND-005",
       "name": "Room & Linen Mist",
-      "type": "simple",
-      "price": "22.00"
-    },
-    {
-      "sku": "LOAM-CND-006",
-      "name": "Incense Holder",
-      "type": "simple",
-      "price": "18.00"
+      "price": "22.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-DSK-001",
       "name": "Layflat Notebook",
-      "type": "variable",
-      "price": "18.00"
+      "price": "18.00",
+      "type": "variable"
     },
     {
       "sku": "LOAM-DSK-002",
       "name": "Gel Pen Set",
-      "type": "simple",
-      "price": "12.00"
-    },
-    {
-      "sku": "LOAM-DSK-003",
-      "name": "Pencil Pouch",
-      "type": "simple",
-      "price": "26.00"
-    },
-    {
-      "sku": "LOAM-DSK-004",
-      "name": "Desk Tray",
-      "type": "simple",
-      "price": "34.00"
+      "price": "12.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-DSK-005",
       "name": "Weekly Planner Pad",
-      "type": "simple",
-      "price": "16.00"
-    },
-    {
-      "sku": "LOAM-DSK-006",
-      "name": "Letter Writing Set",
-      "type": "simple",
-      "price": "22.00"
+      "price": "16.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-KIT-001",
       "name": "Serving Board",
-      "type": "simple",
-      "price": "48.00"
+      "price": "48.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-KIT-002",
       "name": "Storage Jar",
-      "type": "variable",
-      "price": "22.00"
+      "price": "22.00",
+      "type": "variable"
     },
     {
       "sku": "LOAM-KIT-003",
       "name": "Tea Towels, Set of 2",
-      "type": "simple",
-      "price": "22.00"
+      "price": "22.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-KIT-004",
       "name": "Trivet Tile",
-      "type": "simple",
-      "price": "18.00"
+      "price": "18.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-KIT-005",
       "name": "Canvas Apron",
-      "type": "simple",
-      "price": "42.00"
+      "price": "42.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-KIT-006",
       "name": "Measuring Spoons, Set of 4",
-      "type": "simple",
-      "price": "16.00"
+      "price": "16.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CAR-001",
       "name": "Canvas Tote",
-      "type": "variable",
-      "price": "32.00"
+      "price": "32.00",
+      "type": "variable"
     },
     {
       "sku": "LOAM-CAR-002",
       "name": "Crossbody Pouch",
-      "type": "simple",
-      "price": "38.00"
+      "price": "38.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CAR-003",
       "name": "Market Basket",
-      "type": "simple",
-      "price": "36.00"
+      "price": "36.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CAR-004",
       "name": "Gym Sack",
-      "type": "simple",
-      "price": "24.00"
+      "price": "24.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CAR-005",
       "name": "Laptop Sleeve 13 in",
-      "type": "simple",
-      "price": "44.00"
+      "price": "44.00",
+      "type": "simple"
     },
     {
       "sku": "LOAM-CAR-006",
       "name": "Weekend Duffel",
-      "type": "simple",
-      "price": "98.00"
+      "price": "98.00",
+      "type": "simple"
     }
   ]
 }
