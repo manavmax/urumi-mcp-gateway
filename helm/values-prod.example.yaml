@@ -5,7 +5,16 @@
 # <owner> = your GHCR username/org: the custom images are pushed as
 # ghcr.io/<owner>/<name> by `make images-push` (real image names: gateway,
 # dashboard, woo-mcp, demo-mcp-time, demo-mcp-notes, store-assets, wordpress,
-# wp-cli). CPU requests are sized for the 2 vCPU node (see values-prod.yaml).
+# wp-cli, provisioner). CPU requests are sized for the 2 vCPU node (see
+# values-prod.yaml).
+#
+# The multi-store / hosted-servers / OAuth flags (ADR-060/062/063) are RISKY
+# features that stay FALSE in every COMMITTED values file (values.yaml and
+# values-prod.yaml). They are turned on ONLY in a private, uncommitted overlay
+# values file - the shape below is the documentation of those keys; copy it into
+# your private file and fill in <owner> and the real domains. Committed
+# values-prod.yaml keeps everything off, so a flags-off install renders the
+# same object list as before these features existed.
 global:
   domain: shop.example.com
   ingressClass: nginx
@@ -99,3 +108,47 @@ wpSetup:
   resources:
     requests: { memory: 128Mi }
     limits: { cpu: 300m, memory: 512Mi }
+
+# --- PRIVATE OVERLAY ONLY: multi-store + hosted servers + OAuth ---------------
+# These keys belong in the private prod overlay (never committed). Defaults in
+# the committed values stay false/empty. The VPS runs cert-manager with
+# Let's Encrypt HTTP-01 ONLY: the DNS host has no API, so no DNS-01 and NO
+# wildcard certificates - each store gets its own certificate per host
+# (ADR-064), which is why stores.tls exists instead of one wildcard secret.
+#
+# Stores (ADR-060): the provisioner installs one store release per slug into
+# store-<slug> namespaces. globalMax 3 / maxPerUser 1 / maxConcurrent 1 are the
+# single-node VPS caps (8 GB, 2 stores fit alongside the main release; 1 at a
+# time is provisioned because the wp-setup hooks are CPU-hungry).
+provisioner:
+  enabled: true
+  image:
+    repository: ghcr.io/<owner>/provisioner   # pushed by make images-push (9th image)
+    tag: "1.0.0-a1b2c3d"                      # PINNED - same tag as the other images
+    pullPolicy: IfNotPresent
+
+stores:
+  baseDomain: stores.shop.example.com         # wildcard DNS *.stores... -> VPS IP
+  globalMax: 3                                # cluster-wide store cap
+  maxPerUser: 1                               # per dashboard user
+  maxConcurrent: 1                            # simultaneous helm installs (small node)
+  # Per-store TLS (ADR-064): cert-manager HTTP-01, one certificate per store,
+  # issuer NAME from a value (never hardcoded). Staging first, then prod.
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-staging        # switch to letsencrypt-prod once green
+
+hostedServers:
+  enabled: true
+  # comma-separated registry prefixes the admin may host images from; anything
+  # else is refused at apply time. Restrict to YOUR GHCR namespace.
+  allowedRegistries: "ghcr.io/<owner>/"
+  globalMax: 2
+  # timeoutSeconds/resources keep their values.yaml defaults unless overridden.
+
+oauth:
+  # MCP authorization (ADR-063). MCP clients reach the gateway through the
+  # dashboard host in this shape; the public base URL must match what browsers
+  # use (https in prod).
+  enabled: true
+  publicBaseUrl: "https://dashboard.shop.example.com"
