@@ -580,6 +580,40 @@ function urumi_store_stock_line( $block_content, $block ) {
 add_filter( 'render_block', 'urumi_store_stock_line', 10, 2 );
 
 // ---------------------------------------------------------------------------
+// Photography credits page (/image-credits/)
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the /image-credits/ page content from the committed manifest
+ * (wp-content/store/photos-manifest.json, shipped in the store-assets image).
+ * Honest empty state until photo curation fills the manifest (ADR-078).
+ */
+function urumi_store_credits_content( $content ) {
+	if ( ! is_page( 'image-credits' ) ) {
+		return $content;
+	}
+	$path = urumi_store_data_dir() . '/photos-manifest.json';
+	$rows = '';
+	if ( file_exists( $path ) ) {
+		$json = wp_json_file_decode( $path, array( 'associative' => true ) );
+		foreach ( ( $json['images'] ?? array() ) as $img ) {
+			$rows .= '<tr><td>' . esc_html( $img['file'] ?? '' ) . '</td><td>' . esc_html( $img['sku'] ?? '' ) . '</td>'
+				. '<td><a href="' . esc_url( $img['photographer_url'] ?? '#' ) . '">' . esc_html( $img['photographer'] ?? '' ) . '</a></td>'
+				. '<td><a href="' . esc_url( $img['photo_url'] ?? '#' ) . '">Photo page</a></td>'
+				. '<td>' . esc_html( $img['licence'] ?? 'Unsplash License' ) . '</td></tr>';
+		}
+	}
+	$head = '<p>All photography on this demo storefront comes from Unsplash and is used under the <a href="https://unsplash.com/license">Unsplash License</a>. Each photographer is credited per file below.</p>';
+	if ( '' === $rows ) {
+		$head .= '<p>Per-photographer credits are being finalized; no photograph has been attached to the catalogue yet.</p>';
+	} else {
+		$head .= '<table class="urumi-credits"><thead><tr><th>File</th><th>SKU</th><th>Photographer</th><th>Photo</th><th>Licence</th></tr></thead><tbody>' . $rows . '</tbody></table>';
+	}
+	return $content . $head;
+}
+add_filter( 'the_content', 'urumi_store_credits_content' );
+
+// ---------------------------------------------------------------------------
 // Block patterns (the static sections of the front page)
 // ---------------------------------------------------------------------------
 
