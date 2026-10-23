@@ -1224,3 +1224,105 @@ only - fine for MCP's localhost clients); consent revocation UI is a follow-up
 (tokens can be revoked via /oauth/revoke and the DB today); the resource URI
 is the DASHBOARD host (MCP clients reach the gateway through the dashboard
 ingress) - prod should use a dedicated gateway host.
+
+## 2026-10-23: per-store TLS via cert-manager HTTP-01 (ADR-064)
+
+**What changed.** Prod multi-store now gives every store its OWN certificate
+instead of assuming a wildcard. The main chart grew stores.tls.enabled +
+stores.tls.clusterIssuer (default off/empty; committed values stay false), the
+provisioner Deployment forwards them as STORE_TLS_ENABLED /
+STORE_TLS_CLUSTER_ISSUER (deployment-provisioner.yaml), provisioner Settings
+grew store_tls_enabled/store_tls_cluster_issuer, and install_store now also
+--sets global.tlsEnabled + ingress.clusterIssuer on every store release. The
+store Ingress renders the cert-manager.io/cluster-issuer annotation (issuer
+NAME from ingress.clusterIssuer, merged over ingress.annotations - the
+dedicated value wins) and a tls block with the store host and its own
+secretName <slug>-store-tls, replacing the hardcoded
+secretName: urumi-store-wildcard (a wildcard secret nobody can issue here).
+The misleading "wildcard TLS" comments in helm/values.yaml and the store
+Ingress template now state the real posture: a wildcard DNS RECORD is fine
+(*.stores.<domain> -> VPS IP), a wildcard CERTIFICATE is not.
+
+**Why per-store HTTP-01 instead of wildcard.** The VPS DNS host has no API, so
+DNS-01 is unavailable - and DNS-01 is the only ACME challenge that can issue
+wildcard certificates. A wildcard secret would also put the SAME private key
+into every store namespace (copy = more blast radius). Per-store HTTP-01
+certificates are automatic (issued + renewed by cert-manager), the secret
+stays in the store namespace, and the issuer switches staging/prod by values
+only. Trade-off: more Certificate objects and Let's Encrypt rate limits
+(50/week/domain) - noise at stores.globalMax=3.
+
+**Alternatives rejected.** (1) Wildcard via DNS-01: needs a DNS API the host
+does not offer. (2) Shared wildcard Secret copied into store namespaces: same
+DNS-01 blocker + one private key across all namespaces. (3) Out-of-band
+operator-issued certs: manual renewal, drift risk. (4) cert-manager Issuer per
+store namespace: more RBAC than one cluster-issuer for zero gain.
+
+**NetworkPolicy.** The store chart now renders <slug>-allow-acme-solver when
+global.tlsEnabled (mirroring the main chart's ADR-051 policy): ONLY the
+ingress-nginx namespace may reach solver pods (label
+acme.cert-manager.io/http01-solver), ONLY on the solver port
+(networkPolicy.acmeSolver.port, default 8089). Without it, the store
+namespace's default-deny would block the solver pod and every store
+CertificateRequest would hang until timeout (exactly the failure observed
+live in urumi before ADR-051). The storefront allow rule now reads
+networkPolicy.ingressNamespace instead of a hardcoded ingress-nginx (default
+unchanged), giving the store chart a single controller-namespace source.
+
+**Flags-off identity guarantee.** With stores.tls disabled the rendered main
+AND store charts are byte-identical to the pre-change baseline (verified:
+normalized `helm template` diff empty; only randAlphaNum secret churn, which
+a control re-run on unmodified main reproduces), so committed prod/local
+values change nothing.
+
+## 2026-10-23: provisioner image in the GHCR push pipeline (ADR-065)
+
+**What changed.** scripts/push-images.sh now builds and pushes the 9th image,
+the provisioner (ghcr.io/<owner>/provisioner:<appVersion>-<sha>), next to the
+other eight. Its Dockerfile COPYs the STORE CHART into /charts/store, and
+Docker cannot COPY outside the build context, so the script stages helm/store
+into src/provisioner/chart exactly like the existing `provisioner-image`
+Makefile target, builds with buildx for PLATFORMS (default linux/amd64),
+pushes, and verifies the remote platform with `docker buildx imagetools
+inspect` like every other image (a tag that lost its amd64 layer fails the
+run). An EXIT trap ALWAYS removes the staging dir - on success AND on any
+failure (`set -eu`) - so the transient chart copy can never survive a broken
+run; src/provisioner/chart is also gitignored as belt-and-braces. The
+per-image platform check was factored into verify_platforms() so the
+provisioner block reuses it.
+
+**Why.** The VPS pulls every chart-deployed image from ghcr.io/<owner>/
+(values-prod pins PUSHED_SHA tags); the provisioner was the only one missing,
+so a VPS install with stores enabled could not pull it at all. Pinning
+provisioner.image.tag alongside the other images is documented in
+values-prod.example.yaml (committed values stay generic).
+
+**Alternatives rejected.** `helm pull`/OCI chart at RUNTIME: needs internet
+egress from the provisioner pod (its NetworkPolicy allows API+DNS only) and a
+chart/image version skew. Build arg pointing outside the context: Docker
+cannot COPY outside the context. Mounting the chart at deploy time (PVC/host
+path): new volume plumbing on the VPS for no benefit.
+
+## 2026-10-23: store images stay public GHCR packages (ADR-066)
+
+**What changed.** Nothing in code - this records the PROD posture decision:
+fresh store-<slug> namespaces get NO imagePullSecret. The store chart
+supports imagePullSecrets (values + urumi.imagePullSecrets helper) and the
+provisioner deliberately does not set any; prod keeps the GHCR packages
+public.
+
+**Why.** The custom images hold no secrets - proven per image by
+scripts/smoke-images.sh (secret-like-file scan inside every image) - so
+public packages are the documented default posture (helm/values.yaml,
+DEPLOY_VPS.md). Public pulls make ImagePullBackOff structurally impossible in
+a fresh namespace and need zero extra RBAC or code.
+
+**Alternatives.** (1) Provisioner copies the docker-registry Secret from the
+gateway namespace into every store-<slug> namespace at creation
+(stores.imagePullSecret value): feasible - the ClusterRole already grants
+secrets:create, the label guard scopes writes - but rejected: it duplicates
+the pull token into every store namespace (more places to leak a credential)
+and adds code+config for zero confidentiality gain, since the images contain
+nothing to protect. (2) Operator manually creates the Secret per namespace:
+stores stay broken until someone remembers. Chosen: public packages; revisit
+only if private packages ever become a requirement.

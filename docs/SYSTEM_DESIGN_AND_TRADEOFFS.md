@@ -89,6 +89,62 @@ resource URI rides the dashboard host locally (prod: dedicated gateway host);
 opaque tokens mean an extra DB read per /mcp call (immediate revocation is
 worth it).
 
+## Per-store TLS on the VPS (ADR-064)
+
+**Design.** The VPS runs cert-manager with Let's Encrypt HTTP-01 only: the DNS
+host has no API, so DNS-01 is impossible and with it wildcard CERTIFICATES
+(wildcard DNS RECORDS still work - *.stores.<domain> -> VPS IP is fine; only
+the CERTIFICATE would need DNS-01). Each store Ingress therefore gets its own
+certificate: stores.tls.enabled + stores.tls.clusterIssuer (default off/empty
+in every committed value) -> provisioner env STORE_TLS_* -> --set
+global.tlsEnabled/ingress.clusterIssuer on each store release -> the store
+Ingress renders the cert-manager.io/cluster-issuer annotation (issuer name
+from a value) and a tls block whose secretName is per-store
+(<slug>-store-tls). Because every store namespace is default-deny, the store
+chart also renders the main chart's ACME-solver policy (ADR-051) when TLS is
+on: ONLY ingress-nginx may enter solver pods (label
+acme.cert-manager.io/http01-solver), ONLY on the solver port 8089.
+
+**Alternatives rejected.** One wildcard certificate shared into store
+namespaces: needs DNS-01 (no DNS API) AND copies the same private key into
+every store namespace. Operator-issued per-store certs out of band: manual
+renewals. Per-namespace cert-manager Issuer objects: more RBAC surface than
+the single cluster-issuer for no gain.
+
+**Trade-off.** More Certificate objects + Let's Encrypt rate limits (50
+certs/week per registered domain) vs one wildcard; at globalMax=3 this is
+noise, and the solver NetworkPolicy keeps the default-deny story intact.
+
+## Production exposure: provisioner ClusterRole + hosted servers (ADR-064/066)
+
+**Design.** The prod overlay (private, uncommitted; values-prod.example.yaml
+documents the keys) turns on the risky flags with deliberately small caps:
+provisioner.enabled, stores.globalMax=3, stores.maxPerUser=1,
+stores.maxConcurrent=1, stores.tls.*, hostedServers.enabled with
+allowedRegistries=ghcr.io/<owner>/ and hostedServers.globalMax=2, oauth.enabled.
+Committed values stay false, so a flags-off install renders the same object
+list as before.
+
+**Exposure (defend live):** gateway compromised -> attacker holds only the
+provisioner API, which enforces the same caps a member flow hits (globalMax 3
+stores / 2 hosted, 1 concurrent provision, registry allowlist, per-namespace
+quota/limit ranges, label guard on every namespace). The provisioner pod is
+not Ingress-exposed and admits gateway pods only. The provisioner
+ServiceAccount remains the true blast radius (cluster-scoped secrets read +
+workload writes; label guard is CODE, not RBAC) - spelled out in
+THREAT_MODEL.md; accepted for a single-node VPS where the alternative
+(dynamic per-namespace RBAC) costs more than it buys. Hosted images are
+pinned to ghcr.io/<owner>/ by allowedRegistries and capped by globalMax=2 +
+mandatory resource caps, so even a hostile admin cannot introduce an
+unbounded or foreign-registry workload.
+
+**Store images stay PUBLIC GHCR packages (ADR-066):** fresh store namespaces
+get NO imagePullSecret (none is provisioned; none exists to copy). The images
+hold no secrets (proven per-image by scripts/smoke-images.sh), so public
+packages are the zero-RBAC posture; the alternatives (provisioner-side
+cross-namespace Secret copy, operator manual per-namespace step) were
+rejected.
+
 ## Security posture deltas
 
 - The gateway EGRESS allowlist grew by explicit rules: provisioner (port 9000),
