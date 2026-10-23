@@ -109,3 +109,52 @@ curl -s "$STORE_URL/" | grep -o "<title>[^<]*"   # Loam & Ember ...
 kubectl -n urumi exec deploy/urumi-wordpress -c wordpress -- \
   wp option get blogname   # Loam & Ember
 ```
+
+---
+
+# UPDATE 2026-10-22 (photo-first theme pass, branch store-v2)
+
+## What ran in the compose harness THIS session (real runs)
+
+Harness: `docker compose -f artifacts/store-compose/compose.yml -p store-v2-verify`
+(fresh `down -v` first), exact hardened images, wp-setup executed as the REAL
+rendered script (`render-setup.py` re-run after every helm edit).
+
+| Check | Result |
+| --- | --- |
+| Fresh wp-setup (36 products, 15 variations, no image files) | 54 s (emulated arm64; pessimistic) |
+| Second wp-setup run (idempotency) | `created=0 kept=36 updated=0 images=0 variations_created=0`, 45 s |
+| REST catalog (count, sale, stock, weight/dims, tags, variations) | all PASS at 36 products |
+| REST "every product has an image" | FAIL, expected: no photographs shipped yet (ADR-078) |
+| REST "gallery images (2+)" | FAIL, expected: same reason |
+| e2e COD checkout via block checkout -> REST order visible | PASS (order #72, status processing, payment_method=cod) |
+| Screenshots 1440 + 390 (10 page types) + gates | 91/93 PASS (screens in artifacts/store-v2-shots, gitignored) |
+| Zero third-party requests | PASS on every page and viewport |
+| No horizontal overflow (390/768-class/1440) | PASS after `overflow-x: clip` fix (Woo drawer) |
+| Console errors | PASS except 2 known cosmetic Woo ResizeObserver warnings (cart 1440, checkout 390) |
+| WCAG contrast (rest/hover/focus, all pages) | PASS (after ADR-080 fixes; scripts/verify-store-contrast.mjs) |
+| Home page weight | 470 KB total (454 subresources + 16 doc) - under the 800 KB gate (no photos yet; re-measure after curation) |
+| Shop page weight | 542 KB total |
+| demo-reset contract (dry-run via REST) | 36 KEEP, 0 planned product deletions, orders always removed |
+| Consumer key from wp-setup | harness artifact: each compose wp-setup run rotates it (no K8s Secret in compose); the harness re-inserts its verify key. In-cluster semantics unchanged. |
+| /image-credits/ page | 200, licence copy rendered; footer "Photography from Unsplash." links to it |
+| Banned-words + em-dash scan of shipped copy | clean (one invented origin claim removed from a product description) |
+
+Reproduce:
+
+```sh
+node scripts/verify-store-v2.mjs screenshots --out artifacts/store-v2-shots
+node scripts/verify-store-v2.mjs checkout
+node scripts/verify-store-v2.mjs rest --expect 36
+STORE_URL=http://localhost:18088 node scripts/verify-store-contrast.mjs
+```
+
+## What did NOT run (photo-dependent, blocked by ADR-078)
+
+- Photo curation, product rebuild FROM photos, IMAGE_CREDITS rows, contact
+  sheet with real photos.
+- Screenshot review by eye: this session's model cannot view images; the
+  19 screenshots in artifacts/store-v2-shots await a human/photo-capable pass.
+- Post-photo re-measurement of page weight (tiles will add ~300-600 KB
+  fetched; the 800 KB home budget needs re-checking then - see
+  docs/REVIEW_NEEDED_STORE.md).
