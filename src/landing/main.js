@@ -67,21 +67,113 @@
     try { localStorage.setItem("landing-announce-dismissed", "1"); } catch (e) {}
   });
 
-  /* ---------- nav: blur after 8px, mobile sheet ---------- */
+  /* ---------- nav: blur + shrink after 8px, mobile overlay sheet ---------- */
   var nav = $("#nav");
   function onScroll() { if (nav) nav.classList.toggle("scrolled", window.scrollY > 8); }
   window.addEventListener("scroll", onScroll, { passive: true });
   onScroll();
-  var navToggle = $("#navToggle"), sheet = $("#navSheet");
-  if (navToggle && sheet) navToggle.addEventListener("click", function () {
-    var open = sheet.hidden;
-    sheet.hidden = !open;
+
+  var navToggle = $("#navToggle"), sheet = $("#navSheet"), sheetClose = $("#navSheetClose");
+  var desktop = window.matchMedia("(min-width: 900px)");
+  var sheetOpen = false, sheetTimer = null, lastFocus = null;
+
+  function setSheet(open) {
+    if (!navToggle || !sheet) return;
+    if (open === sheetOpen) return;
+    if (open && desktop.matches) return; // the sheet cannot open at desktop widths
+    sheetOpen = open;
     navToggle.setAttribute("aria-expanded", String(open));
     navToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    document.documentElement.classList.toggle("nav-open", open);
+    if (open) {
+      lastFocus = document.activeElement;
+      sheet.hidden = false;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          sheet.classList.add("open");
+          // focus must land after the sheet becomes visible, or it is dropped
+          var first = sheetClose || $(".sheet-links a", sheet);
+          if (first) first.focus();
+        });
+      });
+    } else {
+      sheet.classList.remove("open");
+      clearTimeout(sheetTimer);
+      sheetTimer = setTimeout(function () { sheet.hidden = true; }, reduced ? 0 : 320);
+      if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+    }
+  }
+  if (navToggle) {
+    navToggle.addEventListener("click", function () { setSheet(!sheetOpen); });
+    sheet.addEventListener("click", function (e) {
+      if (e.target.closest("a")) setSheet(false);
+    });
+  }
+  if (sheetClose) sheetClose.addEventListener("click", function () { setSheet(false); });
+  document.addEventListener("keydown", function (e) {
+    if (!sheetOpen) return;
+    if (e.key === "Escape") { setSheet(false); return; }
+    if (e.key !== "Tab") return;
+    var focusables = $$('a[href], button:not([disabled])', sheet)
+      .filter(function (el) { return el.offsetParent !== null; });
+    if (!focusables.length) return;
+    var first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
-  if (sheet) sheet.addEventListener("click", function (e) {
-    if (e.target.tagName === "A") { sheet.hidden = true; navToggle.setAttribute("aria-expanded", "false"); }
-  });
+  if (desktop.addEventListener) {
+    desktop.addEventListener("change", function (e) {
+      if (e.matches) { // resized to desktop: close instantly, never render there
+        clearTimeout(sheetTimer);
+        sheetOpen = false;
+        sheet.classList.remove("open");
+        sheet.hidden = true;
+        document.documentElement.classList.remove("nav-open");
+        if (navToggle) navToggle.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  /* ---------- scroll-spy: sliding highlight in the nav pill group ---------- */
+  var spyLinks = $$(".nav-links a[data-spy]");
+  var glide = $("#navGlide");
+  function positionGlide(link) {
+    if (!glide || !link) return;
+    glide.style.width = link.offsetWidth + "px";
+    glide.style.transform = "translateX(" + link.offsetLeft + "px)";
+    glide.classList.add("in");
+  }
+  if (spyLinks.length && "IntersectionObserver" in window) {
+    var activeSpy = null;
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var id = entry.target.id;
+        var link = $('.nav-links a[data-spy="' + id + '"]');
+        if (!link || link === activeSpy) return;
+        activeSpy = link;
+        spyLinks.forEach(function (a) {
+          var on = a === link;
+          a.classList.toggle("active", on);
+          if (on) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current");
+        });
+        positionGlide(link);
+      });
+    }, { rootMargin: "-40% 0px -52% 0px", threshold: 0 });
+    ["how", "features", "security", "kubernetes", "docs"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) spy.observe(el);
+    });
+    var rsTimer = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(rsTimer);
+      rsTimer = setTimeout(function () { if (activeSpy) positionGlide(activeSpy); }, 120);
+    });
+    // webfont swap changes link widths after first layout; reposition once ready
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { if (activeSpy) positionGlide(activeSpy); });
+    }
+  }
 
   /* ---------- live links + derived gateway URL ---------- */
   var host = window.location.hostname;
@@ -620,24 +712,39 @@
     function makeCircle(svg, cls) {
       var holder = svg === wide ? $("#hvPackets", svg) : $("#hvPacketsTall", svg);
       if (!holder) return null;
-      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      c.setAttribute("r", "4");
-      c.setAttribute("class", cls);
-      holder.appendChild(c);
-      return c;
+      var halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      halo.setAttribute("r", "8");
+      halo.setAttribute("class", cls + " pkt-halo");
+      halo.setAttribute("opacity", "0");
+      var core = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      core.setAttribute("r", "4");
+      core.setAttribute("class", cls);
+      core.setAttribute("opacity", "0");
+      holder.appendChild(halo);
+      holder.appendChild(core);
+      return {
+        setCls: function (c) {
+          core.setAttribute("class", c);
+          halo.setAttribute("class", c + " pkt-halo");
+        },
+        moveTo: function (x, y, op) {
+          core.setAttribute("cx", x); core.setAttribute("cy", y); core.setAttribute("opacity", op);
+          halo.setAttribute("cx", x); halo.setAttribute("cy", y); halo.setAttribute("opacity", op * 0.3);
+        },
+        remove: function () { core.remove(); halo.remove(); }
+      };
     }
-    function legAnim(circle, path, reverse, dur, cls, done) {
+    function legAnim(mover, path, reverse, dur, cls, done) {
       var t0 = now();
-      if (cls) circle.setAttribute("class", cls);
+      if (cls) mover.setCls(cls);
       var len = path.getTotalLength();
       function frame() {
         if (!running) { done && done(true); return; }
         var p = Math.min(1, (now() - t0) / dur);
         var e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOut
         var pt = path.getPointAtLength((reverse ? 1 - e : e) * len);
-        circle.setAttribute("cx", pt.x);
-        circle.setAttribute("cy", pt.y);
-        circle.setAttribute("opacity", p < 0.08 ? p / 0.08 : p > 0.92 ? (1 - p) / 0.08 : 1);
+        var op = p < 0.08 ? p / 0.08 : p > 0.92 ? (1 - p) / 0.08 : 1;
+        mover.moveTo(pt.x, pt.y, op);
         if (p < 1) requestAnimationFrame(frame);
         else done && done(false);
       }
