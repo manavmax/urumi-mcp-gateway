@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build and push all 8 custom Urumi images to GHCR (multi-arch via buildx).
+# Build and push all 9 custom Urumi images to GHCR (multi-arch via buildx).
+# The 9th, the provisioner, bakes the STORE CHART into its image (see below).
 #
 # One stranger-runnable line:
 #   GHCR_OWNER=<owner> GHCR_TOKEN=<token> scripts/push-images.sh
@@ -38,7 +39,17 @@ APP_VERSION=$(sed -n 's/^appVersion: *"\([^"]*\)".*/\1/p' helm/Chart.yaml)
 GIT_SHA=$(git rev-parse --short HEAD)
 TAG="${APP_VERSION}-${GIT_SHA}"
 
-# Image name -> build context (all 8 custom images the chart deploys).
+# The provisioner image bakes the store chart (its Dockerfile COPYs chart/
+# into /charts/store). Docker cannot COPY outside the build context, so
+# helm/store is staged into src/provisioner/chart first - the same staging the
+# `provisioner-image` Makefile target does. The trap ALWAYS removes the staging
+# dir on exit, including on failure (`set -eu` aborts -> EXIT trap fires), so
+# the transient chart copy can never survive a broken run. src/provisioner/chart
+# is also gitignored as belt-and-braces.
+trap 'rm -rf src/provisioner/chart' EXIT
+
+# Image name -> build context (the 8 plain-context images; the provisioner is
+# built after this loop because its context needs the staged store chart).
 IMAGES="gateway:src/gateway dashboard:src/dashboard woo-mcp:src/woo-mcp \
 demo-mcp-time:src/demo-mcp-time demo-mcp-notes:src/demo-mcp-notes \
 wordpress:src/wordpress wp-cli:src/wp-cli store-assets:store"
@@ -54,6 +65,20 @@ fi
 printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin >/dev/null
 echo "logged in to ghcr.io as ${GHCR_USER} (token not echoed, not stored)"
 
+# Verify what the registry ACTUALLY has (not what buildx reported): every
+# expected platform must be present in the pushed manifest list.
+verify_platforms() {  # $1 = pushed image ref
+  echo "== verifying remote platform(s) of $1 =="
+  seen="$(docker buildx imagetools inspect "$1" --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}} {{end}}' || true)"
+  echo "  remote platforms: ${seen:-<none>}"
+  for want in $PLATFORMS; do
+    case " ${seen} " in
+      *" ${want} "*) echo "  ok: ${want} present" ;;
+      *) echo "  ERROR: ${want} MISSING from pushed $1 (found: ${seen:-none})" >&2; RC=1 ;;
+    esac
+  done
+}
+
 echo "building + pushing tag ${TAG} for PLATFORMS=${PLATFORMS}"
 RC=0
 for entry in $IMAGES; do
@@ -66,20 +91,22 @@ for entry in $IMAGES; do
     --push \
     "${dir}"
   echo "pushed ghcr.io/${GHCR_OWNER}/${name}:${TAG}"
-
-  # Verify what the registry ACTUALLY has (not what buildx reported): every
-  # expected platform must be present in the pushed manifest list.
-  REF="ghcr.io/${GHCR_OWNER}/${name}:${TAG}"
-  echo "== verifying remote platform(s) of ${REF} =="
-  seen="$(docker buildx imagetools inspect "${REF}" --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}} {{end}}' || true)"
-  echo "  remote platforms: ${seen:-<none>}"
-  for want in $PLATFORMS; do
-    case " ${seen} " in
-      *" ${want} "*) echo "  ok: ${want} present" ;;
-      *) echo "  ERROR: ${want} MISSING from pushed ${REF} (found: ${seen:-none})" >&2; RC=1 ;;
-    esac
-  done
+  verify_platforms "ghcr.io/${GHCR_OWNER}/${name}:${TAG}"
 done
+
+# --- provisioner (9th image): context = src/provisioner + the staged chart ---
+rm -rf src/provisioner/chart
+cp -R helm/store src/provisioner/chart
+echo "== provisioner <- src/provisioner (helm/store staged at src/provisioner/chart) =="
+docker buildx build \
+  --platform "$PLATFORMS" \
+  --file src/provisioner/Dockerfile \
+  --tag "ghcr.io/${GHCR_OWNER}/provisioner:${TAG}" \
+  --push \
+  src/provisioner
+echo "pushed ghcr.io/${GHCR_OWNER}/provisioner:${TAG}"
+verify_platforms "ghcr.io/${GHCR_OWNER}/provisioner:${TAG}"
+rm -rf src/provisioner/chart
 
 if [ "${RC}" -ne 0 ]; then
   echo "PLATFORM VERIFICATION FAILED: at least one pushed image does not carry the required platform(s): ${PLATFORMS}" >&2
@@ -87,3 +114,4 @@ if [ "${RC}" -ne 0 ]; then
 fi
 
 echo "next: pin these tags in helm/values-prod.yaml (image.tag: ${TAG}) - never :latest"
+echo "      the provisioner tag goes to provisioner.image.tag (values-prod.example.yaml shows the keys)"

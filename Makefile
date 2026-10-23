@@ -347,8 +347,11 @@ verify-cod:
 # ------------------------------------------------------------------
 # Make a one-line stranger can run (required variables listed by `make help`):
 #   GHCR_OWNER=<owner> GHCR_TOKEN=<token> make images-push
-# Builds all 8 custom images with docker buildx for PLATFORMS (default
+# Builds all 9 custom images with docker buildx for PLATFORMS (default
 # linux/amd64; add linux/arm64 explicitly) and pushes ghcr.io/<owner>/<name>:<tag>.
+# The 9th is the provisioner: the script stages helm/store into src/provisioner/chart
+# (Docker cannot COPY outside the context; same staging as `provisioner-image`) and
+# ALWAYS removes it via an EXIT trap, even when the run fails.
 # Tag = <chart appVersion>-<short git SHA>, pinned into helm/values-prod.yaml after.
 # The token is fed to `docker login --password-stdin` (env or hidden prompt), never
 # echoed, never written to disk or shell history. See scripts/push-images.sh.
@@ -377,7 +380,7 @@ rollback:
 help:
 	@echo "Urumi Make targets"
 	@echo "  make images-push   GHCR_OWNER=<owner> [GHCR_TOKEN=<token>] [PLATFORMS=linux/amd64,linux/arm64]"
-	@echo "    builds all 8 custom images with buildx and pushes ghcr.io/<owner>/<name>:<tag>"
+	@echo "    builds all 9 custom images with buildx and pushes ghcr.io/<owner>/<name>:<tag>"
 	@echo "    tag = <chart appVersion>-<short git SHA>; token via GHCR_TOKEN or hidden prompt"
 	@echo "    (GHCR_TOKEN is never echoed, written to a file, or put in shell history)"
 	@echo "  make smoke-images  build host-platform + run a container smoke test per image"
