@@ -1076,3 +1076,63 @@ its packets intentionally stay paused until it is scrolled into view, which is t
 off-screen pause. This session's model has NO image input, so the screenshots and frames
 were not visually reviewed here; scripted geometry and motion probes substitute, and the
 visual pass is the top item for Manav in docs/REVIEW_NEEDED_LANDING.md.
+
+
+## 2026-10-22: Landing nav fix pass: hidden-attribute overrides, the invisible pills, and the packets that never painted (ADR-087)
+
+**User report.** (1) The mobile menu list rendered open on desktop widths from page load and
+pushed the page down. (2) The primary pill "View on GitHub" had nearly invisible text in both
+themes.
+
+**Root causes, verified in the browser before fixing (not assumed).** (1) Author `display`
+rules beat the UA `[hidden] { display: none }` cascade: `.nav-sheet { display: grid }` and
+`.btn { display: inline-flex }` made the hidden sheet (314px, sticky under the nav) and the
+hidden `#simIssue` render anyway, at every width, from load. (2) Inside that always-open
+sheet, `.nav-sheet a { color: var(--body) }` (specificity 0,1,1) overrode `.btn-primary`
+(0,1,0): the GitHub pill painted `#A8ABA6` on `#E3E5E1` in dark (1.75:1) and near-black on
+near-black in light. The user saw the sheet's pill; the nav's own pill measured fine.
+(3) Found during the pass: the hero packets never painted at all. CSS
+`.hv-packets circle { opacity: 0 }` overrode the per-frame `opacity` ATTRIBUTE (CSS rules beat
+presentation attributes), so the previous "6 distinct frame hashes" motion evidence came from
+chip drift and the hub pulse, not packets.
+
+**Fixes.** (1) Global `[hidden] { display: none !important }` guard. (2) The sheet became a
+full-screen overlay rendered ONLY below 900px (`@media (min-width: 900px)` hides it
+unconditionally): fade+slide 300ms, close button, Escape, link-choice and resize-to-desktop
+routes, body scroll lock, focus trapped inside, focus returns to the menu button, correct
+aria-expanded/controls/labels. (3) The sheet link rule is now scoped to `.sheet-links a`, so
+the pills inside keep their token colors. The nav was rebuilt desktop-first per the brief:
+original SVG logomark + wordmark left, the five section links in one translucent pill group
+centre with a sliding accent-deep highlight driven by a section IntersectionObserver
+(band -40%/-52%), repositioned on resize and after webfont swap; right: secondary pill,
+primary pill with a hover-nudging arrow, round theme toggle; 64px bar shrinking to 56px
+after 8px of scroll with blurred translucent canvas and hairline border. Hero fixes from the
+same brief: dashed connection lines restyled to a dedicated `--flow-line` token (alpha 0.34
+dark / 0.38 light, width 2), packets now paint with a halo trail circle (r 8 at 30 percent)
+per packet, the two tilted planes are smaller (452x228 / 358x158) and fainter (opacity
+0.32 / 0.26), and the hero was tightened so the graphic starts 46 percent into a 1440x900
+viewport at load (was 0 percent: it began below the fold), while 390px still shows the
+headline, buttons and the terminal card.
+
+**Verification.** scripts/landing-verify.mjs grew gates for every point above: the sheet is
+hidden and takes zero space on load at 375/768/1024/1440, content starts directly under the
+bar, the desktop bar is 64px, the menu opens and closes by every route (button, Escape,
+close button, section link with scroll, resize to desktop), focus stays trapped across 12
+tabs, the body scroll locks, focus returns to the toggle, pills inside the OPEN sheet pass
+contrast in both themes, the scroll-spy highlights security and kubernetes with the glide
+pixel-exact under the active link (204px = 204px), reduced motion disables the glide
+transition while keeping it positioned, dismissing the announcement does not break the
+sticky offset, the hero graphic is >=45 percent visible at 1440x900, the mobile hero shows
+headline/buttons/card, packets actually paint (max opacity 1.0, halos == cores), planes
+<=0.35 opacity and line alpha >=0.25. Full suite: LANDING VERIFY PASSED, 63/63 contrast
+pairs per theme, budgets total 204,633B of 358,400B and JS 36,471B of 40,960B. Pixel probes
+substituted for eyes (this model has no image input): the six new hero frames contain
+78-179 teal packet pixels each and violet return pixels in three of six frames; the nav pill
+regions in both full-page shots show a 221/230 luminance spread, i.e. text painting.
+
+**Known trade-offs.** The bar shrink animates height (one element, cheap) rather than
+transform because the brief asked for a literal 64px-to-56px transition. The smooth-scroll
+spy legitimately walks the highlight through sections while a long scroll settles; the
+verify gate uses instant scrolling for determinism. Screenshots and frames were retaken and
+the open-sheet states saved for Manav, but the visual review is still his: see
+docs/REVIEW_NEEDED_LANDING.md.

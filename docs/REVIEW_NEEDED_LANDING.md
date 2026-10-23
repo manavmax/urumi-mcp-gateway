@@ -1,68 +1,50 @@
-# Landing page rebuild: items waiting for Manav (2026-10-22, ADR-086 pass)
+# Landing page: fix pass items for Manav (2026-10-22 late, ADR-087)
 
-Context: the `landing` branch was rebuilt to docs/LANDING_DESIGN.md (commit 1fb69a8) without
-access to the cluster and without answers to the questions below. Everything was decided
-unilaterally and logged as ADR-086; nothing blocks merging, but the items need your eyes.
+Context: the nav fix pass (user-reported bugs + nav modernisation + hero graphic fixes) ran
+without image input — this session's model cannot view images, so every visual claim below is
+backed by scripted gates and pixel probes, not eyes. ADR-087 records the root causes and fixes.
 
-## 1. Look at the screenshots — I could not (no image input this session)
+## 1. Still the top item: look at the new screenshots
 
-**This pass was built by a model without image input.** Every visual check ran as scripted
-probes (geometry, contrast, motion), but nobody has actually LOOKED at the page yet. Please open:
+Files, all regenerated after the fix pass:
 
-- `artifacts/landing/landing-desktop-dark.png`, `landing-desktop-light.png` (1440, full page)
-- `artifacts/landing/landing-mobile-dark.png`, `landing-mobile-light.png` (390, full page)
-- `artifacts/landing/frames/hero-frame-1..6.png` (6 frames of the hero graphic, 600ms apart;
-  all six hashes differ, so the packet motion rendered)
-- `artifacts/landing/review/` (32 per-section clips, both themes — easiest way to review
-  section by section)
+- `artifacts/landing/landing-{desktop,mobile}-{dark,light}.png` (1440 / 390 full pages)
+- `artifacts/landing/frames/hero-frame-1..6.png` (now with packets actually painting:
+  78-179 teal pixels per frame, violet return packets in three frames)
+- `artifacts/landing/review/` (32 per-section clips, both themes, plus
+  `sheet-open-{dark,light}.png` showing the new mobile overlay open)
 
-Things to judge by eye: hero prism composition and plane tilt, packet colours/density,
-terminal look, marquee mask, sim cards, quote cards, the giant footer wordmark, light-theme
-contrast feel. The scripted gates that DID pass: zero external requests, zero console errors,
-no horizontal scroll at 375/768/1024/1440, 59/59 AA pairs both themes, sticky nav,
-reduced-motion final values, simulation state machine, clipboard round-trips, budgets
-(total 196KB/350KB, JS 31.9KB/40KB, fonts 78KB), 6 distinct hero frames.
+Judge by eye: the new nav (logomark, centre pill group, sliding highlight, 64->56 shrink),
+the overlay sheet (spacing, large links, buttons at the bottom), the hero's dashed lines and
+packet glow, the smaller fainter planes, and the 46-percent-visible graphic at 1440x900.
 
-## 2. Deviations from the spec to approve (details: docs/LANDING_DESIGN.md section 13, ADR-086)
+## 2. What was reported and fixed (verified root causes, ADR-087)
 
-- Dark `muted` darkened `#6C6E6A -> #8B8E89` (spec value fails WCAG AA below 24px: 3.9:1 on
-  canvas, 3.3:1 on surface). Same role, AA-safe value.
-- Light theme completed where the spec's front matter is silent: cards `#FFFFFF` on `#EEF2F0`
-  bands, danger `#B3261E`, warn `#8A5A00`, plus an `on-deep` token (`#5EEAD4` dark /
-  `#99F6E4` light) for text on accent-deep fills.
-- Sim caption: spec said `scripts/regress-core.sh`, which does not exist in the repo; it now
-  names `make test` and `scripts/verify-server-tools.mjs` (repo wins).
-- The client-tabs config block is placed under the three steps (step 03); the 18-section
-  anatomy has no other home for it.
-- One extra small line in the closing band keeps the data-driven `storeProductCount` claim
-  ("a 12-product catalog") after the redesign dropped the old features card it lived in.
+- Mobile menu rendered open on desktop from load: author `display` rules beat the UA
+  `[hidden]` rule. Fixed globally with `[hidden] { display: none !important }` plus a
+  desktop media guard; the sheet is now a below-900px full-screen overlay.
+- "View on GitHub" nearly invisible in both themes: `.nav-sheet a { color: var(--body) }`
+  clobbered the pill colors inside the always-open sheet (1.75:1 dark). Scoped to
+  `.sheet-links a`; the open sheet now passes contrast 3/3 in both themes.
+- Found during the pass: the hero packets had never painted (CSS `opacity: 0` overrode the
+  per-frame opacity attribute). Fixed; a regression gate now asserts packets paint.
+- `#simIssue` ("Issue new key") was also visible-while-hidden from the same cascade bug; fixed
+  by the global guard.
 
-## 3. Carried over from the first pass (still open)
+## 3. Carried over from earlier passes (still open)
 
-1. **Apex DNS before enabling (prod)** — unchanged from ADR-083 notes.
-2. **Confirm the repo URL** in `features.js` (`https://github.com/urumi-ai/mcp-gateway`).
-3. **Flip beyond-the-brief items only after their branches merge**; then `make landing-image`.
-4. **Demo video** stays hidden until `landing.videoUrl` is set.
-5. **www subdomain** still not served; one more Ingress rule if wanted.
-6. **Image tag**: built locally as `urumi/landing:0.2.0`; for GHCR use `make images-push` and
-   pin the tag in values-prod (values-local pins `0.1.0` — bump it when you enable on kind).
-7. **Live check on kind** (`make landing-image && make helm-local`, then the apex host); the
-   in-cluster path was chart-reviewed and helm-templated only, never live-run from this session.
+1. Apex DNS before enabling prod; 2. confirm repoUrl in features.js; 3. flip beyond-the-brief
+items only after merge; 4. demo video stays hidden until `landing.videoUrl`; 5. www subdomain
+not served; 6. image tag: built as `urumi/landing:0.2.0` locally (values-local pins 0.1.0 —
+bump before `make helm-local`); 7. live kind run when free.
 
 ## Evidence summary (this pass)
 
-- `docker build -t urumi/landing:0.2.0 src/landing`; container run as uid 101 on 127.0.0.1:8090;
-  `/`, styles, scripts, fonts all 200; CSP self-only + nosniff + no-referrer + DENY on responses
-  (unchanged from ADR-080); `font/woff2` served with 7-day cache.
-- `node scripts/landing-verify.mjs` (against the container): LANDING VERIFY PASSED — 7 sweeps
-  OK, zero external requests, zero console errors, contrast 59/59 in both themes, budgets
-  total=196,030B (limit 358,400B) js=31,908B (limit 40,960B) fonts=78,064B, 6 hero frames
-  saved, reduced-motion gates green, simulation/clipboard gates green.
-- Scripted probes: packets move (both accent and violet seen in flight), hub pulse animating,
-  marquee translating, audit rows streaming, terminal looping, steps track drawing,
-  diagram replay 12 -> 1 -> 12, spotlight `--mx/--my` set on pointermove, toast on chip copy,
-  announcement dismissal persisted across reload, mobile menu sheet opens.
-- `helm lint ./helm` with values-local: 0 failed. `helm template` flag-off: zero landing lines;
-  with values-local: Deployment/Service/Ingress/NetworkPolicy/SA render.
-- Page weight: 196KB raw total (HTML 48KB, CSS 38KB, JS 31.9KB, fonts 78KB, favicon+rest);
-  far under the 350KB budget; gzip will land well under half of that.
+- `node scripts/landing-verify.mjs` (dockerised page, uid 101, port 8090):
+  LANDING VERIFY PASSED — 7 sweep cases OK, nav-375 routes OK in both themes, nav-spy OK,
+  reduced-motion OK, hero decor gates OK. Contrast 63/63 per theme. Budgets: total
+  204,633B / 350KB, JS 36,471B / 40KB, fonts 78,064B.
+- Pixel probes (no image input): frame packet-pixel counts above; nav pill luminance spread
+  221 (dark) / 230 (light) proving pill text paints.
+- `helm lint`: 0 failures; flag-off `helm template`: zero landing lines; values-local
+  renders the landing resources. No Helm files changed; nothing pushed.
