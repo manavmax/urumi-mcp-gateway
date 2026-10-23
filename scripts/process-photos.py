@@ -7,6 +7,8 @@ Runs AFTER photo curation. Input: artifacts/store-photos/choices.json
 {
   "hero":      {"search": "lifestyle", "index": 3, "verdict": "..."},
   "editorial": {"search": "lifestyle", "index": 7},
+  "banners":   [{"slug": "ceramics", "search": "ceramics-bowl", "index": 2,
+                 "verdict": "...", "alt": "..."}],
   "products": [
     {"sku": "LOAM-CER-001", "search": "ceramics-vase", "index": 11,
      "name": "Stoneware Vase", "verdict": "speckled stoneware vase on oak",
@@ -21,16 +23,25 @@ Runs AFTER photo curation. Input: artifacts/store-photos/choices.json
   "photo:<search>:<index>"   -> a second distinct real photo
   "none"                     -> no gallery image
 
+An optional "zoom": 1.3 on any hero/banner/editorial/product entry crops
+tighter around the centre before the aspect fit (used for the desk photos,
+where the reviewer asked for a crop to the notebook/pen area).
+
 Per product the pipeline:
   1. downloads the chosen photo (download_location ping + raw w=1600, cached)
   2. center-crops to 4:5 and resizes to 960x1200 (long side 1200)
   3. encodes webp at q80 down to q60 until the file is <= 150KB
   4. writes store/images/<SKU>.webp and, when used, <SKU>-2.webp
   5. writes artifacts/store-photos/manifest.json and docs/IMAGE_CREDITS.md
-  6. builds artifacts/store-photos/contact-sheet.png (photos + names + SKUs)
+  6. builds TWO review sheets: contact-sheet-products.png (every processed
+     product crop with the product name under it) and
+     contact-sheet-hero-banners.png (hero + editorial + category banners)
 
 The hero gets a separate full-bleed wide crop (bounded by the w=1600 source,
 about 1600x720) written as hero.webp; the catalog "hero" entry references it.
+The editorial photo is a 4:5 crop written as editorial.webp (catalog
+"editorial" entry). Each category banner is a wide crop written as
+banner-<slug>.webp and referenced by that category's "image" in products.json.
 The 600px variant is not a second shipped file: the theme registers the
 urumi-600 image size so WordPress derives a 480x600 copy from each sideloaded
 1200px master and serves both via srcset.
@@ -52,12 +63,13 @@ IMAGES = ROOT / "store" / "images"
 CHOICES = ROOT / "artifacts" / "store-photos" / "choices.json"
 MANIFEST_OUT = ROOT / "artifacts" / "store-photos" / "manifest.json"
 CREDITS = ROOT / "docs" / "IMAGE_CREDITS.md"
-CONTACT = ROOT / "artifacts" / "store-photos" / "contact-sheet.png"
 
 LONG_W, LONG_H = 960, 1200        # 4:5 grid master, long side 1200
 MAX_BYTES = 150_000
 HERO_W, HERO_H = 2000, 900        # hero target; output width is source-bounded
 HERO_MAX = 250_000
+BANNER_W, BANNER_H = 1600, 640    # category banner target (2.5:1), source-bounded
+BANNER_MAX = 220_000
 
 
 def api_get(url: str):
@@ -165,7 +177,8 @@ def build_product(p: dict) -> list[dict]:
     """One product: main photo + optional gallery image."""
     src, meta = grab_full(p["search"], p["index"])
     im = Image.open(src).convert("RGB")
-    main = crop_4x5(im).resize((LONG_W, LONG_H), Image.LANCZOS)
+    zoom = float(p.get("zoom", 1.0))
+    main = crop_4x5(im, zoom=zoom).resize((LONG_W, LONG_H), Image.LANCZOS)
     main_dest = IMAGES / f"{p['sku']}.webp"
     encode(main, main_dest, MAX_BYTES)
     print(f"[ok] {main_dest.name} {main_dest.stat().st_size // 1024}KB ({meta['id']})")
@@ -173,7 +186,7 @@ def build_product(p: dict) -> list[dict]:
                      p.get("verdict", ""), p.get("name", p["sku"]))]
     g = p.get("gallery", "crop")
     if g == "crop":
-        detail = crop_4x5(im, zoom=1.6).resize((LONG_W, LONG_H), Image.LANCZOS)
+        detail = crop_4x5(im, zoom=max(1.6, zoom * 1.25)).resize((LONG_W, LONG_H), Image.LANCZOS)
         ddest = IMAGES / f"{p['sku']}-2.webp"
         encode(detail, ddest, MAX_BYTES)
         print(f"[ok] {ddest.name} {ddest.stat().st_size // 1024}KB (detail crop of {meta['id']})")
@@ -217,13 +230,13 @@ def write_credits(entries: list[dict]) -> None:
         lines.append(
             f"| `{e['file']}` | {label} "
             f"| [{e['photographer']}]({e['photographer_url']}) "
-            f"| [{e['photo_url']}]({e['photo_page']}) | Unsplash License |")
+            f"| [{e['photo_url']}]({e['photo_url']}) | Unsplash License |")
     CREDITS.write_text("\n".join(lines) + "\n")
     print(f"[ok] {CREDITS}")
 
 
-def contact_sheet(entries: list[dict]) -> None:
-    """All chosen photos beside their product names and SKUs, for review."""
+def contact_sheet(entries: list[dict], dest: Path, subtitle: bool = True) -> None:
+    """Chosen photos beside their names and SKUs, for review."""
     cell_w, cell_h, label_h, pad = 300, 375, 56, 10
     per = 6
     rows = (len(entries) + per - 1) // per
@@ -243,9 +256,13 @@ def contact_sheet(entries: list[dict]) -> None:
         canvas.paste(im, (x, y))
         d.text((x, y + cell_h + 4), f"{e.get('name', e['sku'])}", fill="#000000")
         d.text((x, y + cell_h + 22), f"{e['sku']} - {e['photo_id']}", fill="#555555")
-    CONTACT.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(CONTACT)
-    print(f"[ok] {CONTACT}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(dest)
+    print(f"[ok] {dest}")
+
+
+CONTACT_PRODUCTS = ROOT / "artifacts" / "store-photos" / "contact-sheet-products.png"
+CONTACT_HERO_BANNERS = ROOT / "artifacts" / "store-photos" / "contact-sheet-hero-banners.png"
 
 
 def main() -> None:
@@ -265,6 +282,27 @@ def main() -> None:
         print(f"[ok] hero.webp {hdest.stat().st_size // 1024}KB ({meta['id']})")
         entries.append(entry_for("hero", "hero.webp", meta,
                                  hero.get("verdict", "hero lifestyle photo"), "hero"))
+
+    ed = choices.get("editorial")
+    if ed and ed.get("search"):
+        src, meta = grab_full(ed["search"], ed["index"])
+        eim = crop_4x5(Image.open(src).convert("RGB"),
+                       zoom=float(ed.get("zoom", 1.0))).resize((LONG_W, LONG_H), Image.LANCZOS)
+        edest = IMAGES / "editorial.webp"
+        encode(eim, edest, MAX_BYTES)
+        print(f"[ok] editorial.webp {edest.stat().st_size // 1024}KB ({meta['id']})")
+        entries.append(entry_for("editorial", "editorial.webp", meta,
+                                 ed.get("verdict", "editorial lifestyle photo"), "editorial"))
+
+    for b in choices.get("banners", []):
+        src, meta = grab_full(b["search"], b["index"])
+        bim = crop_wide(Image.open(src).convert("RGB"), BANNER_W, BANNER_H)
+        bdest = IMAGES / f"banner-{b['slug']}.webp"
+        encode(bim, bdest, BANNER_MAX)
+        print(f"[ok] {bdest.name} {bdest.stat().st_size // 1024}KB ({meta['id']})")
+        entries.append(entry_for(f"banner-{b['slug']}", bdest.name, meta,
+                                 b.get("verdict", "category banner"),
+                                 f"banner: {b['slug']}"))
 
     for p in choices.get("products", []):
         entries.extend(build_product(p))
@@ -291,7 +329,14 @@ def main() -> None:
     }, indent=2))
     print(f"[ok] {MANIFEST_OUT}")
     write_credits(entries)
-    contact_sheet(entries)
+    product_entries = [e for e in entries
+                       if not (e["sku"].startswith("banner-")
+                               or e["sku"] in ("hero", "editorial"))]
+    frame_entries = [e for e in entries
+                     if e["sku"].startswith("banner-")
+                     or e["sku"] in ("hero", "editorial")]
+    contact_sheet(product_entries, CONTACT_PRODUCTS)
+    contact_sheet(frame_entries, CONTACT_HERO_BANNERS)
     total = sum((IMAGES / e["file"]).stat().st_size for e in entries
                 if (IMAGES / e["file"]).exists())
     print(f"[ok] {len(entries)} images, {total // 1024}KB total")
