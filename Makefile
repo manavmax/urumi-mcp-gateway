@@ -3,6 +3,10 @@
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
 CONTEXT   ?= kind-urumi
+# The kind node container (urumi-control-plane) lives under the colima docker
+# context on this machine, not desktop-linux - so image build/save/import must
+# target colima explicitly (same fix as the main Urumi_AI repo Makefile).
+DOCKER_CONTEXT ?= colima
 
 # helm 4 renamed --atomic to --rollback-on-failure (the old spelling still works
 # there but prints a deprecation warning; helm 3 only has --atomic). Pick the
@@ -135,8 +139,8 @@ wp-cli-image:
 # them onto the wp-content volume on pod start, so restart wordpress after a
 # rebuild (`kubectl rollout restart deployment/urumi-wordpress -n urumi`).
 store-assets-image:
-	docker build -t urumi/store-assets:0.1.0 store
-	docker save urumi/store-assets:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	docker --context $(DOCKER_CONTEXT) build -t urumi/store-assets:0.1.0 store
+	docker --context $(DOCKER_CONTEXT) save urumi/store-assets:0.1.0 | docker --context $(DOCKER_CONTEXT) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/store-assets:0.1.0 into kind node"
 
 # Verify both demo servers with a real MCP SDK ClientSession: list tools, call each,
