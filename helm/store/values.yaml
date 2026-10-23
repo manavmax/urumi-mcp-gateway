@@ -122,6 +122,20 @@ quota:
   pvcTotal: 4Gi
   pods: 12
 
+networkPolicy:
+  # Namespace that hosts the ingress controller whose pods may reach this
+  # store's WordPress AND (when TLS is on) cert-manager's ACME HTTP-01 solver
+  # pods. Selector-driven (kubernetes.io/metadata.name), never hardcoded in a
+  # template; the default matches the existing storefront allow rule and both
+  # the kind cluster and the VPS.
+  ingressNamespace: ingress-nginx
+  # cert-manager ACME HTTP-01 solver port (mirrors the main chart's
+  # networkPolicy.acmeSolver; ADR-051/064). While a per-store certificate is
+  # being solved, cert-manager creates a short-lived solver pod in this
+  # namespace (label acme.cert-manager.io/http01-solver) listening here.
+  acmeSolver:
+    port: 8089
+
 nameOverride: ""
 fullnameOverride: ""
 

@@ -118,7 +118,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace | default "ingress-nginx" }}
       ports:
         - port: {{ .Values.wordpress.containerPort | default 8080 }}
     # ... and this store's own wp-setup (install hook) and woo-mcp only
@@ -227,4 +227,38 @@ spec:
           port: 443
         - protocol: TCP
           port: 6443
+{{- end }}
+{{- if .Values.global.tlsEnabled }}
+---
+{{- /* ACME HTTP-01 (ADR-064; mirrors the main chart's ADR-051 policy): while
+        cert-manager solves this store's certificate challenge it creates a
+        short-lived solver pod in THIS namespace with the label below. The
+        namespace default-deny blocks it like every other pod, so the
+        challenge request from the internet would never reach it and the
+        CertificateRequest would hang until timeout (observed live on the VPS
+        in the urumi namespace before ADR-051). This policy lets ONLY the
+        ingress controller namespace reach the solver pods on the solver
+        port, so the challenge still enters through nginx and nothing else
+        can touch them. Rendered only when TLS is enabled: with TLS off there
+        are no ACME solver pods to protect. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "urumi.fullname" . }}-allow-acme-solver
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace | default "ingress-nginx" | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.acmeSolver.port | default 8089 }}
 {{- end }}
