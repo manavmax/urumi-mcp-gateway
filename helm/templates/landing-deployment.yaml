@@ -1,0 +1,79 @@
+{{- if .Values.landing.enabled }}
+{{- /* Landing page Deployment (ADR-080): the same hardened shape as the
+        dashboard — nginx on the unprivileged 8080, run as uid 101 via the
+        shared securityContext helper, read-only root filesystem, and the same
+        three emptyDirs (/tmp, /var/cache/nginx, /var/run) that let a
+        non-root nginx boot. Probes hit /, which nginx answers with the page. */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "urumi.fullname" . }}-landing
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: landing
+    app.kubernetes.io/component: landing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: landing
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: landing
+        app.kubernetes.io/name: {{ include "urumi.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        tier: public
+    spec:
+      serviceAccountName: {{ include "urumi.fullname" . }}-landing
+      automountServiceAccountToken: false
+      {{- include "urumi.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: landing
+          image: "{{ .Values.landing.image.repository }}:{{ .Values.landing.image.tag }}"
+          imagePullPolicy: {{ .Values.landing.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.landing.port }}
+              name: http
+          resources:
+            {{- toYaml .Values.landing.resources | nindent 12 }}
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            {{- include "urumi.securityContext" (dict "root" $ "workload" "landing") | nindent 12 }}
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /var/cache/nginx
+              name: cache
+            - mountPath: /var/run
+              name: run
+            # environment config (ADR-088): the ConfigMap's landing-config.js is
+            # mounted over the image default of the same path, so values changes
+            # reach the page without a rebuild
+            - mountPath: /usr/share/nginx/html/landing-config.js
+              name: config
+              subPath: landing-config.js
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ include "urumi.fullname" . }}-landing-config
+{{- end }}

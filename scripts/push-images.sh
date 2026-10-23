@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build and push all 9 custom Urumi images to GHCR (multi-arch via buildx).
-# The 9th, the provisioner, bakes the STORE CHART into its image (see below).
+# Build and push all 10 custom Urumi images to GHCR (multi-arch via buildx).
+# The 10th, the provisioner, bakes the STORE CHART into its image (see below).
 #
 # One stranger-runnable line:
 #   GHCR_OWNER=<owner> GHCR_TOKEN=<token> scripts/push-images.sh
@@ -48,9 +48,9 @@ TAG="${APP_VERSION}-${GIT_SHA}"
 # is also gitignored as belt-and-braces.
 trap 'rm -rf src/provisioner/chart' EXIT
 
-# Image name -> build context (the 8 plain-context images; the provisioner is
+# Image name -> build context (the 9 plain-context images; the provisioner is
 # built after this loop because its context needs the staged store chart).
-IMAGES="gateway:src/gateway dashboard:src/dashboard woo-mcp:src/woo-mcp \
+IMAGES="gateway:src/gateway dashboard:src/dashboard landing:src/landing woo-mcp:src/woo-mcp \
 demo-mcp-time:src/demo-mcp-time demo-mcp-notes:src/demo-mcp-notes \
 wordpress:src/wordpress wp-cli:src/wp-cli store-assets:store"
 
@@ -94,7 +94,7 @@ for entry in $IMAGES; do
   verify_platforms "ghcr.io/${GHCR_OWNER}/${name}:${TAG}"
 done
 
-# --- provisioner (9th image): context = src/provisioner + the staged chart ---
+# --- provisioner (10th image): context = src/provisioner + the staged chart ---
 rm -rf src/provisioner/chart
 cp -R helm/store src/provisioner/chart
 echo "== provisioner <- src/provisioner (helm/store staged at src/provisioner/chart) =="

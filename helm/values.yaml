@@ -37,6 +37,7 @@ podSecurity:
   workloads:
     gateway:     { runAsUser: 1000, runAsGroup: 1000, readOnlyRootFilesystem: true }
     dashboard:   { runAsUser: 101,  runAsGroup: 101,  readOnlyRootFilesystem: true }
+    landing:     { runAsUser: 101,  runAsGroup: 101,  readOnlyRootFilesystem: true }
     wooMcp:      { runAsUser: 1000, runAsGroup: 1000, readOnlyRootFilesystem: true }
     demoTime:    { runAsUser: 1000, runAsGroup: 1000, readOnlyRootFilesystem: true }
     demoNotes:   { runAsUser: 1000, runAsGroup: 1000, readOnlyRootFilesystem: true }
@@ -232,6 +233,34 @@ dashboard:
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: 200m, memory: 128Mi }
+
+# --- Landing page (ADR-080/083) -----------------------------------------------
+# Static one-page site (src/landing) served by nginx on the APEX host. Disabled
+# by default: enabling needs the apex A record pointing at this server and the
+# landing.host value set (an empty host renders no Ingress on purpose). The
+# nginx container runs as uid 101 on 8080 with a read-only root, same shape as
+# the dashboard; ingress is allowed ONLY from the ingress controller namespace.
+# No hostname is hardcoded anywhere: host + TLS secret come from these values.
+landing:
+  enabled: false
+  image: { repository: ghcr.io/urumi/landing, tag: "0.1.0", pullPolicy: IfNotPresent }
+  # The ONE place the landing page's GitHub links point at (repo root and every
+  # docs/blob link are built from it at runtime). Injected into the page via the
+  # landing-config ConfigMap as /landing-config.js (ADR-088); the image ships a
+  # matching default so plain `docker run` also renders correct links.
+  repoUrl: "https://github.com/manavmax/urumi-mcp-gateway"
+  port: 8080
+  servicePort: 80
+  # The APEX host itself (e.g. the bare domain, not a subdomain). MUST be set
+  # for the Ingress to render; the apex A record must point at the server first.
+  host: ""
+  # Dedicated certificate Secret for the apex host: cert-manager issues one
+  # Certificate per Ingress, so the landing does NOT share the store/dashboard
+  # secretName (two Certificates on one Secret would fight).
+  tlsSecret: urumi-landing-tls
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }
 
 # Extra demo upstreams (Roadmap Day 5-7 "seed 2nd/3rd servers"). They are full MCP
 # servers in their own right so the gateway can prove aggregation, prefixing and

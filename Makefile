@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod helm-prod-first rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
+.PHONY: kind-up kind-down ingress lint template helm-local helm-prod helm-prod-first rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image landing-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -188,6 +188,15 @@ provisioner-image:
 	$(DOCKER) save urumi/provisioner:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
 	rm -rf src/provisioner/chart
 	@echo "loaded urumi/provisioner:0.1.0 into kind node"
+
+# Landing page image (ADR-080): static site from src/landing on nginx 8080.
+# Same build + import pattern as dashboard-image. A chart change (values) still
+# needs `make helm-local`; this is the content-change deploy path.
+landing-image:
+	$(DOCKER) build -t urumi/landing:0.1.0 src/landing
+	$(DOCKER) save urumi/landing:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	@echo "loaded urumi/landing:0.1.0 into kind node"
+	@echo "REMINDER: pods are NOT restarted by an import - restart with: kubectl rollout restart deployment/urumi-landing -n $(NAMESPACE)"
 
 # Rebuild Layer 3 images, import them into the kind node, then RESTART the pods so
 # the new build actually lands. Without the rollout restart, `ctr images import`

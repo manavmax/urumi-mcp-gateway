@@ -54,6 +54,20 @@ dashboard:
     requests: { cpu: 20m, memory: 64Mi }
     limits: { cpu: 200m, memory: 128Mi }
 
+# Landing page on the APEX host (ADR-080/083). nip.io maps 127.0.0.1.nip.io (and
+# every *.127.0.0.1.nip.io subdomain) to 127.0.0.1, so the apex works locally
+# with no DNS step. Image is node-local: `make landing-image` builds and imports
+# it (pullPolicy Never). TLS stays off locally (global.tlsEnabled false).
+landing:
+  enabled: true
+  image: { repository: urumi/landing, tag: "0.1.0", pullPolicy: Never }
+  port: 8080
+  servicePort: 80
+  host: 127.0.0.1.nip.io
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }
+
 wooMcp:
   # Local Kind: image built from src/woo-mcp and loaded into the node by
   # `make woo-mcp-image` (imagePullPolicy Never => use the node copy).

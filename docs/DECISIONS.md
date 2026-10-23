@@ -1326,3 +1326,344 @@ and adds code+config for zero confidentiality gain, since the images contain
 nothing to protect. (2) Operator manually creates the Secret per namespace:
 stores stay broken until someone remembers. Chosen: public packages; revisit
 only if private packages ever become a requirement.
+
+## 2026-10-22: Landing page is a static no-build site served by the dashboard nginx pattern (ADR-080)
+
+**What changed.** `src/landing/` is a one-page site: plain HTML, CSS and a little vanilla JS, no
+framework and no build step. It is served by a tiny nginx image (`FROM nginx:1.27-alpine`) copied
+from the dashboard image pattern: unprivileged 8080, run as uid 101 via the chart, read-only root,
+and the same three emptyDirs (/tmp, /var/cache/nginx, /var/run) that let non-root nginx boot. The
+security headers are byte-identical to the dashboard's (CSP self-only with no inline scripts, the
+theme bootstrap lives in the external theme-init.js, nosniff, no-referrer, DENY framing, empty
+Permissions-Policy) and the add_header inheritance gotcha is handled the same way. The page makes
+ZERO external requests: system fonts only, inline SVG only, no CDN, no analytics, no trackers, and
+the optional demo video renders as a link out, never an embed.
+
+**Why.** The brief asked for a fast, honest one-page site at the apex domain, and the repo already
+has a proven hardened static-serving shape (the dashboard). Reusing it keeps the security story in
+one family instead of inventing a second nginx config.
+
+**Alternatives considered.**
+- A React/Vite app for the landing: rejected, a build step and 100x the JS for zero benefit on a
+  static page (the brief forbade frameworks anyway).
+- An embed for the demo video (YouTube/iframe): rejected, it breaks the zero-external-request
+  guarantee and the CSP; a link out keeps both and the block stays hidden until videoUrl is set.
+
+**Known trade-offs.** The empty-value Permissions-Policy header is silently dropped by nginx
+(verified by curl: five of the six headers arrive; the sixth is the empty one). This matches the
+dashboard/gateway behaviour exactly, so the family stays consistent. Editing features.js requires
+an image rebuild by design (the config ships inside the image; there is no Secret wiring for a
+static page).
+
+**Verification.** `scripts/landing-verify.mjs` (playwright-core): 1440 and 390, light AND dark,
+into gitignored artifacts/landing/. Gates: zero external requests, zero console errors, no
+horizontal scroll and no element past the viewport at either width, 32-pair AA contrast gate per
+theme (one real failure found and fixed: the sample-data chip used light text on a mid-tone tint;
+it now uses the dashboard's on-tint rule, dark ink on tints in both themes), pre-paint theme
+applied in both modes, reduced-motion collapses the flow animation (computed 1e-05s), and with the
+default config the Beyond-the-brief and video sections stay hidden. Page weight 52KB raw, 15.5KB
+gzip. docker build + docker run as uid 101 with tmpfs emptyDir mimics, curl headers checked.
+
+## 2026-10-22: Landing theme is dark-first with dashboard-family tokens (ADR-081)
+
+**What changed.** The landing ships dark by default with a light mode. Tokens mirror
+src/dashboard/src/styles/tokens.css: same neutral scale (dark surfaces #14161B/#1C1F26/#22262F,
+light greige #ECEBE7/white), same ink pill primary (light-on-dark in dark mode), same accent tints
+(periwinkle, sky, blush) and the Dusk gradient restricted to one 3px strip on the hero code card.
+No green accent anywhere. Theme resolution: stored choice in localStorage (try/catch), else
+prefers-color-scheme, else dark. The pre-paint bootstrap is an external file (theme-init.js)
+because the CSP forbids inline scripts; the nav toggle stores the choice. Radii (24/14/10/999),
+shadow family and the 20px spacing grid are the dashboard's; the type scale extends it with display
+sizes (h1 up to 54px) for a marketing page. Final values documented in docs/LANDING_DESIGN.md.
+
+**Why.** The brief said dark-first with a light mode and one family with the product. The
+dashboard's dark set already passed contrast review, so reusing it avoids inventing (and
+re-measuring) a second palette.
+
+**Alternatives considered.**
+- Light-first like the dashboard app: rejected, the brief explicitly said dark-first for the site.
+- A separate landing palette: rejected, two colour systems would read as two products.
+
+**Known trade-offs.** The dashboard defaults to Light and remembers System-less choices; the
+landing defaults to Dark. They share the token VALUES, not the default. A visitor moving from site
+to app sees the app start light unless they pick dark there; acceptable, the site is the storefront
+and the app is the tool.
+
+## 2026-10-22: Beyond-the-brief and the video block are config-driven from features.js (ADR-082)
+
+**What changed.** `src/landing/features.js` is the single config file: `repoUrl` (announcement bar
++ nav + footer, defaulting to the Chart.yaml home), `videoUrl` (empty = the video section stays
+hidden), and `features`: multi-store provisioning, hosted MCP servers, OAuth, compact tool mode,
+rate limits, metrics. Every item ships `enabled: false`; main.js renders ONLY enabled items, and
+when none are enabled the whole section stays hidden. main.js also derives the dashboard/store
+links from the apex host the page is served on (dashboard.<apex>, store.<apex>, the same
+convention the Helm values use), with optional explicit overrides in the same file, so the static
+page carries no hardcoded hostname and the hero code card shows the real /mcp URL of the
+deployment.
+
+**Why.** The page must only claim what exists on the branch at build time. A flipped boolean that
+ships before its branch merges would be a false claim on a public page; the flip therefore lives in
+the image build, not in cluster state.
+
+**Alternatives considered.**
+- Helm values -> rendered config: rejected, the page is static and the flag belongs to the site's
+  content build, not the release; also avoids wiring a ConfigMap for one boolean.
+- Rendering disabled items greyed out: rejected, showing "OAuth" as a grey card still advertises a
+  thing that does not exist; hidden means honest.
+
+**Known trade-offs.** Flipping a flag requires `make landing-image` plus a landing rollout. The
+section disappears entirely while all items are off, so the code that renders it is untestable in
+the default build; scripts/landing-verify.mjs asserts the default-hidden state, and the render path
+is six lines of DOM building in main.js.
+
+## 2026-10-22: Helm landing component, separate files, apex Ingress with a dedicated cert (ADR-083)
+
+**What changed.** The landing deploys from five NEW templates (nothing existing was edited except
+values files and the schema): landing-deployment.yaml (dashboard-shaped: uid 101 via the shared
+securityContext helper, readOnlyRootFilesystem, probes on /, small resources 10m/32Mi requests),
+landing-service.yaml (ClusterIP), landing-serviceaccount.yaml (automountServiceAccountToken false;
+kept in its own file instead of serviceaccounts.yaml to stay conflict-free),
+landing-networkpolicy.yaml (the ONLY opening for the landing pod: ingress from the
+ingress-controller namespace on the values port; no egress rule at all, a static server needs not
+even DNS), and landing-ingress.yaml. The Ingress serves the APEX host from the `landing.host`
+value; TLS follows the existing cert-manager pattern (same annotations object, same tlsEnabled
+gate) but with a DEDICATED secretName (`landing.tlsSecret`, default urumi-landing-tls) because
+cert-manager issues one Certificate per Ingress and two Certificates cannot share a Secret. The
+Ingress renders only when `landing.host` is set: an empty host would render a catch-all rule that
+steals traffic from the store/dashboard Ingress. `landing.enabled` defaults FALSE in values.yaml
+and true in values-local.yaml (kind apex 127.0.0.1.nip.io). No hostname is hardcoded in any
+template. Makefile gained `landing-image` (same build+import style); push-images.sh and
+smoke-images.sh list the ninth image.
+
+**Why.** Merge safety first: every new manifest is a new file, so other branches cannot conflict
+with it; the only shared-file touches are the values appends and one schema property.
+
+**Alternatives considered.**
+- One combined Ingress object edited inside ingress.yaml: rejected, it would put the landing in the
+  highest-conflict file in the chart and entangle its rollout with the store/dashboard host list.
+- Sharing the existing urumi-tls Secret: rejected (cert-manager shim creates a Certificate per
+  Ingress; two Certificates claiming one Secret fight). The apex gets its own cert, renewed
+  independently.
+- Adding the landing port to the shared public-tier NetworkPolicy: rejected in favour of a
+  dedicated policy that allows ONLY the ingress controller (the brief's wording); the landing needs
+  no same-namespace callers and no egress.
+
+**Known trade-offs.** Two certificates to renew instead of one, and the apex A record must point
+at the server BEFORE enabling (documented in README). The local kind values turn the flag on with
+the nip.io apex, which is plain HTTP locally (global.tlsEnabled false), same as the dashboard.
+
+## 2026-10-22: Landing verification posture: docker + playwright + helm only, no cluster (ADR-084)
+
+**What changed.** The landing branch was verified WITHOUT touching the kind cluster, kubectl or any
+helm release (another session owns them): docker build + docker run as uid 101 with tmpfs mounts
+mimicking the pod's emptyDirs, curl header assertions, scripts/landing-verify.mjs (Playwright:
+screenshots 1440/390 in both themes into gitignored artifacts/landing/, zero-external-request,
+overflow, contrast and console gates), helm lint with values-local and values-prod.example, and
+helm template proving the flag renders four resources + the NetworkPolicy when on and ZERO landing
+lines when off. npm ci in src/dashboard installed the existing playwright-core devDep for the
+script; node_modules stay gitignored.
+
+**Why.** The brief for this session forbade cluster access; every gate had to be runnable against
+the image and the chart alone, and each must stay runnable later as a regression check.
+
+**Known trade-offs.** The screenshots cannot be visually reviewed by this session (no image input
+available), so the visual review is scripted proxies (geometry, overflow, contrast, computed
+animation state) plus the saved PNGs for a human pass. The docker run needs explicit
+--tmpfs ...:mode=1777 because plain docker tmpfs defaults are not uid-101-writable; the smoke test
+encodes the same invocation.
+
+## 2026-10-22: Landing polish pass, config-driven claims and copy button (ADR-085)
+
+**What changed.** One timeboxed polish pass on the landing page, no Helm changes. (1) The nav's
+sticky behaviour is now proven in-browser: the verify script scrolls to 1600px and asserts the
+header's rect sits at the viewport top in all four cases, saving a mid-scroll screenshot per case.
+(2) The hero config's gateway URL is config-driven: `landing.gatewayUrl` in features.js, empty by
+default, falling back to `dashboard.<apex>/mcp` derived from the page host (same convention as the
+Helm values, still no hardcoded hostname). The Authorization placeholder is now real visible text
+(`Bearer <your-api-key>` with escaped angle brackets; the first version had raw `<your-api-key>`
+in the HTML, which the parser swallowed as an unknown element, so the page silently showed only
+"Bearer"). A Copy button puts the plain-text config on the clipboard (async Clipboard API with a
+textarea fallback for plain-http, "Copied" feedback), proven by reading the clipboard back in
+Playwright. (3) Hero strengthened with dashboard-accent tokens: a soft radial glow behind the
+config block (`--hero-glow`), a subtle border, a one-time rise-in, a blinking caret, an accent
+outline plus hover glow on primary buttons (`--accent-ring`) and stronger focus rings; more space
+above the fold. All motion collapses under prefers-reduced-motion (re-verified 1e-05s). (4) Section
+rhythm: a mono uppercase eyebrow above every section title and a hairline divider between
+consecutive sections. (5) The features intro now reads "The gateway, the store and the team
+controls below are all live in the demo", the queue intro lost its "branch" wording, and the page
+contains zero "this branch" mentions. (6) The store claim is data-driven: `storeProductCount` in
+features.js fills the "12-product catalog" phrase; null reads "a product catalog".
+
+**Why.** The pass brief asked for exactly these seven items; the copy button and the two new config
+keys keep the page's honesty invariant (claims come from one config file, not prose) while making
+the hero actually usable.
+
+**Known trade-offs.** The glow's horizontal inset initially pushed the 390px scrollWidth to 410px
+(body's overflow-x clip hid the scrollbar, but the strict gate caught it); the glow now spills
+vertically only. execCommand copy is deprecated but is only the plain-http fallback. The clipboard
+round-trip test grants permissions explicitly; real browsers prompt or allow per-site.
+
+**Verification.** scripts/landing-verify.mjs: all 4 cases OK with the new gates (sticky nav at
+top, visible Bearer placeholder, derived URL without example.com, copy button present, store claim
+"12-product"), zero external requests, 32/32 contrast pairs per theme, zero console errors.
+Page weight 57.8KB raw, 17.0KB gzip.
+
+
+## 2026-10-22: Landing page rebuilt to docs/LANDING_DESIGN.md as the single source of truth (ADR-086)
+
+**What changed.** Full rebuild of `src/landing/` to the new spec (the spec file landed as
+commit 1fb69a8 and overrides the older token note): the new token family (near-black
+canvas #040804, surface bands, hairlines, one micro shadow, mint-teal accent), 18
+sections in the spec's order, and the full motion set. Self-hosted fonts: Inter Variable
+and DM Mono installed from the fontsource packages in a temp folder OUTSIDE the repo,
+only the latin woff2 files copied in (48KB + 15KB + 15KB), the two main files preloaded,
+`font-display: swap`, licences recorded in docs/FONT_CREDITS.md. The hero graphic ("the
+gateway prism") is original inline SVG: client cards, /mcp hub with accent ring and
+3s pulse, four upstream cards incl. a dashed "your server", tilted translucent planes
+that follow the pointer, curved paths with accent outgoing / violet returning packets,
+upstream flash on arrival, drifting tool chips; the loop pauses off screen and on hidden
+tabs and renders a static frame under prefers-reduced-motion. Interactions: typing
+terminal (28ms/char, 5s loop), client tabs (Cursor / Claude Code / MCP Inspector) with
+per-snippet copy buttons and 160ms cross fade, count-up stats with a drawing sparkline,
+audit rows streaming every 2.5s (last 5, pause on hover), card spotlight on pointer
+devices, 40s marquee paused on hover, the "Break it yourself" simulation (kill pod ->
+Unreachable after 600ms with the other servers still answering, restarting after 6s,
+Connected again after restart; disable pulls tools from the combined list with the live
+count; revoke -> 401 until a new key is issued; Reset restores), step track drawing on
+scroll, numbered diagram lighting 400ms apart with a Replay pill, bottom-centre toasts,
+nav blur after 8px, mobile menu sheet, entrance reveals staggered 60ms. Light/dark with
+the manual toggle; reduced motion shows final values with loops disabled. No framework,
+no build step, no external requests.
+
+**Kept, per the brief.** The nginx image pattern and headers (CSP unchanged: `font-src
+'self'` already covered fonts; only the cache regex gained `woff2`), all Helm files
+untouched, the features.js contract (every beyond-the-brief item `enabled: false`,
+`gatewayUrl`, `storeProductCount`, `videoUrl`), the real gateway URL derivation
+(`dashboard.<apex>/mcp`), the visible `Bearer <your-api-key>` placeholder (escaped this
+time; raw angle brackets are parser-swallowed, see ADR-085), and the copy buttons.
+
+**Deviations.** Each is listed in docs/LANDING_DESIGN.md section 13: dark `muted`
+darkened to `#8B8E89` because the spec value fails WCAG AA below 24px (3.9:1 canvas,
+3.3:1 surface); light theme completed (white cards on `#EEF2F0` bands, dark danger/warn
+tokens); new `on-deep` token for text on accent-deep fills; the sim caption names real
+checks (`make test`, `scripts/verify-server-tools.mjs`) because `scripts/regress-core.sh`
+does not exist; the client-tabs config block lives under the three steps; the closing
+band gained one small line so `storeProductCount` stays wired.
+
+**Verification.** `docker build -t urumi/landing:0.2.0 src/landing` + the container run
+from ADR-084. scripts/landing-verify.mjs extended and green: zero external requests, zero
+console errors at every width, no horizontal scroll at 375/768/1024/1440, 59/59 AA pairs
+in both themes, sticky nav with the scrolled backdrop, reduced-motion gates (packets
+hidden, marquee stopped, final stat values, terminal/diagram final states), the full
+simulation state machine, clipboard round-trips for all three snippets plus tool chips,
+tab switching, budgets from real response bodies (total 196KB of the 350KB budget, JS
+31.9KB of 40KB, fonts 78KB), screenshots at 1440/390 in both themes and 6 hero frames
+600ms apart with six distinct hashes. Scripted probes (no image input this session):
+packets move with both spec colours, hub pulse, marquee motion, streaming rows, terminal
+typing, track draw, diagram replay restart (12 -> 1 -> 12), spotlight variables, toasts,
+announcement persistence, mobile sheet, tab switch. `helm lint` 0 failures; flag-off
+`helm template` renders zero landing lines; values-local renders the landing resources.
+
+**Known trade-offs.** The hero graphic begins just below the fold at 1440x900 (y=1008);
+its packets intentionally stay paused until it is scrolled into view, which is the spec's
+off-screen pause. This session's model has NO image input, so the screenshots and frames
+were not visually reviewed here; scripted geometry and motion probes substitute, and the
+visual pass is the top item for Manav in docs/REVIEW_NEEDED_LANDING.md.
+
+
+## 2026-10-22: Landing nav fix pass: hidden-attribute overrides, the invisible pills, and the packets that never painted (ADR-087)
+
+**User report.** (1) The mobile menu list rendered open on desktop widths from page load and
+pushed the page down. (2) The primary pill "View on GitHub" had nearly invisible text in both
+themes.
+
+**Root causes, verified in the browser before fixing (not assumed).** (1) Author `display`
+rules beat the UA `[hidden] { display: none }` cascade: `.nav-sheet { display: grid }` and
+`.btn { display: inline-flex }` made the hidden sheet (314px, sticky under the nav) and the
+hidden `#simIssue` render anyway, at every width, from load. (2) Inside that always-open
+sheet, `.nav-sheet a { color: var(--body) }` (specificity 0,1,1) overrode `.btn-primary`
+(0,1,0): the GitHub pill painted `#A8ABA6` on `#E3E5E1` in dark (1.75:1) and near-black on
+near-black in light. The user saw the sheet's pill; the nav's own pill measured fine.
+(3) Found during the pass: the hero packets never painted at all. CSS
+`.hv-packets circle { opacity: 0 }` overrode the per-frame `opacity` ATTRIBUTE (CSS rules beat
+presentation attributes), so the previous "6 distinct frame hashes" motion evidence came from
+chip drift and the hub pulse, not packets.
+
+**Fixes.** (1) Global `[hidden] { display: none !important }` guard. (2) The sheet became a
+full-screen overlay rendered ONLY below 900px (`@media (min-width: 900px)` hides it
+unconditionally): fade+slide 300ms, close button, Escape, link-choice and resize-to-desktop
+routes, body scroll lock, focus trapped inside, focus returns to the menu button, correct
+aria-expanded/controls/labels. (3) The sheet link rule is now scoped to `.sheet-links a`, so
+the pills inside keep their token colors. The nav was rebuilt desktop-first per the brief:
+original SVG logomark + wordmark left, the five section links in one translucent pill group
+centre with a sliding accent-deep highlight driven by a section IntersectionObserver
+(band -40%/-52%), repositioned on resize and after webfont swap; right: secondary pill,
+primary pill with a hover-nudging arrow, round theme toggle; 64px bar shrinking to 56px
+after 8px of scroll with blurred translucent canvas and hairline border. Hero fixes from the
+same brief: dashed connection lines restyled to a dedicated `--flow-line` token (alpha 0.34
+dark / 0.38 light, width 2), packets now paint with a halo trail circle (r 8 at 30 percent)
+per packet, the two tilted planes are smaller (452x228 / 358x158) and fainter (opacity
+0.32 / 0.26), and the hero was tightened so the graphic starts 46 percent into a 1440x900
+viewport at load (was 0 percent: it began below the fold), while 390px still shows the
+headline, buttons and the terminal card.
+
+**Verification.** scripts/landing-verify.mjs grew gates for every point above: the sheet is
+hidden and takes zero space on load at 375/768/1024/1440, content starts directly under the
+bar, the desktop bar is 64px, the menu opens and closes by every route (button, Escape,
+close button, section link with scroll, resize to desktop), focus stays trapped across 12
+tabs, the body scroll locks, focus returns to the toggle, pills inside the OPEN sheet pass
+contrast in both themes, the scroll-spy highlights security and kubernetes with the glide
+pixel-exact under the active link (204px = 204px), reduced motion disables the glide
+transition while keeping it positioned, dismissing the announcement does not break the
+sticky offset, the hero graphic is >=45 percent visible at 1440x900, the mobile hero shows
+headline/buttons/card, packets actually paint (max opacity 1.0, halos == cores), planes
+<=0.35 opacity and line alpha >=0.25. Full suite: LANDING VERIFY PASSED, 63/63 contrast
+pairs per theme, budgets total 204,633B of 358,400B and JS 36,471B of 40,960B. Pixel probes
+substituted for eyes (this model has no image input): the six new hero frames contain
+78-179 teal packet pixels each and violet return pixels in three of six frames; the nav pill
+regions in both full-page shots show a 221/230 luminance spread, i.e. text painting.
+
+**Known trade-offs.** The bar shrink animates height (one element, cheap) rather than
+transform because the brief asked for a literal 64px-to-56px transition. The smooth-scroll
+spy legitimately walks the highlight through sections while a long scroll settles; the
+verify gate uses instant scrolling for determinism. Screenshots and frames were retaken and
+the open-sheet states saved for Manav, but the visual review is still his: see
+docs/REVIEW_NEEDED_LANDING.md.
+
+
+## 2026-10-23: One repo URL for every landing link, injected from the chart (ADR-088)
+
+**What changed.** Every outbound link on the landing page is now built at runtime instead of
+hardcoded. The GitHub repo URL lives in ONE value: `landing.repoUrl` in the chart values
+(defaulted in the committed values.yaml to https://github.com/manavmax/urumi-mcp-gateway).
+A new `urumi-landing-config` ConfigMap renders a tiny `landing-config.js` from that value
+plus the chart's existing ingress hosts (dashboard/store, scheme from `global.tlsEnabled`:
+https when TLS is on, http locally) and is mounted over the image default of the same path
+in the landing Deployment, so deployments change links from values without a rebuild. The
+image ships a matching default `landing-config.js` (the only page-side copy, needed for
+plain `docker run` previews); nginx serves it no-cache so ConfigMap changes reach browsers.
+features.js now ships `repoUrl: ""` and index.html carries no URL: the six repo-root links
+keep `data-repo` and the ten docs links carry `data-repo-path="<in-repo path>"`, resolved by
+main.js to `<repoUrl>/blob/main/<path>`. Chart.yaml `home` was updated to the same repo.
+The `dashboard.example.com` placeholders in the config snippets became the neutral
+`dashboard.<apex>` form. GitHub links keep `target="_blank" rel="noopener noreferrer"`;
+dashboard and store links stay same-tab, built from the chart hosts (in-cluster) or derived
+from the page host (docker preview), with no signup/OAuth/registration links anywhere.
+
+**Why.** All 16 link targets in the page source pointed at a stale org
+(github.com/urumi-ai/mcp-gateway) and were scattered across 16 hardcoded hrefs plus
+features.js; the blob links also pinned the `landing` branch instead of `main`.
+
+**Verification.** scripts/landing-verify.mjs gained a links block that prints every distinct
+rendered href and gates: all 16 GitHub hrefs start with the manavmax repo prefix, zero stale
+org/placeholder links, GitHub links carry target/rel while site links stay same-tab, and
+every `/blob/main/<path>` href is cross-checked against `git ls-tree -r main --name-only`
+(all five paths exist). Rendered: 6 repo-root links, 5 dashboard links, 2 store links, 10
+docs links over 5 distinct main paths. helm renders the ConfigMap with
+`http://dashboard.127.0.0.1.nip.io` for values-local and `https://dashboard.<host>` for a
+prod-like overlay (https + real hosts); helm lint 0 failures; flag-off template still renders
+zero landing lines. Full landing suite PASSED with budgets total 205,019B and JS 37,413B.
+Secret/placeholder scan of src/landing and the helm landing files: no credentials, no emails;
+the only URL defaults are the allowed GitHub repo URL. Pre-existing chart-wide placeholders
+outside the landing scope (nip.io local hosts, example.com in values-prod.example.yaml and
+the wp adminEmail default) were reviewed and left untouched.

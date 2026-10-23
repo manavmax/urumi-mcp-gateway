@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host-platform build + per-image container smoke test for all 8 custom images.
+# Host-platform build + per-image container smoke test for all 9 custom images.
 # Proves the build contexts and Dockerfiles work WITHOUT pushing anything.
 # Used by `make smoke-images`; push-images.sh does the multi-arch GHCR push.
 set -eu
@@ -8,7 +8,7 @@ APP_VERSION=$(sed -n 's/^appVersion: *"\([^"]*\)".*/\1/p' helm/Chart.yaml)
 GIT_SHA=$(git rev-parse --short HEAD)
 TAG="${APP_VERSION}-${GIT_SHA}"
 
-IMAGES="gateway:src/gateway dashboard:src/dashboard woo-mcp:src/woo-mcp \
+IMAGES="gateway:src/gateway dashboard:src/dashboard landing:src/landing woo-mcp:src/woo-mcp \
 demo-mcp-time:src/demo-mcp-time demo-mcp-notes:src/demo-mcp-notes \
 wordpress:src/wordpress wp-cli:src/wp-cli store-assets:store"
 
@@ -34,6 +34,15 @@ for entry in $IMAGES; do
     dashboard)
       docker run -d --rm --name "urumi-smoke-${name}" -p "127.0.0.1:${PORT}:8080" "urumi/${name}:${TAG}" >/dev/null; sleep 2
       [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/")" = 200 ] && echo "  dashboard / -> 200" || { echo "  dashboard FAILED"; FAIL=1; } ;;
+    landing)
+      # Same non-root shape as the dashboard pod: uid 101 + tmpfs for the three
+      # emptyDir paths (/tmp, /var/cache/nginx, /var/run), then a header check.
+      docker run -d --rm --name "urumi-smoke-${name}" --user 101 \
+        --tmpfs /tmp:mode=1777 --tmpfs /var/cache/nginx:mode=1777 --tmpfs /var/run:mode=1777 \
+        -p "127.0.0.1:${PORT}:8080" "urumi/${name}:${TAG}" >/dev/null; sleep 2
+      CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/")
+      CSP=$(curl -s -D - -o /dev/null "http://127.0.0.1:${PORT}/" | grep -c "Content-Security-Policy")
+      if [ "$CODE" = 200 ] && [ "$CSP" -ge 1 ]; then echo "  landing / -> 200 with CSP"; else echo "  landing FAILED (code=$CODE csp=$CSP)"; FAIL=1; fi ;;
     woo-mcp|demo-mcp-time)
       docker run -d --rm --name "urumi-smoke-${name}" -p "127.0.0.1:${PORT}:8000" "urumi/${name}:${TAG}" >/dev/null; sleep 2
       [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/")" = 200 ] && echo "  ${name} / -> 200" || { echo "  ${name} FAILED"; FAIL=1; } ;;

@@ -58,6 +58,20 @@ dashboard:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: 200m, memory: 128Mi }
 
+# Landing page on the APEX host (ADR-080/083). The apex A record MUST point at
+# this server before enabling. host is the bare domain; set it via --set or an
+# uncommitted overlay if you do not want it in any committed file. The apex
+# certificate gets its OWN secret (tlsSecret), separate from the shared
+# urumi-tls Secret, because cert-manager issues one Certificate per Ingress.
+landing:
+  enabled: true
+  image: { repository: ghcr.io/<owner>/landing, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
+  host: shop.example.com
+  tlsSecret: urumi-landing-tls
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }
+
 wooMcp:
   enabled: true
   image: { repository: ghcr.io/<owner>/woo-mcp, tag: "1.0.0-a1b2c3d", pullPolicy: IfNotPresent }
