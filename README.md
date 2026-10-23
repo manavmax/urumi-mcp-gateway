@@ -281,10 +281,15 @@ Enabling it in prod takes three things, in this order:
 item ships `enabled: false`, and only `enabled: true` items render in the "Beyond the brief"
 section (all-off hides the section). Flip an item ONLY after its branch actually merges, then
 rebuild: `make landing-image` + restart `deployment/urumi-landing`. The same file also holds
-`repoUrl` (announcement bar + nav), `gatewayUrl` (the hero MCP config; empty = derived from the
-page host as `dashboard.<apex>/mcp`), `storeProductCount` (the store claim, so a count correction
-never touches prose), and `videoUrl` (the demo video block stays hidden while empty; it renders
-as a link out, never an embed, so the page keeps making zero external requests).
+`gatewayUrl` (the hero MCP config; empty = derived from the page host as `dashboard.<apex>/mcp`),
+`storeProductCount` (the store claim, so a count correction never touches prose), and `videoUrl`
+(the demo video block stays hidden while empty; it renders as a link out, never an embed, so the
+page keeps making zero external requests). Outbound links (ADR-088): every GitHub link is built at
+runtime from ONE value, `landing.repoUrl` in the chart values (defaulted to the public repo),
+injected as `/landing-config.js` via the `urumi-landing-config` ConfigMap together with the
+dashboard and store URLs (scheme from `global.tlsEnabled`, hosts from the existing ingress
+values). The image ships a matching default `landing-config.js` so plain `docker run` works;
+no page file carries the repo URL.
 
 ## Submission (when ready)
 

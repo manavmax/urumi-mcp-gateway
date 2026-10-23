@@ -1136,3 +1136,41 @@ spy legitimately walks the highlight through sections while a long scroll settle
 verify gate uses instant scrolling for determinism. Screenshots and frames were retaken and
 the open-sheet states saved for Manav, but the visual review is still his: see
 docs/REVIEW_NEEDED_LANDING.md.
+
+
+## 2026-10-23: One repo URL for every landing link, injected from the chart (ADR-088)
+
+**What changed.** Every outbound link on the landing page is now built at runtime instead of
+hardcoded. The GitHub repo URL lives in ONE value: `landing.repoUrl` in the chart values
+(defaulted in the committed values.yaml to https://github.com/manavmax/urumi-mcp-gateway).
+A new `urumi-landing-config` ConfigMap renders a tiny `landing-config.js` from that value
+plus the chart's existing ingress hosts (dashboard/store, scheme from `global.tlsEnabled`:
+https when TLS is on, http locally) and is mounted over the image default of the same path
+in the landing Deployment, so deployments change links from values without a rebuild. The
+image ships a matching default `landing-config.js` (the only page-side copy, needed for
+plain `docker run` previews); nginx serves it no-cache so ConfigMap changes reach browsers.
+features.js now ships `repoUrl: ""` and index.html carries no URL: the six repo-root links
+keep `data-repo` and the ten docs links carry `data-repo-path="<in-repo path>"`, resolved by
+main.js to `<repoUrl>/blob/main/<path>`. Chart.yaml `home` was updated to the same repo.
+The `dashboard.example.com` placeholders in the config snippets became the neutral
+`dashboard.<apex>` form. GitHub links keep `target="_blank" rel="noopener noreferrer"`;
+dashboard and store links stay same-tab, built from the chart hosts (in-cluster) or derived
+from the page host (docker preview), with no signup/OAuth/registration links anywhere.
+
+**Why.** All 16 link targets in the page source pointed at a stale org
+(github.com/urumi-ai/mcp-gateway) and were scattered across 16 hardcoded hrefs plus
+features.js; the blob links also pinned the `landing` branch instead of `main`.
+
+**Verification.** scripts/landing-verify.mjs gained a links block that prints every distinct
+rendered href and gates: all 16 GitHub hrefs start with the manavmax repo prefix, zero stale
+org/placeholder links, GitHub links carry target/rel while site links stay same-tab, and
+every `/blob/main/<path>` href is cross-checked against `git ls-tree -r main --name-only`
+(all five paths exist). Rendered: 6 repo-root links, 5 dashboard links, 2 store links, 10
+docs links over 5 distinct main paths. helm renders the ConfigMap with
+`http://dashboard.127.0.0.1.nip.io` for values-local and `https://dashboard.<host>` for a
+prod-like overlay (https + real hosts); helm lint 0 failures; flag-off template still renders
+zero landing lines. Full landing suite PASSED with budgets total 205,019B and JS 37,413B.
+Secret/placeholder scan of src/landing and the helm landing files: no credentials, no emails;
+the only URL defaults are the allowed GitHub repo URL. Pre-existing chart-wide placeholders
+outside the landing scope (nip.io local hosts, example.com in values-prod.example.yaml and
+the wp adminEmail default) were reviewed and left untouched.

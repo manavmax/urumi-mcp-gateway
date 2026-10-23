@@ -33,10 +33,13 @@ packet glow, the smaller fainter planes, and the 46-percent-visible graphic at 1
 
 ## 3. Carried over from earlier passes (still open)
 
-1. Apex DNS before enabling prod; 2. confirm repoUrl in features.js; 3. flip beyond-the-brief
-items only after merge; 4. demo video stays hidden until `landing.videoUrl`; 5. www subdomain
-not served; 6. image tag: built as `urumi/landing:0.2.0` locally (values-local pins 0.1.0 —
-bump before `make helm-local`); 7. live kind run when free.
+1. Apex DNS before enabling prod. 2. DONE (ADR-088): every GitHub link now builds from the
+   one chart value `landing.repoUrl`, defaulted to https://github.com/manavmax/urumi-mcp-gateway —
+   confirm that is the repo you want public; docs links resolve to /blob/main/<path> and all
+   five paths were proven to exist on main. 3. Flip beyond-the-brief items only after merge;
+4. demo video stays hidden until `landing.videoUrl`; 5. www subdomain not served; 6. image tag:
+   built as `urumi/landing:0.2.0` locally (values-local pins 0.1.0 — bump before
+   `make helm-local`); 7. live kind run when free.
 
 ## Evidence summary (this pass)
 
