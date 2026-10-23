@@ -59,6 +59,13 @@ spec:
               name: cache
             - mountPath: /var/run
               name: run
+            # environment config (ADR-088): the ConfigMap's landing-config.js is
+            # mounted over the image default of the same path, so values changes
+            # reach the page without a rebuild
+            - mountPath: /usr/share/nginx/html/landing-config.js
+              name: config
+              subPath: landing-config.js
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
@@ -66,4 +73,7 @@ spec:
           emptyDir: {}
         - name: run
           emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ include "urumi.fullname" . }}-landing-config
 {{- end }}

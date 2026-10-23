@@ -222,6 +222,11 @@ dashboard:
 landing:
   enabled: false
   image: { repository: ghcr.io/urumi/landing, tag: "0.1.0", pullPolicy: IfNotPresent }
+  # The ONE place the landing page's GitHub links point at (repo root and every
+  # docs/blob link are built from it at runtime). Injected into the page via the
+  # landing-config ConfigMap as /landing-config.js (ADR-088); the image ships a
+  # matching default so plain `docker run` also renders correct links.
+  repoUrl: "https://github.com/manavmax/urumi-mcp-gateway"
   port: 8080
   servicePort: 80
   # The APEX host itself (e.g. the bare domain, not a subdomain). MUST be set

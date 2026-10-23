@@ -1,0 +1,21 @@
+{{- if .Values.landing.enabled }}
+{{- /* Landing environment config (ADR-088): the single injection point for the
+        repo URL and the dashboard/store links. Rendered as a tiny JS file and
+        mounted over /landing-config.js in the nginx html dir, so deployments
+        change the links from values without rebuilding the image. The scheme
+        follows global.tlsEnabled (https when TLS is on, http locally) and the
+        hosts are the chart's existing ingress hosts — nothing is hardcoded. */ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "urumi.fullname" . }}-landing-config
+  labels:
+    {{- include "urumi.labels" . | nindent 4 }}
+    app: landing
+    app.kubernetes.io/component: landing
+data:
+  landing-config.js: |
+    (window.LANDING = window.LANDING || {}).repoUrl = {{ .Values.landing.repoUrl | quote }};
+    window.LANDING.dashboardUrl = "{{ if .Values.global.tlsEnabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.hosts.dashboard }}";
+    window.LANDING.storeUrl = "{{ if .Values.global.tlsEnabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.hosts.store }}";
+{{- end }}
