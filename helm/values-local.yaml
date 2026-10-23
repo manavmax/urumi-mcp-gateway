@@ -90,13 +90,25 @@ wordpress:
   image: { repository: urumi/wordpress, tag: 6.6-php8.2-apache-hardened, pullPolicy: Never }
   containerPort: 8080
   resources:
-    requests: { cpu: 100m, memory: 128Mi }
+    # 10m request: this 2-CPU kind node also hosts the bonus multi-store demo
+    # namespaces (store-gate-alpha/bravo), which push CPU requests to 99% - a
+    # 50-100m surge pod never schedules and a rollout stalls (store down). 10m
+    # reserves a slot; the 500m limit still caps burst.
+    requests: { cpu: 10m, memory: 128Mi }
     limits: { cpu: 500m, memory: 512Mi }
 
 wpSetup:
   # Hardened wp-cli runner built from src/wp-cli (`make wp-cli-image`): job runs
   # as uid 33, ALL capabilities dropped.
   image: { repository: urumi/wp-cli, tag: cli-php8.2-hardened, pullPolicy: Never }
+  # Local override: Kubernetes defaults a container's unspecified request to its
+  # LIMIT, so the values.yaml shape (memory-only request + 300m cpu limit) still
+  # requests 300m cpu and the hook pod can never schedule on this 2-CPU node
+  # (the bonus multi-store namespaces push requests to ~99%). State the request
+  # explicitly; the 300m limit still bounds the job.
+  resources:
+    requests: { cpu: 10m, memory: 128Mi }
+    limits: { cpu: 300m, memory: 512Mi }
 
 mariadb:
   resources:
