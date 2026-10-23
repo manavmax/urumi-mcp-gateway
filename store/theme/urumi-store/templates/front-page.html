@@ -3,17 +3,26 @@
 <main class="wp-block-group">
 	<!-- wp:urumi-store/hero {"align":"full"} /-->
 
-	<!-- wp:group {"align":"wide","layout":{"type":"constrained"}} -->
-	<div class="wp-block-group alignwide">
-		<!-- wp:urumi-store/categories {"align":"wide"} /-->
+	<!-- wp:pattern {"slug":"urumi-store/intro"} /-->
 
-		<!-- wp:pattern {"slug":"urumi-store/new-in"} /-->
-
-		<!-- wp:pattern {"slug":"urumi-store/split"} /-->
-
-		<!-- wp:pattern {"slug":"urumi-store/faq"} /-->
+	<!-- wp:group {"className":"urumi-section urumi-band--alt","align":"full","layout":{"type":"constrained"}} -->
+	<div class="wp-block-group urumi-section urumi-band--alt alignfull">
+		<!-- wp:group {"align":"wide","layout":{"type":"constrained"}} -->
+		<div class="wp-block-group">
+			<!-- wp:heading {"level":2,"className":"urumi-section-title"} -->
+			<h2 class="wp-block-heading urumi-section-title">Collections</h2>
+			<!-- /wp:heading -->
+			<!-- wp:urumi-store/categories {"align":"wide"} /-->
+		</div>
+		<!-- /wp:group -->
 	</div>
 	<!-- /wp:group -->
+
+	<!-- wp:pattern {"slug":"urumi-store/new-featured"} /-->
+
+	<!-- wp:urumi-store/editorial {"align":"full"} /-->
+
+	<!-- wp:pattern {"slug":"urumi-store/details-strip"} /-->
 </main>
 <!-- /wp:group -->
 <!-- wp:template-part {"slug":"footer","tagName":"footer"} /-->

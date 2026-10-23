@@ -10,10 +10,11 @@
  * safe, capability-scoped path.
  *
  * Rule (mirrors scripts/demo-seeds.json "media_rule"): an attachment is KEPT iff
- * it is the featured thumbnail of one of the 12 seeded products (matched by SKU
- * from store/products.json, the single source of truth); every other attachment
- * is deleted. Unattached test uploads and images left over from deleted test
- * products are therefore removed, and the seed product images are never touched.
+ * it is the featured thumbnail or a gallery image of one of the seeded products
+ * (matched by SKU from store/products.json, the single source of truth); every
+ * other attachment is deleted. Unattached test uploads and images left over from
+ * deleted test products are therefore removed, and the seed product images are
+ * never touched. Gallery keeps were added with the store v2 catalog (ADR-073).
  *
  * Set MEDIA_DRY_RUN=1 in the environment to list what would be deleted without
  * deleting (demo-reset.sh passes it for the plan phase).
@@ -50,10 +51,20 @@ if ( is_array( $data ) && ! empty( $data['products'] ) ) {
 $keep_ids = array();
 foreach ( $skus as $sku ) {
     $pid = wc_get_product_id_by_sku( $sku );
-    if ( $pid ) {
-        $tid = get_post_thumbnail_id( $pid );
-        if ( $tid ) {
-            $keep_ids[ (int) $tid ] = true;
+    if ( ! $pid ) {
+        continue;
+    }
+    $tid = get_post_thumbnail_id( $pid );
+    if ( $tid ) {
+        $keep_ids[ (int) $tid ] = true;
+    }
+    // Gallery attachments (store v2: 2-3 gallery images per product).
+    $product = wc_get_product( $pid );
+    if ( $product ) {
+        foreach ( (array) $product->get_gallery_image_ids() as $gid ) {
+            if ( $gid ) {
+                $keep_ids[ (int) $gid ] = true;
+            }
         }
     }
 }

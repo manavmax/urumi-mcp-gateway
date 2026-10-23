@@ -16,8 +16,8 @@ const STORE = process.env.STORE_URL || "http://store.127.0.0.1.nip.io";
 const PAGES = [
   ["home", "/"],
   ["shop", "/shop/"],
-  ["category apparel", "/product-category/apparel/"],
-  ["product", "/product/urumi-classic-tee/"],
+  ["category ceramics", "/product-category/ceramics/"],
+  ["product", "/product/incense-holder/"],
   ["cart", "/cart/"],
   ["checkout", "/checkout/"],
   ["404", "/this-page-does-not-exist/"],

@@ -144,7 +144,7 @@ wp-cli-image:
 # rebuild (`kubectl rollout restart deployment/urumi-wordpress -n urumi`).
 store-assets-image:
 	$(DOCKER) build -t urumi/store-assets:0.1.0 store
-	$(DOCKER) save urumi/store-assets:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/store-assets:0.1.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/store-assets:0.1.0 into kind node"
 
 # Verify both demo servers with a real MCP SDK ClientSession: list tools, call each,

@@ -127,7 +127,7 @@ run_woo() {
 run_media() {
     # Orphan media lives in the WordPress pod (DB + upload filesystem); the Woo
     # consumer key cannot authenticate wp/v2/media, so this worker runs there.
-    local mode="$1"
+    local mode="${1:-}"
     if [ "$mode" = "--dry-run" ]; then
         kubectl exec -i -n "$NS" "$WP_POD" -c wordpress -- env MEDIA_DRY_RUN=1 php \
             <<< "$(cat "$SCRIPT_DIR/demo-reset-media.php")"

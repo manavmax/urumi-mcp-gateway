@@ -1,10 +1,10 @@
 /*
-Theme Name: Urumi Store
+Theme Name: Loam & Ember Store
 Theme URI: https://urumi.local/store
 Author: Urumi
 Author URI: https://urumi.local
-Description: Standalone block theme for the Urumi demo storefront. No parent theme. Self-hosted Instrument Serif (display) and Inter variable (UI) fonts, zero third-party requests, tokens in theme.json.
-Version: 1.0.0
+Description: Standalone block theme for the Loam & Ember demo storefront (a fictional brand). Gallery-minimal: warm neutral palette, Newsreader Variable display serif, Hanken Grotesk Variable UI, sharp corners, no shadows, no accent colour, self-hosted variable fonts, zero third-party requests. Tokens in theme.json, rules in assets/styles.css, spec in docs/STORE_DESIGN.md.
+Version: 3.0.0
 Requires at least: 6.6
 Tested up to: 6.6
 Requires PHP: 8.0
