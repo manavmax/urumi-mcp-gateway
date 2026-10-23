@@ -1,37 +1,49 @@
 {
   "brand": "Loam & Ember",
   "tagline": "Slow-made goods for warm rooms and quiet desks.",
-  "note": "Single source of truth for the storefront catalog. The wp-setup seed (helm/templates/jobs/wp-setup.yaml) creates products by SKU, idempotently: running twice creates nothing and resets nothing. Product photos are real Unsplash photographs processed by scripts/process-photos.py (4:5, 1200px webp); see docs/STORE_DESIGN.md and docs/IMAGE_CREDITS.md. 'image' and 'gallery' name files in store/images/ (webp). 'new' and 'featured' are distinct flags; 'sale_price' makes the product (or variation) on sale; 'stock' enables manage-stock with that quantity; weight is kg, dimensions are cm. NOTE (photo-first pass): the image files this catalog references are pending photo curation (docs/REVIEW_NEEDED_STORE.md); until then the seed attaches no images and the theme shows neutral placeholders.",
+  "note": "Single source of truth for the storefront catalog. The wp-setup seed (helm/templates/jobs/wp-setup.yaml) creates products by SKU, idempotently: running twice creates nothing and resets nothing. Product photos are real Unsplash photographs chosen by the reviewer (artifacts/store-photos/choices.json) and processed by scripts/process-photos.py (4:5, 1200px webp, <=150KB); see docs/STORE_DESIGN.md and docs/IMAGE_CREDITS.md. 'image' and 'gallery' name files in store/images/ (webp): each product ships <SKU>.webp plus one <SKU>-2.webp detail crop of the same photograph, so no photograph is used twice in the catalogue. 'new' and 'featured' are distinct flags; 'sale_price' makes the product (or variation) on sale; 'stock' enables manage-stock with that quantity; weight is kg, dimensions are cm. Categories carry 'image': the banner-<slug>.webp category banner rendered atop each category archive. Photo-first catalogue cut (2026-10-23): 29 products; the removed products are listed in docs/DECISIONS.md (live-store migration notes).",
   "categories": [
     {
       "name": "Ceramics",
       "slug": "ceramics",
-      "description": "Stoneware and porcelain thrown in small batches, glazed in quiet colours."
+      "description": "Stoneware and porcelain thrown in small batches, glazed in quiet colours.",
+      "image": "banner-ceramics.webp",
+      "image_alt": "Handmade ceramics arranged on a table"
     },
     {
       "name": "Textiles",
       "slug": "textiles",
-      "description": "Wool, linen and cotton in weights that settle a room."
+      "description": "Wool, linen and cotton in weights that settle a room.",
+      "image": "banner-textiles.webp",
+      "image_alt": "Folded textiles stacked in soft neutral tones"
     },
     {
       "name": "Candles & Care",
       "slug": "candles-care",
-      "description": "Slow-burning candles and plain soaps for the kitchen shelf."
+      "description": "Slow-burning candles and plain soaps for the kitchen shelf.",
+      "image": "banner-candles-care.webp",
+      "image_alt": "A lit candle on a wooden table"
     },
     {
       "name": "Desk & Paper",
       "slug": "desk-paper",
-      "description": "Notebooks, pens and small organisers for a calmer desk."
+      "description": "Notebooks, pens and small organisers for a calmer desk.",
+      "image": "banner-desk-paper.webp",
+      "image_alt": "A calm wooden desk with a notebook and pen"
     },
     {
       "name": "Kitchen",
       "slug": "kitchen",
-      "description": "Boards, spoons and towels for unhurried cooking."
+      "description": "Boards, spoons and towels for unhurried cooking.",
+      "image": "banner-kitchen.webp",
+      "image_alt": "A styled kitchen scene with wooden boards"
     },
     {
       "name": "Carry",
       "slug": "carry",
-      "description": "Bags and baskets in waxed canvas and heavy cotton."
+      "description": "Bags and baskets in waxed canvas and heavy cotton.",
+      "image": "banner-carry.webp",
+      "image_alt": "A canvas tote resting on a chair in a bright room"
     }
   ],
   "products": [
@@ -56,11 +68,9 @@
         "handmade",
         "stoneware"
       ],
-      "image": "LOAM-CER-001.png",
+      "image": "LOAM-CER-001.webp",
       "gallery": [
-        "LOAM-CER-001-2.png",
-        "LOAM-CER-001-3.png",
-        "LOAM-CER-001-4.png"
+        "LOAM-CER-001-2.webp"
       ],
       "alt": "Stoneware mug with a soft speckled glaze and a generous handle",
       "short_description": "A hand-thrown stoneware mug with a soft speckled glaze and a handle that fits a full hand.",
@@ -114,10 +124,9 @@
         "handmade",
         "kitchen"
       ],
-      "image": "LOAM-CER-002.png",
+      "image": "LOAM-CER-002.webp",
       "gallery": [
-        "LOAM-CER-002-2.png",
-        "LOAM-CER-002-3.png"
+        "LOAM-CER-002-2.webp"
       ],
       "alt": "Deep stoneware ramen bowl with a wide rim",
       "short_description": "A deep stoneware bowl with a wide rim, sized for ramen night or a generous salad.",
@@ -144,10 +153,9 @@
         "stoneware",
         "kitchen"
       ],
-      "image": "LOAM-CER-003.png",
+      "image": "LOAM-CER-003.webp",
       "gallery": [
-        "LOAM-CER-003-2.png",
-        "LOAM-CER-003-3.png"
+        "LOAM-CER-003-2.webp"
       ],
       "alt": "Stack of four speckled stoneware dinner plates",
       "short_description": "Four 27 cm stoneware plates in a quiet speckled glaze, stacked and ready for weekdays.",
@@ -175,75 +183,13 @@
         "handmade",
         "gift"
       ],
-      "image": "LOAM-CER-004.png",
+      "image": "LOAM-CER-004.webp",
       "gallery": [
-        "LOAM-CER-004-2.png",
-        "LOAM-CER-004-3.png"
+        "LOAM-CER-004-2.webp"
       ],
       "alt": "Small stoneware bud vase with a narrow neck",
       "short_description": "A narrow-necked bud vase that turns one stem into a small occasion.",
       "description": "Turned tall and narrow so a single stem stands to attention, with a weighted base that forgives a heavy dahlia. The matte glaze shifts from soft grey to warm white in daylight. Watertight and wipe-clean; hand wash to keep the outside matte."
-    },
-    {
-      "sku": "LOAM-CER-005",
-      "name": "Stoneware Teapot 750 ml",
-      "category": "ceramics",
-      "kind": "teapot",
-      "tint": "periwinkle",
-      "motif": "none",
-      "price": "54.00",
-      "sale_price": "44.00",
-      "stock": 12,
-      "weight": "1.1",
-      "dimensions": {
-        "length": "21",
-        "width": "14",
-        "height": "13"
-      },
-      "tags": [
-        "ceramics",
-        "handmade",
-        "kitchen"
-      ],
-      "image": "LOAM-CER-005.png",
-      "gallery": [
-        "LOAM-CER-005-2.png",
-        "LOAM-CER-005-3.png"
-      ],
-      "alt": "Round stoneware teapot with a bamboo handle and drip-free spout",
-      "short_description": "A round-bellied teapot with a drip-free spout and a wrapped bamboo handle.",
-      "description": "The rounded body keeps a full pot of tea hot through a long conversation, and the cut spout pours clean to the last drop. The bamboo handle stays cool while the pot is full. Includes a stainless fine-mesh basket that lifts out for loose leaf. Hand wash; not for the microwave."
-    },
-    {
-      "sku": "LOAM-CER-006",
-      "name": "Spoon Rest",
-      "category": "ceramics",
-      "kind": "spoonrest",
-      "tint": "periwinkle",
-      "motif": "none",
-      "price": "16.00",
-      "sale_price": null,
-      "stock": 0,
-      "weight": "0.3",
-      "dimensions": {
-        "length": "13",
-        "width": "10",
-        "height": "3"
-      },
-      "tags": [
-        "ceramics",
-        "kitchen",
-        "gift"
-      ],
-      "image": "LOAM-CER-006.png",
-      "gallery": [
-        "LOAM-CER-006-2.png",
-        "LOAM-CER-006-3.png"
-      ],
-      "alt": "Small stoneware spoon rest with a curved well",
-      "short_description": "A curved stoneware spoon rest that keeps the stove tidy between stirs.",
-      "description": "A shallow well with a raised lip holds a heavy wooden spoon without a wobble, and the glaze wipes clean of tomato and turmeric alike. Back in stock after the next kiln load.",
-      "out_of_stock": true
     },
     {
       "sku": "LOAM-TEX-001",
@@ -266,11 +212,9 @@
         "textiles",
         "gift"
       ],
-      "image": "LOAM-TEX-001.png",
+      "image": "LOAM-TEX-001.webp",
       "gallery": [
-        "LOAM-TEX-001-2.png",
-        "LOAM-TEX-001-3.png",
-        "LOAM-TEX-001-4.png"
+        "LOAM-TEX-001-2.webp"
       ],
       "alt": "Woven wool throw with a neat hand-knotted fringe",
       "short_description": "A soft woven wool throw with a hand-knotted fringe, generous enough for two.",
@@ -317,10 +261,9 @@
         "textiles",
         "everyday"
       ],
-      "image": "LOAM-TEX-002.png",
+      "image": "LOAM-TEX-002.webp",
       "gallery": [
-        "LOAM-TEX-002-2.png",
-        "LOAM-TEX-002-3.png"
+        "LOAM-TEX-002-2.webp"
       ],
       "alt": "Stonewashed linen cushion cover with a hidden zip",
       "short_description": "A stonewashed linen cushion cover with a hidden zip; insert sold separately.",
@@ -382,10 +325,9 @@
         "textiles",
         "kitchen"
       ],
-      "image": "LOAM-TEX-003.png",
+      "image": "LOAM-TEX-003.webp",
       "gallery": [
-        "LOAM-TEX-003-2.png",
-        "LOAM-TEX-003-3.png"
+        "LOAM-TEX-003-2.webp"
       ],
       "alt": "Six linen napkins with a mitred hem, stacked",
       "short_description": "Six midweight linen napkins with a mitred hem; they only get better with washing.",
@@ -412,10 +354,9 @@
         "textiles",
         "kitchen"
       ],
-      "image": "LOAM-TEX-004.png",
+      "image": "LOAM-TEX-004.webp",
       "gallery": [
-        "LOAM-TEX-004-2.png",
-        "LOAM-TEX-004-3.png"
+        "LOAM-TEX-004-2.webp"
       ],
       "alt": "Two waffle-weave cotton hand towels",
       "short_description": "Two waffle-weave towels that dry fast and look neat on the rail.",
@@ -442,10 +383,9 @@
         "textiles",
         "gift"
       ],
-      "image": "LOAM-TEX-005.png",
+      "image": "LOAM-TEX-005.webp",
       "gallery": [
-        "LOAM-TEX-005-2.png",
-        "LOAM-TEX-005-3.png"
+        "LOAM-TEX-005-2.webp"
       ],
       "alt": "Striped linen table runner with hand-knotted fringe",
       "short_description": "A striped linen runner with a hand-knotted fringe, wide enough for a shared table.",
@@ -472,10 +412,9 @@
         "textiles",
         "everyday"
       ],
-      "image": "LOAM-TEX-006.png",
+      "image": "LOAM-TEX-006.webp",
       "gallery": [
-        "LOAM-TEX-006-2.png",
-        "LOAM-TEX-006-3.png"
+        "LOAM-TEX-006-2.webp"
       ],
       "alt": "Thick cotton bath mat in a low waffle weave",
       "short_description": "A thick, low-pile cotton bath mat that dries overnight and lies flat.",
@@ -502,11 +441,9 @@
         "handmade",
         "gift"
       ],
-      "image": "LOAM-CND-001.png",
+      "image": "LOAM-CND-001.webp",
       "gallery": [
-        "LOAM-CND-001-2.png",
-        "LOAM-CND-001-3.png",
-        "LOAM-CND-001-4.png"
+        "LOAM-CND-001-2.webp"
       ],
       "alt": "Soy candle in a reusable glass jar, cedar and smoke scent",
       "short_description": "A slow soy candle in cedar and smoke, poured into a jar worth keeping.",
@@ -533,11 +470,9 @@
         "candle",
         "handmade"
       ],
-      "image": "LOAM-CND-002.png",
+      "image": "LOAM-CND-002.webp",
       "gallery": [
-        "LOAM-CND-002-2.png",
-        "LOAM-CND-002-3.png",
-        "LOAM-CND-002-4.png"
+        "LOAM-CND-002-2.webp"
       ],
       "alt": "Soy candle in a reusable glass jar, fig and fern scent",
       "short_description": "Green fig and crushed fern leaves: a candle that smells like a shaded porch.",
@@ -564,44 +499,13 @@
         "candle",
         "gift"
       ],
-      "image": "LOAM-CND-003.png",
+      "image": "LOAM-CND-003.webp",
       "gallery": [
-        "LOAM-CND-003-2.png",
-        "LOAM-CND-003-3.png"
+        "LOAM-CND-003-2.webp"
       ],
       "alt": "Clamshell of six soy wax melts",
       "short_description": "Six soy wax melts for the warmer; the Cedar & Smoke scent without the wick.",
       "description": "The same soy blend as our jar candles, poured into a snap clamshell of six melts. One cube scents a room for two evenings in a standard wax warmer. Flame-free, so it is the dorm- and office-safe way to wear the scent."
-    },
-    {
-      "sku": "LOAM-CND-004",
-      "name": "Hand Soap Bar",
-      "category": "candles-care",
-      "kind": "soap",
-      "tint": "peach",
-      "motif": "none",
-      "price": "12.00",
-      "sale_price": "9.60",
-      "stock": 44,
-      "weight": "0.14",
-      "dimensions": {
-        "length": "8.5",
-        "width": "6",
-        "height": "2.5"
-      },
-      "tags": [
-        "handmade",
-        "gift",
-        "everyday"
-      ],
-      "image": "LOAM-CND-004.png",
-      "gallery": [
-        "LOAM-CND-004-2.png",
-        "LOAM-CND-004-3.png"
-      ],
-      "alt": "Cold-process olive oil soap bar, stamped with a leaf",
-      "short_description": "A cold-process olive oil soap, cured six weeks and stamped by hand.",
-      "description": "Cold-pressed olive and coconut oils, saponified slowly and cured six weeks so the bar lasts a month at the sink. Scented only with a trace of the cedar blend; nothing else. Wrapped in a paper band that composts."
     },
     {
       "sku": "LOAM-CND-005",
@@ -624,45 +528,13 @@
         "gift",
         "everyday"
       ],
-      "image": "LOAM-CND-005.png",
+      "image": "LOAM-CND-005.webp",
       "gallery": [
-        "LOAM-CND-005-2.png",
-        "LOAM-CND-005-3.png",
-        "LOAM-CND-005-4.png"
+        "LOAM-CND-005-2.webp"
       ],
       "alt": "Amber glass room and linen mist bottle with a fine sprayer",
       "short_description": "A fine cedar-and-amber mist for pillows, sofas and the air above them.",
       "description": "The Cedar & Smoke scent, thinned for fabric and air: two sprays over a pillow, three over a sofa, and the room settles. Alcohol-free base with real essential oils, in an amber glass bottle with a fine-mist sprayer. Shake before use; keep out of direct sun."
-    },
-    {
-      "sku": "LOAM-CND-006",
-      "name": "Incense Holder",
-      "category": "candles-care",
-      "kind": "incense",
-      "tint": "peach",
-      "motif": "none",
-      "price": "18.00",
-      "sale_price": null,
-      "stock": 21,
-      "weight": "0.28",
-      "dimensions": {
-        "length": "10",
-        "width": "10",
-        "height": "4"
-      },
-      "tags": [
-        "ceramics",
-        "handmade",
-        "gift"
-      ],
-      "image": "LOAM-CND-006.png",
-      "gallery": [
-        "LOAM-CND-006-2.png",
-        "LOAM-CND-006-3.png"
-      ],
-      "alt": "Dome-shaped stoneware incense holder with an angled catch",
-      "short_description": "A stoneware dome that holds a stick at an angle and catches every ash.",
-      "description": "A weighted stoneware dome with a brass insert that takes a stick at a slight angle, so ash falls back onto the plate instead of the table. Works with sticks of any length up to 28 cm. Wipe clean; the glaze does not stain."
     },
     {
       "sku": "LOAM-DSK-001",
@@ -685,11 +557,9 @@
         "everyday",
         "gift"
       ],
-      "image": "LOAM-DSK-001.png",
+      "image": "LOAM-DSK-001.webp",
       "gallery": [
-        "LOAM-DSK-001-2.png",
-        "LOAM-DSK-001-3.png",
-        "LOAM-DSK-001-4.png"
+        "LOAM-DSK-001-2.webp"
       ],
       "alt": "Cloth-bound layflat notebook with an elastic band",
       "short_description": "A cloth-bound layflat notebook that stays open at the page you left.",
@@ -734,74 +604,13 @@
         "paper",
         "everyday"
       ],
-      "image": "LOAM-DSK-002.png",
+      "image": "LOAM-DSK-002.webp",
       "gallery": [
-        "LOAM-DSK-002-2.png",
-        "LOAM-DSK-002-3.png"
+        "LOAM-DSK-002-2.webp"
       ],
       "alt": "Two gel pens in ink and navy beside a canvas case",
       "short_description": "Two fine-point gel pens (ink and navy) in a small canvas slip.",
       "description": "A 0.5 mm gel tip that lays a clean, quick-drying line with no blob, in two colours: warm ink black and a deep navy. The aluminium barrels are weighted forward to sit lightly in the hand. Arrives in a cotton slip that fits a pocket."
-    },
-    {
-      "sku": "LOAM-DSK-003",
-      "name": "Pencil Pouch",
-      "category": "desk-paper",
-      "kind": "pouch",
-      "tint": "sand",
-      "motif": "zip",
-      "price": "26.00",
-      "sale_price": null,
-      "stock": 24,
-      "weight": "0.12",
-      "dimensions": {
-        "length": "21",
-        "width": "9",
-        "height": "3"
-      },
-      "tags": [
-        "waxed-canvas",
-        "carry",
-        "everyday"
-      ],
-      "image": "LOAM-DSK-003.png",
-      "gallery": [
-        "LOAM-DSK-003-2.png",
-        "LOAM-DSK-003-3.png"
-      ],
-      "alt": "Waxed canvas pencil pouch with a brass zip",
-      "short_description": "A waxed canvas pencil pouch with a brass zip that opens all the way flat.",
-      "description": "Ten-ounce waxed canvas with a self-repairing brass zip that opens the pouch flat, so pens are visible at a glance rather than buried. It stands up on the desk when full and folds flat when empty. Wipe clean with a damp cloth; the wax darkens pleasantly where you hold it."
-    },
-    {
-      "sku": "LOAM-DSK-004",
-      "name": "Desk Tray",
-      "category": "desk-paper",
-      "kind": "tray",
-      "tint": "sand",
-      "motif": "none",
-      "price": "34.00",
-      "sale_price": null,
-      "stock": 17,
-      "weight": "0.6",
-      "dimensions": {
-        "length": "24",
-        "width": "16",
-        "height": "3"
-      },
-      "tags": [
-        "handmade",
-        "everyday",
-        "gift"
-      ],
-      "image": "LOAM-DSK-004.png",
-      "gallery": [
-        "LOAM-DSK-004-2.png",
-        "LOAM-DSK-004-3.png"
-      ],
-      "alt": "Solid ash desk tray with a shallow well and felt base",
-      "short_description": "A solid-ash tray that corrals keys, coins and the pocket you empty at 6 pm.",
-      "description": "Milled from solid ash with a shallow well and a hand-rubbed oil finish, sized to hold a phone, keys, wallet and one pair of earrings. Cork-backed so it never scratches, and heavy enough that it does not travel. Wipe with a dry cloth; re-oil once a year."
     },
     {
       "sku": "LOAM-DSK-005",
@@ -823,46 +632,14 @@
         "paper",
         "everyday"
       ],
-      "image": "LOAM-DSK-005.png",
+      "image": "LOAM-DSK-005.webp",
       "gallery": [
-        "LOAM-DSK-005-2.png",
-        "LOAM-DSK-005-3.png",
-        "LOAM-DSK-005-4.png"
+        "LOAM-DSK-005-2.webp"
       ],
       "alt": "A4 weekly planner pad with 52 undated sheets",
       "short_description": "52 undated weekly pages on a sturdy board backing; start any Monday.",
       "description": "One week per page with room for the three things that matter and the twenty that pretend to. Undated, so a missed week costs you nothing, printed on 120 gsm that shrugs off gel ink and mild coffee. Glued at the top with a stiff board back; tear off and carry the week with you.",
       "new": true
-    },
-    {
-      "sku": "LOAM-DSK-006",
-      "name": "Letter Writing Set",
-      "category": "desk-paper",
-      "kind": "letters",
-      "tint": "sand",
-      "motif": "none",
-      "price": "22.00",
-      "sale_price": null,
-      "stock": 0,
-      "weight": "0.3",
-      "dimensions": {
-        "length": "24",
-        "width": "17",
-        "height": "2"
-      },
-      "tags": [
-        "paper",
-        "gift"
-      ],
-      "image": "LOAM-DSK-006.png",
-      "gallery": [
-        "LOAM-DSK-006-2.png",
-        "LOAM-DSK-006-3.png"
-      ],
-      "alt": "Letter writing set with ten sheets, envelopes and wax seals",
-      "short_description": "Ten sheets, ten lined envelopes and wax seals: a kit for real letters.",
-      "description": "Ten sheets of cream laid paper with a faint grain, ten self-lined envelopes and a sheet of wax-effect seals. The paper takes fountain pen ink beautifully. Currently being reprinted with our second print run; back soon.",
-      "out_of_stock": true
     },
     {
       "sku": "LOAM-KIT-001",
@@ -885,11 +662,9 @@
         "handmade",
         "gift"
       ],
-      "image": "LOAM-KIT-001.png",
+      "image": "LOAM-KIT-001.webp",
       "gallery": [
-        "LOAM-KIT-001-2.png",
-        "LOAM-KIT-001-3.png",
-        "LOAM-KIT-001-4.png"
+        "LOAM-KIT-001-2.webp"
       ],
       "alt": "Walnut and ash serving board with a leather hanging loop",
       "short_description": "A walnut-and-ash board that goes from the counter to the table to the wall.",
@@ -917,10 +692,9 @@
         "kitchen",
         "everyday"
       ],
-      "image": "LOAM-KIT-002.png",
+      "image": "LOAM-KIT-002.webp",
       "gallery": [
-        "LOAM-KIT-002-2.png",
-        "LOAM-KIT-002-3.png"
+        "LOAM-KIT-002-2.webp"
       ],
       "alt": "Stoneware storage jar with an airtight bamboo lid",
       "short_description": "A stoneware jar with an airtight bamboo lid for coffee, tea or flour.",
@@ -966,11 +740,9 @@
         "kitchen",
         "everyday"
       ],
-      "image": "LOAM-KIT-003.png",
+      "image": "LOAM-KIT-003.webp",
       "gallery": [
-        "LOAM-KIT-003-2.png",
-        "LOAM-KIT-003-3.png",
-        "LOAM-KIT-003-4.png"
+        "LOAM-KIT-003-2.webp"
       ],
       "alt": "Two striped cotton tea towels on a rail",
       "short_description": "Two striped cotton tea towels that dry glasses without leaving lint.",
@@ -998,10 +770,9 @@
         "kitchen",
         "gift"
       ],
-      "image": "LOAM-KIT-004.png",
+      "image": "LOAM-KIT-004.webp",
       "gallery": [
-        "LOAM-KIT-004-2.png",
-        "LOAM-KIT-004-3.png"
+        "LOAM-KIT-004-2.webp"
       ],
       "alt": "Square stoneware trivet tile with cork feet",
       "short_description": "A stoneware trivet tile with cork feet; hot pans stop here.",
@@ -1028,10 +799,9 @@
         "kitchen",
         "everyday"
       ],
-      "image": "LOAM-KIT-005.png",
+      "image": "LOAM-KIT-005.webp",
       "gallery": [
-        "LOAM-KIT-005-2.png",
-        "LOAM-KIT-005-3.png"
+        "LOAM-KIT-005-2.webp"
       ],
       "alt": "Waxed canvas apron with crossback leather straps",
       "short_description": "A crossback waxed canvas apron with leather straps and a deep front pocket.",
@@ -1057,10 +827,9 @@
         "kitchen",
         "everyday"
       ],
-      "image": "LOAM-KIT-006.png",
+      "image": "LOAM-KIT-006.webp",
       "gallery": [
-        "LOAM-KIT-006-2.png",
-        "LOAM-KIT-006-3.png"
+        "LOAM-KIT-006-2.webp"
       ],
       "alt": "Four stainless measuring spoons on a ring",
       "short_description": "Four stainless spoons on a ring that snaps apart for the dishwasher.",
@@ -1087,11 +856,9 @@
         "carry",
         "everyday"
       ],
-      "image": "LOAM-CAR-001.png",
+      "image": "LOAM-CAR-001.webp",
       "gallery": [
-        "LOAM-CAR-001-2.png",
-        "LOAM-CAR-001-3.png",
-        "LOAM-CAR-001-4.png"
+        "LOAM-CAR-001-2.webp"
       ],
       "alt": "Waxed canvas tote with flat carry handles and an interior pocket",
       "short_description": "A waxed canvas tote with a laptop pocket that shrugs off a wet commute.",
@@ -1136,10 +903,9 @@
         "waxed-canvas",
         "carry"
       ],
-      "image": "LOAM-CAR-002.png",
+      "image": "LOAM-CAR-002.webp",
       "gallery": [
-        "LOAM-CAR-002-2.png",
-        "LOAM-CAR-002-3.png"
+        "LOAM-CAR-002-2.webp"
       ],
       "alt": "Small waxed canvas crossbody pouch with an adjustable strap",
       "short_description": "A small crossbody for keys, phone and card case, on an adjustable strap.",
@@ -1166,10 +932,9 @@
         "handmade",
         "kitchen"
       ],
-      "image": "LOAM-CAR-003.png",
+      "image": "LOAM-CAR-003.webp",
       "gallery": [
-        "LOAM-CAR-003-2.png",
-        "LOAM-CAR-003-3.png"
+        "LOAM-CAR-003-2.webp"
       ],
       "alt": "Woven seagrass market basket with short handles",
       "short_description": "A seagrass market basket that folds flat and stands up full.",
@@ -1196,10 +961,9 @@
         "carry",
         "everyday"
       ],
-      "image": "LOAM-CAR-004.png",
+      "image": "LOAM-CAR-004.webp",
       "gallery": [
-        "LOAM-CAR-004-2.png",
-        "LOAM-CAR-004-3.png"
+        "LOAM-CAR-004-2.webp"
       ],
       "alt": "Waxed canvas drawstring gym sack",
       "short_description": "A drawstring gym sack in waxed canvas, with a zip pocket for valuables.",
@@ -1226,10 +990,9 @@
         "carry",
         "everyday"
       ],
-      "image": "LOAM-CAR-005.png",
+      "image": "LOAM-CAR-005.webp",
       "gallery": [
-        "LOAM-CAR-005-2.png",
-        "LOAM-CAR-005-3.png"
+        "LOAM-CAR-005-2.webp"
       ],
       "alt": "Padded waxed canvas laptop sleeve for a 13 inch laptop",
       "short_description": "A padded waxed canvas sleeve for a 13 inch laptop, with a snug brass zip.",
@@ -1257,15 +1020,27 @@
         "carry",
         "gift"
       ],
-      "image": "LOAM-CAR-006.png",
+      "image": "LOAM-CAR-006.webp",
       "gallery": [
-        "LOAM-CAR-006-2.png",
-        "LOAM-CAR-006-3.png",
-        "LOAM-CAR-006-4.png"
+        "LOAM-CAR-006-2.webp"
       ],
       "alt": "Waxed canvas weekend duffel with leather base corners",
       "short_description": "A waxed canvas duffel that fits two nights of everything, overhead-bin friendly.",
       "description": "Two nights of everything: 55 cm of waxed canvas with a full-length zip, a leather-lined base, an interior zip pocket for the wet things and a detachable shoulder strap. Sized for overhead bins and train racks alike. Re-wax once a year and it will outlast the trips."
     }
-  ]
+  ],
+  "hero": {
+    "headline": "Warm things for quiet rooms.",
+    "sub": "Slow-made ceramics, textiles and desk goods. Ordered today, paid in cash when they arrive.",
+    "image": "hero.webp",
+    "alt": "A bouquet of flowers in a bright, quiet interior"
+  },
+  "editorial": {
+    "heading": "Materials and care",
+    "body": "Every piece is photographed exactly as it is. Care notes ship with each order.",
+    "button": "Read the shop notes",
+    "url": "/about/",
+    "image": "editorial.webp",
+    "alt": "Spring flowers in a ceramic vase on a bright table"
+  }
 }
