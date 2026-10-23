@@ -823,6 +823,18 @@ ul.urumi-grid {
 
 /* archive */
 
+.urumi-cat-banner {
+	width: 100%;
+	margin-bottom: clamp(20px, 3vw, 36px);
+}
+
+.urumi-cat-banner .urumi-photo {
+	display: block;
+	width: 100%;
+	height: clamp(160px, 26vw, 360px);
+	object-fit: cover;
+}
+
 .urumi-archive-head {
 	padding-top: clamp(40px, 5vw, 72px);
 	padding-bottom: 24px;

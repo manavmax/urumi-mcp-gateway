@@ -6,8 +6,9 @@
  *  - the theme stylesheet (assets/styles.css) on top of theme.json
  *  - self-hosted font preloads (Newsreader + Hanken Grotesk variable, no externals)
  *  - removal of every third-party hook: emoji scripts, gravatars, oEmbed
- *  - dynamic blocks: urumi-store/hero, urumi-store/categories, urumi-store/featured-grid,
- *    urumi-store/new-badge, urumi-store/editorial, urumi-store/product-meta
+ *  - dynamic blocks: urumi-store/hero, urumi-store/categories, urumi-store/category-banner,
+ *    urumi-store/featured-grid, urumi-store/new-badge, urumi-store/editorial,
+ *    urumi-store/product-meta
  *  - a registered 600px image size so sideloaded 1200px photos get an exact
  *    600px derivative and real srcset values
  *  - tile flags (sale / new / sold out) injected into WooCommerce block grids
@@ -23,7 +24,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'URUMI_STORE_VERSION', '3.0.0' );
+define( 'URUMI_STORE_VERSION', '3.1.0' );
 define( 'URUMI_STORE_BRAND', 'Loam & Ember' );
 
 /**
@@ -304,6 +305,41 @@ function urumi_store_hero_render() {
 }
 register_block_type( 'urumi-store/hero', array(
 	'render_callback' => 'urumi_store_hero_render',
+) );
+
+/**
+ * Category banner: one wide photograph at the top of a product-category
+ * archive. The photo comes from the catalog category's "image"
+ * (banner-<slug>.webp, set during photo curation); without it the archive
+ * head renders exactly as before, so nothing breaks.
+ */
+function urumi_store_category_banner_render() {
+	if ( ! is_tax( 'product_cat' ) ) {
+		return '';
+	}
+	$term = get_queried_object();
+	if ( ! $term || empty( $term->slug ) ) {
+		return '';
+	}
+	$file = '';
+	$alt = '';
+	foreach ( urumi_store_catalog()['categories'] ?? array() as $c ) {
+		if ( sanitize_title( $c['slug'] ?? '' ) === $term->slug ) {
+			$file = (string) ( $c['image'] ?? '' );
+			$alt = (string) ( $c['image_alt'] ?? $c['name'] );
+			break;
+		}
+	}
+	if ( '' === $file || ! file_exists( urumi_store_data_dir() . '/images/' . $file ) ) {
+		return '';
+	}
+	return '<div class="urumi-cat-banner" aria-hidden="false">'
+		. '<img class="urumi-photo" src="' . esc_url( urumi_store_asset_url( 'images/' . $file ) ) . '"'
+		. ' alt="' . esc_attr( $alt ) . '" loading="eager" decoding="async" />'
+		. '</div>';
+}
+register_block_type( 'urumi-store/category-banner', array(
+	'render_callback' => 'urumi_store_category_banner_render',
 ) );
 
 /**
