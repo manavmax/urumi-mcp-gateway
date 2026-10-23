@@ -437,6 +437,56 @@ try {
     await ctx.close();
   }
 
+  // ---------- outbound links: one repo value, correct targets, main paths ----------
+  {
+    const c = { name: "links", width: 1440, height: 900, theme: "dark" };
+    const { ctx, page } = await newCase(c);
+    let caseFails = 0;
+    const REPO = "https://github.com/manavmax/urumi-mcp-gateway";
+    const links = await page.evaluate(() => {
+      const out = [];
+      document.querySelectorAll("a[href]").forEach((a) => {
+        let abs;
+        try { abs = new URL(a.getAttribute("href"), location.href).href; }
+        catch (e) { abs = a.getAttribute("href"); } // e.g. subdomain-of-IP in the docker preview
+        const target = a.getAttribute("target") || "";
+        const rel = a.getAttribute("rel") || "";
+        out.push({ href: abs, target, rel, text: a.textContent.trim().slice(0, 30) });
+      });
+      return out;
+    });
+    const distinct = [...new Map(links.map((l) => [l.href, l])).values()].sort((a, b) => a.href.localeCompare(b.href));
+    console.log("distinct hrefs (" + distinct.length + "):");
+    distinct.forEach((l) => console.log("  " + l.href));
+    // every github.com href must use the one repo; no stale orgs or placeholders
+    const gh = links.filter((l) => l.href.includes("github.com"));
+    const badGh = gh.filter((l) => !l.href.startsWith(REPO));
+    if (badGh.length) { problems(c.name, `non-repo github links: ${badGh.map((l) => l.href).join(", ")}`); caseFails++; }
+    const stale = links.filter((l) => /urumi-ai|example\.com|your-org|blob\/landing/.test(l.href));
+    if (stale.length) { problems(c.name, `stale/placeholder links: ${stale.map((l) => l.href).join(", ")}`); caseFails++; }
+    // GitHub links open in a new tab with noopener; site links stay same-tab
+    const badTarget = gh.filter((l) => !(l.target === "_blank" && /noopener/.test(l.rel) && /noreferrer/.test(l.rel)));
+    const sameTab = links.filter((l) => /:\/\/dashboard\.|:\/\/store\./.test(l.href) && l.target === "_blank");
+    if (badTarget.length) { problems(c.name, `github links missing target/rel: ${badTarget.map((l) => l.href).join(", ")}`); caseFails++; }
+    if (sameTab.length) { problems(c.name, `site links must not open a new tab: ${sameTab.map((l) => l.href).join(", ")}`); caseFails++; }
+    // dashboard and store hrefs derive from the page host in docker; the chart
+    // injects value-built URLs in-cluster (checked via helm template below)
+    const dash = links.filter((l) => /^https?:\/\/dashboard\./.test(l.href));
+    const store = links.filter((l) => /^https?:\/\/store\./.test(l.href));
+    if (!dash.length) { problems(c.name, "no dashboard links rendered"); caseFails++; }
+    if (!store.length) { problems(c.name, "no store links rendered"); caseFails++; }
+    // every /blob/main/<path> link must exist on the main branch
+    const paths = [...new Set(gh.filter((l) => l.href.includes("/blob/main/")).map((l) => l.href.slice(REPO.length + "/blob/main/".length)))];
+    console.log("blob/main paths (" + paths.length + "): " + paths.join(", "));
+    const { execSync } = await import("node:child_process");
+    const tree = new Set(execSync("git ls-tree -r main --name-only", { cwd: join(__dirname, ".."), encoding: "utf8" }).split("\n"));
+    const missing = paths.filter((p) => !tree.has(p));
+    if (missing.length) { problems(c.name, `blob/main paths missing on main: ${missing.join(", ")}`); caseFails++; }
+    console.log(`${caseFails === 0 ? "OK" : "FAIL"} links: ${gh.length} github (${badGh.length} bad), ${dash.length} dashboard, ${store.length} store, ${paths.length} blob paths (${missing ? missing.length : 0} missing on main)`);
+    fail += caseFails;
+    await ctx.close();
+  }
+
   // ---------- desktop-dark: budgets, clipboard, simulation, frames ----------
   {
     const c = { name: "desktop-dark-main", width: 1440, height: 900, theme: "dark" };
