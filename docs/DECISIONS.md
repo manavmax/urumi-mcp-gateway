@@ -957,3 +957,108 @@ for verification and never committed.
 **Why.** The kind cluster is off-limits (another session owns it), and the
 brief asks for real runs, not prose. Matching images + the rendered job script
 gives fidelity to the in-cluster wp-setup path while staying fully local.
+
+## 2026-10-22: Generated artwork retired; photo-first catalogue (ADR-076)
+
+**Decision.** All 155 generated PNGs and scripts/gen-store-images.py are
+deleted (git rm). The storefront moves to real photography per
+docs/STORE_DESIGN.md (alpha, the single source of truth): warm neutral tokens,
+sharp corners, no accent colour, no illustrations. store/images keeps a
+.gitkeep so the store-assets image build does not break while photos are
+curated. The wp-setup seed's sideload step already skips image files that are
+absent on disk, so the store seeds and functions during the interim: 36
+products, zero images, neutral beige/dark placeholders in the theme.
+
+**Why.** The brief retires the previous look explicitly; generated flat art
+reads as "AI-looking artwork" against the new gallery-like direction. A blind
+fill of placeholder photos would violate the "never pad with weak photos"
+rule, so the catalogue rebuild waits for curated photos (ADR-078).
+
+## 2026-10-22: Self-hosted Newsreader + Hanken Grotesk variable fonts (ADR-077)
+
+**Decision.** The theme ships latin-subset variable woff2 files only:
+newsreader-latin-wght-normal.woff2, newsreader-latin-wght-italic.woff2,
+hanken-grotesk-latin-wght-normal.woff2, installed from
+@fontsource-variable/newsreader@5.3.0 and @fontsource-variable/hanken-grotesk
+@5.3.0 via npm into a temp folder OUTSIDE the repo, then copied in. Licences
+(SIL OFL 1.1, copyright lines) recorded in docs/FONT_CREDITS.md. theme.json
+declares both families with font-display: swap; functions.php preloads both
+woff2 files. No CDN, no external font requests at runtime.
+
+**Why.** The reference fonts (Plantin Infant, Monument Grotesk) are commercial
+and cannot ship; Newsreader and Hanken Grotesk match the measured type scale
+and are OFL licensed. Latin-only subsets keep the store-assets image small.
+
+## 2026-10-22: Unsplash sourcing machinery, curation deferred (ADR-078)
+
+**Decision.** Photo sourcing uses the Unsplash API (per the source override in
+the brief) through scripts/fetch-unsplash.py: the Access Key is read only
+inside the script, never printed, echoed, logged or written anywhere; search
+responses are cached in artifacts/store-photos/cache/ (gitignored) so re-runs
+do not burn the 50 req/h demo budget; candidate previews are downloaded from
+the CDN (uncounted) into candidate sheets (scripts/sheet-candidates.py) for
+eyeball curation. scripts/process-photos.py implements the full pipeline for
+AFTER curation: download_location ping per chosen photo, raw fetch at w=1600,
+4:5 centre crop to 960x1200, webp q80 with a hard 150KB ceiling (q stepped
+down to 60), detail-crop gallery images, artifacts manifest +
+docs/IMAGE_CREDITS.md writer and a contact sheet. The 600px variant is a
+WordPress-derived size (urumi-600, registered in functions.php) so srcset
+serves 480x600 next to the 1200px master without double-shipping files.
+
+**IMPORTANT (honesty note):** this session's model could not view images (the
+read tool rejects image input for this model). Per the brief ("if you cannot
+[view images], build everything except the photo selection, say so at the top
+of your report, and stop. Do not pick photos blindly"), NO photos were chosen,
+no products were renamed for photos, and no screenshot was eyeballed. Ten
+cached searches (30 results each) and candidate sheets wait in
+artifacts/store-photos/ for a photo-capable pass or for Manav.
+
+**Why.** The brief's quality bar (reject faces, text, logos, clutter,
+inconsistent style) is a visual judgement; guessing would ship weak photos and
+product copy that does not match what the photographs show.
+
+## 2026-10-22: Seed defaults to .webp; demo-seeds regenerator (ADR-079)
+
+**Decision.** In the ONE wp-setup file (ADR-071 pattern), the seed's image
+fallback filename changes from <SKU>.png to <SKU>.webp to match the photo
+pipeline output. scripts/regen-demo-seeds.py regenerates scripts/demo-seeds.json
+from store/products.json (parent SKU, name, price, type) so the demo-reset
+keep-manifest can never drift after the catalogue is rebuilt from photos. The
+regenerated output was verified byte-equivalent (modulo key order and note
+wording) to the committed manifest, so the committed file is left untouched
+until the rebuild.
+
+**Why.** One-line seed change keeps the idempotent path untouched (verified:
+second run created=0 kept=36); the regenerator removes the manual step most
+likely to be forgotten during the photo rebuild.
+
+## 2026-10-22: Theme rebuilt to the gallery spec; AA outranks the muted token (ADR-080)
+
+**Decision.** store/theme/urumi-store is rebuilt to docs/STORE_DESIGN.md:
+theme.json tokens (canvas #FBFBF9, surface-alt bands, ink #262525, radius 0,
+no shadows, hairline #E1E1E0, the two variable families), a rewritten
+assets/styles.css (outline/solid/text buttons, 44px inputs with ink focus and
+the rgb(235,235,235) inner shadow, 4:5 tile frames with 500ms 1.03 zoom,
+plain-text flags, vertical PDP thumbnails, hairline tables, surface-alt
+summaries and footer, mobile full-screen menu overlay with 300ms fade,
+reduced-motion kill switch, 4/3/2 responsive grids), new header (wordmark,
+Shop, Collections dropdown, About, Shipping, Search, Account, Cart) and footer
+(four columns, demo-store line, "Photography from Unsplash." link to
+/image-credits/), new front-page pattern order (hero, intro, collections,
+new-and-featured, editorial split, details strip) with the faq/newsletter/
+trust/split patterns deleted. Two deliberate deviations from the letter of the
+token table, both logged here: (1) struck-through old prices and "Sold out"
+flags use neutral-4 #4C4C4C instead of neutral-1 #999999 because #999999 on
+canvas is 2.75:1 and fails the WCAG gate the brief demands; (2) the
+photo-absent hero ground is the dark warm neutral #5C5142 (not taupe) so the
+white hero copy passes AA before photographs exist; a real photo covers it
+fully and the 20 percent veil sits on top. html/body use overflow-x: clip so
+the off-canvas Woo mini-cart drawer can never widen the page. Verified in the
+compose harness: 91/93 harness checks pass (2 known cosmetic Woo ResizeObserver
+console warnings on the block cart), WCAG gate passes all rest/hover/focus
+samples, e2e COD checkout green, seed-twice idempotent, demo-reset contract
+holds (36 KEEP, 0 planned product deletions).
+
+**Why.** The spec's own contrast requirement ("contrast AA verified") is a
+gate; when a muted token and AA conflict, AA wins and the deviation is
+recorded rather than silently bent.
