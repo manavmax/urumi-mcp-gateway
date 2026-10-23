@@ -258,15 +258,13 @@ function urumi_store_tile_flags( $product ) {
 // Dynamic blocks
 // ---------------------------------------------------------------------------
 
-/** Photo frame: an <img> when the file exists, else a quiet beige block. */
+/** Photo frame: an <img> only when the file exists on disk, else a beige block. */
 function urumi_store_photo_img( $file, $alt, $w, $h, $eager = false ) {
-	$url = $file ? urumi_store_image_url_safe( $file ) : '';
+	$url = $file ? urumi_store_image_if_exists( $file ) : '';
 	if ( '' === $url ) {
 		return '<span class="urumi-photo urumi-photo--empty" aria-hidden="true"></span>';
 	}
-	$cls = 'urumi-photo';
-	$out = '<img class="' . $cls . '" src="' . esc_url( $url ) . '" alt="' . esc_attr( $alt ) . '" loading="' . ( $eager ? 'eager' : 'lazy' ) . '" decoding="async" />';
-	return $out;
+	return '<img class="urumi-photo" src="' . esc_url( $url ) . '" alt="' . esc_attr( $alt ) . '" loading="' . ( $eager ? 'eager' : 'lazy' ) . '" decoding="async" />';
 }
 
 function urumi_store_image_url_safe( $file ) {
