@@ -231,6 +231,77 @@
           <p>Three jobs, one deployment. Everything below is running in the demo now.</p>
         </header>
       </div>
+      <!-- Lifecycle figure: the three real upstream servers, the single gateway
+           endpoint, and the merged namespaced tool list, exactly as the demo
+           runs today. Status names are the dashboard's real states. -->
+      <figure class="fig band-fig" id="figLifecycle" data-io>
+        <div class="fig-canvas" role="img" aria-label="Diagram of the gateway lifecycle: on the left, three upstream MCP servers named woo, time and notes, all with a teal Connected dot, with a legend for the Disabled and Unreachable states. In the middle, the gateway box labelled /mcp, one MCP endpoint, which checks the key and role on every call. On the right, the merged list of 13 tools with namespaced names like woo__list_products, time__get_current_time and notes__search_notes. Arrows flow left to right: many servers in, one endpoint out.">
+          <div class="fig-head">
+            <span class="fig-kicker">The pipeline</span>
+            <span class="fig-tag">live in the demo now</span>
+          </div>
+          <div class="lc">
+            <div class="lc-col">
+              <p class="lc-coltitle">3 upstream servers</p>
+              <div class="lc-card">
+                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-name">woo</span>
+                <span class="lc-status status-ok">Connected</span>
+                <span class="lc-meta">8 tools</span>
+              </div>
+              <div class="lc-card">
+                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-name">time</span>
+                <span class="lc-status status-ok">Connected</span>
+                <span class="lc-meta">2 tools</span>
+              </div>
+              <div class="lc-card">
+                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-name">notes</span>
+                <span class="lc-status status-ok">Connected</span>
+                <span class="lc-meta">3 tools</span>
+              </div>
+              <p class="lc-legend">
+                <span class="lc-dot" data-ink style="background: var(--accent)"></span><span>Connected</span>
+                <span class="lc-dot" data-ink style="background: var(--warn)"></span><span>Disabled</span>
+                <span class="lc-dot" data-ink style="background: var(--danger)"></span><span>Unreachable</span>
+              </p>
+              <p class="lc-note">Per-server timeouts and a circuit breaker: tool list 8s, tool call 10s. One dead server never breaks the rest.</p>
+            </div>
+            <div class="fig-link" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="M7 5l7 7-7 7"/></svg>
+            </div>
+            <div class="lc-gw">
+              <p class="lc-url">/mcp</p>
+              <p class="lc-gwname">one MCP endpoint</p>
+              <p class="lc-gwsub">checks the key and the role on every call</p>
+            </div>
+            <div class="fig-link" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="M7 5l7 7-7 7"/></svg>
+            </div>
+            <div class="lc-col lc-col-wide">
+              <p class="lc-coltitle">13 tools, namespaced</p>
+              <ul class="lc-chips">
+                <li>woo__list_products</li>
+                <li>woo__get_product</li>
+                <li>woo__create_product</li>
+                <li>woo__list_product_images</li>
+                <li>woo__add_product_image</li>
+                <li>woo__list_orders</li>
+                <li>woo__get_order</li>
+                <li>woo__update_order_status</li>
+                <li>time__get_current_time</li>
+                <li>time__convert_time</li>
+                <li>notes__create_note</li>
+                <li>notes__list_notes</li>
+                <li>notes__search_notes</li>
+              </ul>
+              <p class="lc-note">Every client sees one merged list; the <span class="mono">server__tool</span> prefix is what keeps names apart.</p>
+            </div>
+          </div>
+        </div>
+        <figcaption class="fig-caption">Many servers in, one endpoint out. What to notice: every tool name carries its server prefix, so names never collide.</figcaption>
+      </figure>
       <div class="cols3">
         <article class="card" data-io data-spot>
           <p class="card-tag">connect</p>
@@ -361,7 +432,7 @@
           <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 2 6M4 10V4m0 6h6"/></svg>
         </button>
       </div>
-      <div class="diagram diagram-wide" role="img" aria-label="Six numbered steps: one, the MCP client or chat agent sends a call with a Bearer key. Two, the gateway checks the key hash, the caller's role and the rate limit. Three, routing picks the upstream server in-cluster. Four, the woo MCP server runs the namespaced tool. Five, the store is reached over REST with credentials held server-side. Six, an audit row records who called what, how long it took and the outcome. The result returns along the same path.">
+      <div class="diagram diagram-wide" role="img" aria-label="Six numbered steps: one, the MCP client or chat agent sends a call with a Bearer key. Two, the gateway checks the key hash, the caller's role and the rate limit. Three, routing picks the upstream server in-cluster. Four, the woo MCP server runs the namespaced tool. Five, the store is reached over REST with credentials held server-side. Six, an audit row records who called what, how long it took and the outcome. A dashed boundary between routing and the upstream server marks where the client key stops: upstream calls carry the gateway's own credential, never the client key. The result returns along the same path.">
         <svg id="tourWide" viewBox="0 0 960 340" aria-hidden="true" focusable="false">
           <g class="flow-lines">
             <path class="dpath" id="d12" d="M195 74 H260"/>
@@ -370,6 +441,10 @@
             <path class="dpath" id="d45" d="M845 118 C845 168 680 155 680 202"/>
             <path class="dpath" id="d56" d="M505 246 H440"/>
             <path class="dpath dpath-back" id="d61" d="M275 292 C150 322 108 200 104 122"/>
+          </g>
+          <g class="boundary" aria-hidden="false">
+            <path class="dline" d="M717 16 V132"/>
+            <text class="dline-label" x="717" y="12" text-anchor="middle">client key stops here</text>
           </g>
           <g class="node" data-step="1"><rect x="25" y="30" width="170" height="88" rx="12"/><circle class="badge" cx="45" cy="30" r="12"/><text class="badge-num" x="45" y="34">1</text><text class="node-title" x="110" y="66">MCP client</text><text class="node-sub" x="110" y="86">or chat agent</text><text class="node-sub" x="110" y="103">Bearer &lt;your-api-key&gt;</text></g>
           <g class="node" data-step="2"><rect x="260" y="30" width="180" height="88" rx="12"/><circle class="badge" cx="280" cy="30" r="12"/><text class="badge-num" x="280" y="34">2</text><text class="node-title" x="350" y="66">Gateway checks</text><text class="node-sub" x="350" y="86">key · role · rate</text></g>
@@ -385,7 +460,7 @@
           </g>
         </svg>
       </div>
-      <div class="diagram diagram-compact" role="img" aria-label="Same six steps, vertical: client, gateway checks, routing, the woo MCP server, the store, and the audit row; the result returns to the caller.">
+      <div class="diagram diagram-compact" role="img" aria-label="Same six steps, vertical: client, gateway checks, routing, the woo MCP server, the store, and the audit row; a dashed line between routing and the upstream server marks where the client key stops and the gateway's own credential takes over. The result returns to the caller.">
         <svg id="tourTall" viewBox="0 0 360 760" aria-hidden="true" focusable="false">
           <g class="flow-lines">
             <path class="dpath" id="e12" d="M180 108 V148"/>
@@ -393,6 +468,11 @@
             <path class="dpath" id="e34" d="M180 364 V404"/>
             <path class="dpath" id="e45" d="M180 492 V532"/>
             <path class="dpath" id="e56" d="M180 620 V660"/>
+          </g>
+          <g class="boundary">
+            <path class="dline" d="M14 384 H346"/>
+            <rect class="dline-plate" x="70" y="374" width="220" height="20" rx="5"/>
+            <text class="dline-label" x="180" y="388" text-anchor="middle">client key never forwarded</text>
           </g>
           <g class="node" data-step="1"><rect x="20" y="28" width="320" height="80" rx="12"/><circle class="badge" cx="40" cy="28" r="12"/><text class="badge-num" x="40" y="32">1</text><text class="node-title" x="180" y="62">MCP client or chat agent</text><text class="node-sub" x="180" y="84">Bearer &lt;your-api-key&gt;</text></g>
           <g class="node" data-step="2"><rect x="20" y="148" width="320" height="88" rx="12"/><circle class="badge" cx="40" cy="148" r="12"/><text class="badge-num" x="40" y="152">2</text><text class="node-title" x="180" y="186">Gateway checks</text><text class="node-sub" x="180" y="208">key · role · rate</text></g>
@@ -402,6 +482,7 @@
           <g class="node" data-step="6"><rect x="20" y="660" width="320" height="88" rx="12"/><circle class="badge" cx="40" cy="660" r="12"/><text class="badge-num" x="40" y="664">6</text><text class="node-title" x="180" y="698">Audit row</text><text class="node-sub" x="180" y="720">who · what · how long</text></g>
         </svg>
       </div>
+      <p class="diagram-note">The boundary: the client key is checked at step 2 and never forwarded. Steps 4 and 5 run with the gateway's own credential, which never reaches the client.</p>
     </section>
 
     <!-- 8. Break it yourself -->
@@ -475,6 +556,27 @@
             <li><strong>Restrict a tool</strong> and it is hidden and refused.</li>
           </ul>
           <p class="col-note">Admins do this from the dashboard; members see the change on their next call.</p>
+          <!-- Audit-row anatomy figure: what the gateway really writes per call
+               (the AuditLog columns), and the privacy line that matters. -->
+          <figure class="fig col-fig" id="figAudit" data-io>
+            <div class="fig-canvas" role="img" aria-label="What one audit row keeps: the user, the server, the tool, the outcome and the duration. It never stores argument values or result bodies, so payloads stay off the record.">
+              <p class="fig-kicker">One row per call</p>
+              <p class="aa-lede">The audit row keeps:</p>
+              <ul class="aa-chips">
+                <li>user</li>
+                <li>server</li>
+                <li>tool</li>
+                <li>outcome</li>
+                <li>duration</li>
+              </ul>
+              <p class="aa-never">
+                <svg class="aa-x" viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
+                Argument values and result bodies: never stored.
+              </p>
+              <p class="aa-note">The row says who called what and what happened. The payload itself stays off the record, and a revoked key is on it too: the denial is audited.</p>
+            </div>
+            <figcaption class="fig-caption">Who, what, how long: and never the arguments.</figcaption>
+          </figure>
         </div>
         <div class="col-panel" data-io>
           <div class="panel" data-spot>
@@ -534,6 +636,89 @@
           <p>One Helm chart deploys all three tiers; only the values file changes between laptop and VPS.</p>
         </header>
       </div>
+      <!-- Zone figure: the real tier split from the Helm chart. Public pods are
+           the only ones the ingress namespace can reach; the MCP servers are
+           ClusterIP-only with gateway-only ingress; state sits on PVCs. -->
+      <figure class="fig band-fig" id="figZones" data-io>
+        <div class="fig-canvas" role="img" aria-label="Zone diagram of the deployment. The public zone holds the nginx Ingress with TLS via cert-manager, the WooCommerce storefront, the React dashboard and the FastAPI gateway; it is the only zone the internet can reach. The private zone holds the woo-mcp, time and notes MCP servers on ClusterIP-only services; a default-deny NetworkPolicy means only the gateway may connect to them. The state zone holds Postgres, which only the gateway may reach, and MariaDB, which only the store may reach, both on persistent volumes.">
+          <div class="fig-head">
+            <span class="fig-kicker">What runs where</span>
+            <span class="fig-tag">the chart's real tier split</span>
+          </div>
+          <div class="zones">
+            <div class="zone zone-pub">
+              <div class="zone-head">
+                <span class="zone-name">Public</span>
+                <span class="zone-sub">the only zone the internet reaches, through one Ingress</span>
+              </div>
+              <div class="zone-row">
+                <div class="zone-node zone-node-in">
+                  <span class="zn-name">Ingress</span>
+                  <span class="zn-sub">nginx, TLS via cert-manager</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">storefront</span>
+                  <span class="zn-sub">WooCommerce store</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">dashboard</span>
+                  <span class="zn-sub">React</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">gateway</span>
+                  <span class="zn-sub">FastAPI</span>
+                </div>
+              </div>
+            </div>
+            <div class="zone-link" aria-hidden="true">
+              <svg class="zl-arrow" viewBox="0 0 24 24" focusable="false"><path d="M12 4v14M6 12l6 6 6-6"/></svg>
+              <span class="zl-label">only the gateway may cross: default-deny NetworkPolicy</span>
+            </div>
+            <div class="zone zone-priv">
+              <div class="zone-head">
+                <span class="zone-name">Private</span>
+                <span class="zone-sub">ClusterIP only: no route exists from the internet</span>
+              </div>
+              <div class="zone-row">
+                <div class="zone-node">
+                  <span class="zn-name">woo-mcp</span>
+                  <span class="zn-sub">gateway holds its credential</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">time</span>
+                  <span class="zn-sub">gateway holds its credential</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">notes</span>
+                  <span class="zn-sub">gateway holds its credential</span>
+                </div>
+              </div>
+              <p class="zone-note">Ingress rules select app: gateway and nothing else. Throwaway probes are blocked.</p>
+            </div>
+            <div class="zone-link" aria-hidden="true">
+              <svg class="zl-arrow" viewBox="0 0 24 24" focusable="false"><path d="M12 4v14M6 12l6 6 6-6"/></svg>
+              <span class="zl-label">state survives restarts, upgrades and rollbacks</span>
+            </div>
+            <div class="zone zone-state">
+              <div class="zone-head">
+                <span class="zone-name">State</span>
+                <span class="zone-sub">persistent volumes under the databases</span>
+              </div>
+              <div class="zone-row">
+                <div class="zone-node">
+                  <span class="zn-name">Postgres</span>
+                  <span class="zn-sub">gateway only</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">MariaDB</span>
+                  <span class="zn-sub">store only</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="fig-caption">Three zones, one chart. What to notice: the private servers have no internet route at all; the only door in is the gateway.</figcaption>
+      </figure>
       <div class="tiers" data-io>
         <div class="tier-line" aria-hidden="true"></div>
         <article class="card tier" data-spot><p class="card-tag">public</p><h3>Public</h3><p>Ingress, the gateway, the dashboard, this page.</p></article>
