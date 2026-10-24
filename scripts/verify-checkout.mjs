@@ -14,7 +14,15 @@
 
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { chromium } = require("../src/dashboard/node_modules/playwright-core");
+let chromium = null;
+for (const p of ["../src/dashboard/node_modules/playwright-core",
+                 "/Users/manavsharma/Desktop/Urumi_AI/src/dashboard/node_modules/playwright-core"]) {
+  try { ({ chromium } = require(p)); break; } catch {}
+}
+if (!chromium) {
+  console.error("playwright-core not found (dashboard node_modules missing in both paths)");
+  process.exit(2);
+}
 import { execSync } from "node:child_process";
 import { adminLogin, httpJson } from "./lib/browser-auth.mjs";
 

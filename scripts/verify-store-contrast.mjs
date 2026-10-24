@@ -10,14 +10,22 @@
 
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { chromium } = require("../src/dashboard/node_modules/playwright-core");
+let chromium = null;
+for (const p of ["../src/dashboard/node_modules/playwright-core",
+                 "/Users/manavsharma/Desktop/Urumi_AI/src/dashboard/node_modules/playwright-core"]) {
+  try { ({ chromium } = require(p)); break; } catch {}
+}
+if (!chromium) {
+  console.error("playwright-core not found (dashboard node_modules missing in both paths)");
+  process.exit(2);
+}
 
 const STORE = process.env.STORE_URL || "http://store.127.0.0.1.nip.io";
 const PAGES = [
   ["home", "/"],
   ["shop", "/shop/"],
   ["category ceramics", "/product-category/ceramics/"],
-  ["product", "/product/incense-holder/"],
+  ["product", "/product/gel-pen-set/"],
   ["cart", "/cart/"],
   ["checkout", "/checkout/"],
   ["404", "/this-page-does-not-exist/"],
