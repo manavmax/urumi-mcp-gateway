@@ -231,8 +231,12 @@ try {
       caseFails++;
     }
 
-    // hero visibility gates (ADR-087): >=45% of the graphic visible at 1440x900;
-    // headline, buttons and the hero card visible at 390
+    // hero visibility gates (ADR-087): >=45% of the graphic visible at 1440x900.
+    // Mobile (owner-decided hero order, 2026-10): heading, subtext, flow graphic,
+    // chat card, buttons. The old "terminal+actions above the fold" assertion
+    // encoded the previous order (graphic last) and is incompatible with it; the
+    // gate now asserts the order itself, the heading/subtext fully in the first
+    // 390x844 viewport and >=45% of the graphic visible, mirroring desktop.
     if (c.name === "desktop-dark" || c.name === "desktop-light") {
       const vis = await page.evaluate(() => {
         const r = document.getElementById("heroVisual").getBoundingClientRect();
@@ -242,14 +246,40 @@ try {
         problems(c.name, `hero graphic only ${(vis.visible * 100).toFixed(1)}% visible at load (top=${vis.top} h=${vis.h})`);
         caseFails++;
       }
+      const seq = await page.evaluate(() => {
+        const box = (s) => document.querySelector(s).getBoundingClientRect();
+        const g = document.getElementById("heroVisual").getBoundingClientRect();
+        return box(".hero h1").bottom <= box(".hero .lead").top + 1 &&
+               box(".hero .lead").bottom <= g.top + 1 &&
+               g.bottom <= document.getElementById("terminal").getBoundingClientRect().top + 1 &&
+               document.getElementById("terminal").getBoundingClientRect().bottom <= box(".hero-actions").top + 1;
+      });
+      if (!seq) { problems(c.name, "hero order wrong: expected h1 -> lead -> graphic -> terminal -> actions"); caseFails++; }
     }
     if (c.name === "mobile-dark" || c.name === "mobile-light") {
-      const mvis = await page.evaluate(() => ({
-        actionsBottom: document.querySelector(".hero-actions").getBoundingClientRect().bottom,
-        terminalTop: document.getElementById("terminal").getBoundingClientRect().top,
-      }));
-      if (mvis.actionsBottom > 844 || mvis.terminalTop > 844) {
-        problems(c.name, `mobile hero: actions bottom=${mvis.actionsBottom}, terminal top=${mvis.terminalTop} (viewport 844)`);
+      const mvis = await page.evaluate(() => {
+        const h1 = document.querySelector(".hero h1").getBoundingClientRect();
+        const lead = document.querySelector(".hero .lead").getBoundingClientRect();
+        const g = document.getElementById("heroVisual").getBoundingClientRect();
+        const term = document.getElementById("terminal").getBoundingClientRect();
+        const act = document.querySelector(".hero-actions").getBoundingClientRect();
+        return {
+          h1: h1.bottom, lead: lead.bottom, termTop: term.top, actTop: act.top, gTop: g.top, gBottom: g.bottom,
+          gFrac: Math.max(0, 844 - g.top) / g.height,
+          order: h1.bottom <= lead.top + 1 && lead.bottom <= g.top + 1 &&
+                 g.bottom <= term.top + 1 && term.bottom <= act.top + 1,
+        };
+      });
+      if (mvis.h1 > 844 || mvis.lead > 844) {
+        problems(c.name, `mobile hero: heading/subtext not in first viewport (h1=${mvis.h1}, lead=${mvis.lead})`);
+        caseFails++;
+      }
+      if (mvis.gFrac < 0.45) {
+        problems(c.name, `mobile hero: graphic only ${(mvis.gFrac * 100).toFixed(1)}% visible at load (top=${mvis.gTop})`);
+        caseFails++;
+      }
+      if (!mvis.order) {
+        problems(c.name, `mobile hero order wrong: h1/lead/graphic/terminal/actions overlap (g=${mvis.gTop}-${mvis.gBottom}, term=${mvis.termTop}, act=${mvis.actTop})`);
         caseFails++;
       }
     }
@@ -290,12 +320,17 @@ try {
     }
     await page.evaluate(() => window.scrollTo(0, 0));
 
-    // screenshots (reveal everything first: scroll through, settle, return)
+    // screenshots (reveal everything first: scroll through, settle, return).
+    // The jumps must be instant: html has scroll-behavior smooth, so plain
+    // scrollTo(0, y) starts an animation that the next jump interrupts - the
+    // real scroll position never reaches the lower page, IntersectionObserver
+    // never reveals those sections, and the full-page capture shows them at
+    // opacity 0 (large blank runs below ~2400px).
     if (c.shots) {
       await page.evaluate(async () => {
         const step = window.innerHeight * 0.8;
-        for (let y = 0; y <= document.body.scrollHeight; y += step) { window.scrollTo(0, y); await new Promise(r => setTimeout(r, 60)); }
-        window.scrollTo(0, 0);
+        for (let y = 0; y <= document.body.scrollHeight; y += step) { window.scrollTo({ top: y, behavior: "instant" }); await new Promise(r => setTimeout(r, 60)); }
+        window.scrollTo({ top: 0, behavior: "instant" });
       });
       await page.waitForTimeout(900);
       await page.screenshot({ path: join(OUT, `landing-${c.name}.png`), fullPage: !!c.full });
@@ -345,8 +380,12 @@ try {
       problems(c.name, `open state wrong: ${JSON.stringify(open)}`);
       caseFails++;
     }
-    // body scroll is locked while open
-    await page.evaluate(() => window.scrollTo(0, 300));
+    // body scroll is locked while open. Tested with a real user wheel: the
+    // page's lock (html.nav-open { overflow: hidden }) stops user scrolling
+    // but not programmatic scrollTo, and the old scrollTo+immediate-read was
+    // a race against the smooth-scroll first frame (flaky scrollY=1).
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(150);
     const scrollY = await page.evaluate(() => window.scrollY);
     if (scrollY !== 0) { problems(c.name, `scroll lock failed: scrollY=${scrollY}`); caseFails++; }
     // contrast of the pills inside the OPEN sheet

@@ -47,6 +47,9 @@
   --on-accent: #04100E;
   /* text on accent-deep fills (chips, tabs, step numbers) */
   --on-deep: #5EEAD4;
+  /* secondary text on accent-deep fills: ~82% on-deep blended over the deep
+     fill, precomputed as a solid colour so contrast stays measurable */
+  --on-deep-soft: #4FCAB8;
   --violet: #A78BFA;
   --violet-deep: #2A2250;
   --danger: #FF5B5B;
@@ -64,7 +67,7 @@
   --dot: rgba(255, 255, 255, 0.07);
   --glow: rgba(20, 184, 166, 0.16);
   /* hero connection lines: clearly visible in both themes (ADR-087) */
-  --flow-line: rgba(227, 229, 225, 0.34);
+  --flow-line: rgba(227, 229, 225, 0.45);
 
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -104,6 +107,7 @@
   --accent-deep: #0B3B36;
   --on-accent: #FFFFFF;
   --on-deep: #99F6E4;
+  --on-deep-soft: #7FD5C5;
   --violet: #6D28D9;
   --violet-deep: #E5DDF7;
   --danger: #B3261E;
@@ -120,7 +124,7 @@
   --chip2-bg: rgba(17, 25, 21, 0.04);
   --dot: rgba(17, 25, 21, 0.10);
   --glow: rgba(15, 118, 110, 0.12);
-  --flow-line: rgba(17, 25, 21, 0.38);
+  --flow-line: rgba(17, 25, 21, 0.52);
   --shadow-micro: rgba(17, 25, 21, 0.08) 0 1px 3px 0, rgba(17, 25, 21, 0.10) 0 2px 24px 0;
   --shadow-inset: rgba(0, 0, 0, 0.06) 0 0 0 1px inset;
   --glow-accent: 0 0 0 1px rgba(15, 118, 110, 0.25), 0 0 40px rgba(15, 118, 110, 0.10);
@@ -198,6 +202,166 @@ pre code { background: none; padding: 0; }
 .section-head { max-width: 640px; margin-bottom: clamp(32px, 5vw, 56px); }
 .section-head p { margin-top: var(--s-sm); max-width: 560px; }
 .hl { font-style: italic; color: var(--accent-bright); }
+
+/* ---------- band head: the head row of the alternate bands. The large
+   figures that illustrate these sections live below the head (see
+   .fig/.band-fig). ---------- */
+.band-head { margin-bottom: clamp(32px, 5vw, 56px); }
+.band-head .section-head { margin-bottom: 0; }
+
+/* ---------- band figures: large informative graphics for the alternate
+   bands. Structure is HTML (exact px text control, theme tokens, real
+   contrast) with inline SVG used only for arrows and glyphs. Every graphic
+   spans the full section content width; text inside is 13px+ in both themes;
+   meaningful strokes (arrows, dots, zone borders) sit at 3:1+ via
+   --flow-line and the status colours. No animation: calm and editorial. */
+.fig { margin: 0; }
+.band-fig { margin-bottom: clamp(32px, 5vw, 56px); }
+.two-col + .fig { margin-top: clamp(28px, 4vw, 48px); }
+.fig-canvas {
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-micro);
+  padding: var(--s-lg);
+}
+.fig-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--s-sm) var(--s-md); flex-wrap: wrap;
+  margin-bottom: var(--s-md);
+}
+.fig-kicker {
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.36px;
+  color: var(--accent-bright);
+}
+.fig-tag {
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.1px;
+  color: var(--muted); border: 1px solid var(--hairline);
+  border-radius: var(--r-full); padding: 2px 10px;
+}
+.fig-caption {
+  font-size: 13px; line-height: 1.5; color: var(--body);
+  margin-top: 10px; max-width: 760px;
+}
+.fig-link { align-self: center; }
+.fig-link svg {
+  width: 26px; height: 26px; display: block; margin-inline: auto;
+  fill: none; stroke: var(--flow-line); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* lifecycle (features): servers -> gateway -> merged tool list */
+.lc {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) 34px minmax(0, 0.75fr) 34px minmax(0, 1.35fr);
+  gap: 10px; align-items: stretch;
+}
+.lc-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.lc-coltitle, .aa-lede, .zone-name {
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.3px;
+  color: var(--ink);
+}
+.lc-coltitle { margin-bottom: 2px; }
+.lc-card {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface-alt); border: 1px solid var(--hairline);
+  border-radius: var(--r-sm); padding: 9px 12px;
+}
+.lc-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.lc-name { font-family: var(--font-mono); font-size: 14px; color: var(--ink); }
+.lc-status { font-size: 13px; padding: 2px 9px; }
+.lc-meta {
+  font-family: var(--font-mono); font-size: 13px; color: var(--muted);
+  margin-left: auto; white-space: nowrap;
+}
+.lc-legend {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 6px 8px; font-size: 13px; color: var(--body);
+  margin-top: 2px;
+}
+.lc-legend .lc-dot + span { margin-right: 8px; }
+.lc-note { font-size: 13px; line-height: 1.45; color: var(--muted); margin-top: auto; }
+.lc-gw {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center; gap: 5px;
+  background: var(--accent-deep); border-radius: var(--r-md);
+  padding: 14px 12px; min-width: 0;
+}
+.lc-url {
+  font-family: var(--font-mono); font-size: 21px; color: var(--on-deep);
+  letter-spacing: 0.36px;
+}
+.lc-gwname { font-size: 13.5px; font-weight: 500; color: var(--on-deep); }
+.lc-gwsub { font-size: 13px; line-height: 1.4; color: var(--on-deep-soft); }
+.lc-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 7px; }
+.lc-chips li {
+  font-family: var(--font-mono); font-size: 13px; color: var(--body);
+  background: var(--chip2-bg); border: 1px solid var(--hairline);
+  padding: 4px 10px; border-radius: var(--r-full); white-space: nowrap;
+}
+.lc-col .lc-note, .lc-col-wide .lc-note { margin-top: 8px; }
+
+/* zones (kubernetes): public / private / state */
+.zones { display: flex; flex-direction: column; }
+.zone {
+  border: 1.5px dashed var(--flow-line); border-radius: var(--r-md);
+  background: var(--surface-alt); padding: 12px 14px;
+}
+.zone-head {
+  display: flex; align-items: baseline; flex-wrap: wrap;
+  gap: 2px 12px; margin-bottom: 10px;
+}
+.zone-name { color: var(--accent-bright); }
+.zone-sub { font-size: 13px; color: var(--muted); }
+.zone-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.zone-node {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  background: var(--surface); border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm); padding: 8px 12px;
+  flex: 1 1 150px;
+}
+.zone-node-in { border: 1.5px solid var(--accent); flex: 1 1 170px; }
+.zn-name { font-family: var(--font-mono); font-size: 13.5px; color: var(--ink); }
+.zn-sub { font-size: 13px; color: var(--muted); }
+.zone-note {
+  margin: 10px 0 0; font-size: 13px; line-height: 1.45; color: var(--body);
+  border-left: 2px solid var(--accent); padding-left: 10px;
+}
+.zone-link { display: flex; align-items: center; gap: 10px; padding: 8px 0 8px 20px; }
+.zl-arrow {
+  width: 20px; height: 20px; flex: none;
+  fill: none; stroke: var(--flow-line); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.zl-label {
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.1px;
+  color: var(--muted);
+}
+
+/* audit-row anatomy (control) */
+.aa-lede { margin-bottom: 8px; }
+.aa-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.aa-chips li {
+  font-family: var(--font-mono); font-size: 13px;
+  background: var(--accent-deep); color: var(--on-deep);
+  padding: 4px 12px; border-radius: var(--r-full); white-space: nowrap;
+}
+.aa-never {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13.5px; color: var(--ink); margin-top: 14px;
+}
+.aa-x {
+  width: 18px; height: 18px; flex: none;
+  fill: none; stroke: var(--danger); stroke-width: 1.75; stroke-linecap: round;
+}
+.aa-note { font-size: 13px; line-height: 1.5; color: var(--muted); margin-top: 8px; }
+
+/* responsive: figures stack below 900px; arrows turn downward */
+@media (max-width: 899px) {
+  .lc { grid-template-columns: 1fr; gap: 6px; }
+  .fig-link { transform: rotate(90deg); padding: 2px 0; }
+  .lc-gw { padding: 16px 12px; }
+  .zone-node { flex: 1 1 130px; }
+  .fig-canvas { padding: var(--s-md); }
+  .zone-link { padding-left: 8px; }
+}
 
 /* entrance reveal (JS adds .io-pre, then .io-in) */
 [data-io] { transition: opacity var(--slow) var(--std), transform var(--slow) var(--std); }
@@ -459,7 +623,7 @@ html.nav-open { overflow: hidden; }
   margin-top: clamp(24px, 4vw, 40px);
   height: clamp(380px, 42vw, 560px);
 }
-.hv-glow, .hv-dots, .hv-fade { position: absolute; inset: 0; pointer-events: none; }
+.hv-glow, .hv-dots { position: absolute; inset: 0; pointer-events: none; }
 .hv-glow { background: radial-gradient(560px 340px at 50% 46%, var(--glow), transparent 70%); }
 .hv-dots {
   background-image: radial-gradient(var(--dot) 1px, transparent 1.4px);
@@ -467,9 +631,10 @@ html.nav-open { overflow: hidden; }
   -webkit-mask-image: radial-gradient(560px 360px at 50% 44%, #000, transparent 74%);
   mask-image: radial-gradient(560px 360px at 50% 44%, #000, transparent 74%);
 }
-.hv-fade { top: auto; height: 110px; background: linear-gradient(180deg, transparent, var(--surface-alt)); }
-.hero-visual + * { margin-top: 0; }
-.hero { padding-bottom: 0; }
+/* owner-decided hero order: heading, subtext, flow graphic, chat card,
+   buttons. The graphic sits mid-hero now, so the hero gets real bottom
+   padding and no fade strip is needed where it used to blend into the band. */
+.hero { padding-bottom: var(--s-xxl); }
 .hero::after { content: none; }
 .hv-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .hv-tall { display: none; }
@@ -504,9 +669,12 @@ html.nav-open { overflow: hidden; }
 .hv-title { font-size: 14px; font-weight: 500; fill: var(--ink); }
 .hv-sub { font-size: 11px; fill: var(--muted); }
 .hv-dot { fill: var(--accent); }
-.hv-up-empty rect { fill: none; stroke: var(--faint); stroke-dasharray: 4 4; }
-.hv-up-empty .hv-dot { fill: var(--faint); }
+.hv-up-empty rect { fill: none; stroke: var(--muted); stroke-dasharray: 4 4; }
+.hv-up-empty .hv-dot { fill: var(--muted); }
 .hv-up.flash rect { stroke: var(--accent-bright); }
+/* the tall hero variant renders at ~0.95 scale on a 390px screen; 13px user
+   units keep its secondary text at 12px+ rendered, the mobile minimum */
+.hv-tall .hv-sub, .hv-tall .hv-hub-sub { font-size: 13px; }
 
 .hv-hub rect { fill: var(--surface-raised); stroke: var(--hairline-strong); }
 .hv-ring { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: 0.7; }
@@ -654,14 +822,28 @@ html.nav-open { overflow: hidden; }
 .tour-actions { display: flex; justify-content: flex-end; margin-bottom: var(--s-md); }
 .diagram svg { width: 100%; height: auto; }
 .diagram-compact { display: none; max-width: 420px; margin-inline: auto; }
+/* below 900px the wide six-step SVG would render its 11-15px labels under
+   the readable minimum, so the purpose-built compact variant takes over */
+@media (max-width: 899px) {
+  .diagram-wide { display: none; }
+  .diagram-compact { display: block; }
+  #tourTall .node-sub, #tourTall .badge-num { font-size: 13px; }
+  #tourTall .dline-label { font-size: 13.5px; }
+}
 .node rect { fill: var(--surface); stroke: var(--hairline-strong); transition: stroke var(--base) var(--soft); }
 .node-title { font-size: 15px; font-weight: 500; fill: var(--ink); text-anchor: middle; }
 .node-sub { font-size: 11px; fill: var(--muted); text-anchor: middle; font-family: var(--font-mono); }
-.badge { fill: var(--surface); stroke: var(--hairline-strong); transition: fill var(--base) var(--soft), stroke var(--base) var(--soft); }
+.badge { fill: var(--surface); stroke: var(--flow-line); transition: fill var(--base) var(--soft), stroke var(--base) var(--soft); }
 .badge-num { font-size: 12px; fill: var(--muted); text-anchor: middle; transition: fill var(--base) var(--soft); }
-.dpath { fill: none; stroke: var(--hairline-strong); stroke-width: 1.5; stroke-dasharray: 4 6; transition: stroke var(--base) var(--soft), opacity var(--base) var(--soft); }
+.dpath { fill: none; stroke: var(--flow-line); stroke-width: 1.5; stroke-dasharray: 4 6; transition: stroke var(--base) var(--soft), opacity var(--base) var(--soft); }
 .dpath-back { opacity: 0.6; }
 .edge-label { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); text-anchor: middle; }
+/* the credential boundary: a dashed cut between routing and the upstream
+   servers. Everything right of it runs on the gateway's own credential. */
+.dline { fill: none; stroke: var(--flow-line); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.dline-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.2px; fill: var(--accent-bright); }
+.dline-plate { fill: var(--surface); stroke: var(--hairline-strong); }
+.diagram-note { margin-top: 12px; font-size: 13px; line-height: 1.5; color: var(--body); max-width: 720px; }
 .node.lit rect { stroke: var(--accent); }
 .node.lit .badge { fill: var(--accent-deep); stroke: var(--accent); }
 .node.lit .badge-num { fill: var(--accent-bright); }
@@ -721,6 +903,7 @@ html.nav-open { overflow: hidden; }
 .sim-log { list-style: none; display: grid; gap: 6px; font-size: 12px; letter-spacing: 0.36px; }
 .sim-log li {
   display: flex; gap: var(--s-md); justify-content: space-between;
+  flex-wrap: wrap; /* long mono tool names wrap instead of overflowing below 360px */
   color: var(--muted);
 }
 .sim-log li.new { animation: row-in var(--base) var(--std); }
@@ -744,7 +927,7 @@ html.nav-open { overflow: hidden; }
 .panel-title { font-size: 14px; color: var(--ink); font-weight: 500; }
 .panel-note { font-size: 13px; color: var(--muted); margin-top: var(--s-md); }
 .mock-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.mock-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 460px; }
+.mock-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
 .mock-table th {
   text-align: left; font-size: 11px; font-weight: 400; letter-spacing: 0.3px;
   color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--hairline-strong);
@@ -861,10 +1044,13 @@ html.nav-open { overflow: hidden; }
   .sim { grid-template-columns: 1fr; }
 }
 @media (max-width: 899px) {
-  /* below 900px the nav shows only the wordmark, theme toggle and menu button */
+  /* below 900px the nav shows the wordmark, the Open dashboard CTA, the
+     theme toggle and the menu button. The call to action must stay in the
+     top bar at every width so it is never more than a glance away. */
+  .nav { grid-template-columns: 1fr auto; }
   .nav-links { display: none; }
   .nav-toggle { display: grid; }
-  .nav-actions .btn-secondary, .nav-actions .btn-primary { display: none; }
+  .nav-actions .btn-primary { display: none; }
   .cols3, .tiers, .cols2 { grid-template-columns: 1fr; }
   .two-col { grid-template-columns: 1fr; gap: var(--s-lg); }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
@@ -872,13 +1058,11 @@ html.nav-open { overflow: hidden; }
   .steps-track { display: none; }
   .tier-line { display: none; }
   .footer-cols { grid-template-columns: 1fr 1fr; }
-  .nav-actions .btn-secondary { display: none; }
 }
 @media (max-width: 767px) {
   .hv-wide { display: none; }
   .hv-tall { display: block; position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: 360 / 690; }
   .hero-visual { height: auto; }
-  .hv-fade { display: none; }
   .closing-actions { flex-direction: column; align-items: stretch; }
   .btn-mono { align-items: flex-start; }
   .announce { padding-inline: 40px; text-align: center; }
@@ -891,6 +1075,14 @@ html.nav-open { overflow: hidden; }
   .sim-controls .btn { flex: 1 1 40%; }
   .code-block { font-size: 12px; }
   .note-card p { font-size: 22px; }
+  /* keep wordmark + Open dashboard + both toggles inside 375px */
+  .nav { padding-inline: 16px; gap: var(--s-xs); }
+  .wordmark span { font-size: 13px; }
+  .nav .btn { font-size: 12.5px; padding-inline: 10px; height: 32px; }
+  .theme-toggle, .nav-toggle { width: 32px; height: 32px; }
+}
+@media (max-width: 359px) {
+  .wordmark span { display: none; }
 }
 
 /* ---------- reduced motion ---------- */
@@ -906,6 +1098,7 @@ html.nav-open { overflow: hidden; }
   .marquee { overflow: visible; flex-wrap: wrap; justify-content: center; -webkit-mask-image: none; mask-image: none; }
   .marquee .marks + .marks { display: none; }
   .hv-packets { display: none; }
+  /* band-art motion is gone; the remaining rules only stop page motion */
   .hv-pulse { animation: none; opacity: 0.1; }
   .term-caret { animation: none; }
   .hv-chip { animation: none; }

@@ -498,7 +498,7 @@
       ["alice", "woo__list_orders", "118 ms", "ok"],
       ["bob", "notes__search_notes", "64 ms", "ok"],
       ["alice", "time__convert_time", "12 ms", "ok"],
-      ["bob", "woo__update_order_status", "—", "permission denied"],
+      ["bob", "woo__update_order_status", "n/a", "permission denied"],
       ["bob", "woo__get_order", "210 ms", "error"],
       ["alice", "notes__create_note", "31 ms", "ok"],
       ["bob", "time__get_current_time", "9 ms", "ok"]
@@ -518,8 +518,9 @@
       var tr = document.createElement("tr");
       tr.className = "new";
       var time = two(d.getHours()) + ":" + two(d.getMinutes()) + ":" + two(d.getSeconds());
+      var server = ev[1].split("__")[0];
       tr.innerHTML =
-        '<td class="mono">' + time + "</td><td>" + ev[0] + '</td><td class="mono">' + ev[1] +
+        '<td class="mono">' + time + "</td><td>" + ev[0] + '</td><td class="mono">' + server + '</td><td class="mono">' + ev[1] +
         '</td><td class="mono">' + ev[2] + '</td><td><span class="badge ' + BADGE[ev[3]] + '">' + ev[3] + "</span></td>";
       auditBody.insertBefore(tr, auditBody.firstChild);
       while (auditBody.children.length > 5) auditBody.removeChild(auditBody.lastChild);
@@ -644,7 +645,7 @@
     $("#simRevoke").addEventListener("click", function () {
       revoked = true;
       if (issueBtn) issueBtn.hidden = false;
-      logRow('<span>' + stamp() + "</span><span>system</span><span>key revoked</span><span>—</span>", "new");
+      logRow('<span>' + stamp() + "</span><span>system</span><span>key revoked</span><span>n/a</span>", "new");
     });
     if (issueBtn) issueBtn.addEventListener("click", function () {
       revoked = false;

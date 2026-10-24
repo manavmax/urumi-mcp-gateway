@@ -3,14 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Urumi Gateway — one MCP endpoint for your whole team</title>
+  <title>Urumi Gateway - one MCP endpoint for your whole team</title>
   <meta name="description" content="One MCP endpoint for a whole team: register MCP servers once, give every teammate a key, keep upstream credentials on the server. A take-home project built for the Urumi AI FDE internship, not a product of Urumi.">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/dm-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <script src="/theme-init.js"></script>
-  <link rel="stylesheet" href="/styles.css">
+  <!-- ?v=3: cache-bust for the band-art removal + new band figures; browsers
+       holding the old styles.css never revalidate on their own without it. -->
+  <link rel="stylesheet" href="/styles.css?v=3">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -79,23 +81,9 @@
       <h1 class="display">One MCP endpoint for your <em class="hl">whole team</em>.</h1>
       <p class="lead">Register your MCP servers once. Give every teammate a key. Their editor and the built-in chat get every tool, while the upstream credentials stay on the server.</p>
 
-      <div class="terminal" id="terminal">
-        <div class="term-head">
-          <span class="term-title">urumi · chat</span>
-          <span class="chip chip-sample">sample</span>
-        </div>
-        <p class="term-line"><span class="term-prompt" aria-hidden="true">›</span><span class="term-text" id="termText">What orders came in today?</span><span class="term-caret" aria-hidden="true"></span></p>
-        <p class="term-call" id="termCall">woo__list_orders&ensp;118&thinsp;ms&ensp;<span class="term-ok">ok</span></p>
-        <p class="term-answer" id="termAnswer">3 orders today, latest #1042 (processing).<br>Combined total 184.90 across the three.</p>
-      </div>
-
-      <div class="hero-actions">
-        <a class="btn btn-primary" data-link-dashboard href="#main">Open dashboard<span class="arrow" aria-hidden="true">→</span></a>
-        <a class="btn btn-secondary" data-repo href="#main" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-      </div>
-      <p class="hero-note">A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
-
-      <!-- Hero graphic: "the gateway prism". Original inline SVG artwork. -->
+      <!-- Hero graphic: "the gateway prism". Original inline SVG artwork.
+           Owner-decided hero order: heading, subtext, this flow graphic
+           (clients to /mcp to servers), the sample chat card, the buttons. -->
       <div class="hero-visual" id="heroVisual" role="img" aria-label="Diagram: an editor, a chat agent and a CLI send calls through the Urumi gateway, which routes them to the woo, time and notes MCP servers and a dashed placeholder for your own server. Teal packets travel to the gateway and on to the servers; violet packets return.">
         <div class="hv-glow" aria-hidden="true"></div>
         <div class="hv-dots" aria-hidden="true"></div>
@@ -149,25 +137,25 @@
 
             <g class="hv-up" id="hvU0">
               <rect x="800" y="48" width="180" height="76" rx="10"/>
-              <circle class="hv-dot" cx="822" cy="70" r="4"/>
+              <circle class="hv-dot" data-ink="" cx="822" cy="70" r="4"/>
               <text class="hv-title" x="838" y="75">woo</text>
               <text class="hv-sub" x="816" y="102">8 tools · WooCommerce</text>
             </g>
             <g class="hv-up" id="hvU1">
               <rect x="800" y="168" width="180" height="76" rx="10"/>
-              <circle class="hv-dot" cx="822" cy="190" r="4"/>
+              <circle class="hv-dot" data-ink="" cx="822" cy="190" r="4"/>
               <text class="hv-title" x="838" y="195">time</text>
               <text class="hv-sub" x="816" y="222">2 tools</text>
             </g>
             <g class="hv-up" id="hvU2">
               <rect x="800" y="288" width="180" height="76" rx="10"/>
-              <circle class="hv-dot" cx="822" cy="310" r="4"/>
+              <circle class="hv-dot" data-ink="" cx="822" cy="310" r="4"/>
               <text class="hv-title" x="838" y="315">notes</text>
               <text class="hv-sub" x="816" y="342">3 tools</text>
             </g>
             <g class="hv-up hv-up-empty" id="hvU3">
               <rect x="800" y="408" width="180" height="76" rx="10"/>
-              <circle class="hv-dot" cx="822" cy="430" r="4"/>
+              <circle class="hv-dot" data-ink="" cx="822" cy="430" r="4"/>
               <text class="hv-title" x="838" y="435">your server</text>
               <text class="hv-sub" x="816" y="462">register it in the dashboard</text>
             </g>
@@ -197,13 +185,28 @@
             <text class="hv-hub-label" x="180" y="342">/mcp</text>
             <text class="hv-hub-sub" x="180" y="366">gateway</text>
           </g>
-          <g class="hv-up" id="hvT0"><rect x="120" y="430" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="448" r="3.5"/><text class="hv-title" x="154" y="453">woo</text><text class="hv-sub" x="136" y="470">8 tools</text></g>
-          <g class="hv-up" id="hvT1"><rect x="120" y="488" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="506" r="3.5"/><text class="hv-title" x="154" y="511">time</text><text class="hv-sub" x="136" y="528">2 tools</text></g>
-          <g class="hv-up" id="hvT2"><rect x="120" y="546" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="564" r="3.5"/><text class="hv-title" x="154" y="569">notes</text><text class="hv-sub" x="136" y="586">3 tools</text></g>
-          <g class="hv-up hv-up-empty" id="hvT3"><rect x="120" y="604" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="622" r="3.5"/><text class="hv-title" x="154" y="627">your server</text><text class="hv-sub" x="136" y="644">register it</text></g>
+          <g class="hv-up" id="hvT0"><rect x="120" y="430" width="220" height="48" rx="10"/><circle class="hv-dot" data-ink="" cx="140" cy="448" r="3.5"/><text class="hv-title" x="154" y="453">woo</text><text class="hv-sub" x="136" y="470">8 tools</text></g>
+          <g class="hv-up" id="hvT1"><rect x="120" y="488" width="220" height="48" rx="10"/><circle class="hv-dot" data-ink="" cx="140" cy="506" r="3.5"/><text class="hv-title" x="154" y="511">time</text><text class="hv-sub" x="136" y="528">2 tools</text></g>
+          <g class="hv-up" id="hvT2"><rect x="120" y="546" width="220" height="48" rx="10"/><circle class="hv-dot" data-ink="" cx="140" cy="564" r="3.5"/><text class="hv-title" x="154" y="569">notes</text><text class="hv-sub" x="136" y="586">3 tools</text></g>
+          <g class="hv-up hv-up-empty" id="hvT3"><rect x="120" y="604" width="220" height="48" rx="10"/><circle class="hv-dot" data-ink="" cx="140" cy="622" r="3.5"/><text class="hv-title" x="154" y="627">your server</text><text class="hv-sub" x="136" y="644">register it</text></g>
         </svg>
-        <div class="hv-fade" aria-hidden="true"></div>
       </div>
+
+      <div class="terminal" id="terminal">
+        <div class="term-head">
+          <span class="term-title">urumi · chat</span>
+          <span class="chip chip-sample">sample</span>
+        </div>
+        <p class="term-line"><span class="term-prompt" aria-hidden="true">›</span><span class="term-text" id="termText">What orders came in today?</span><span class="term-caret" aria-hidden="true"></span></p>
+        <p class="term-call" id="termCall">woo__list_orders&ensp;118&thinsp;ms&ensp;<span class="term-ok">ok</span></p>
+        <p class="term-answer" id="termAnswer">3 orders today, latest #1042 (processing).<br>Combined total 184.90 across the three.</p>
+      </div>
+
+      <div class="hero-actions">
+        <a class="btn btn-primary" data-link-dashboard href="#main">Open dashboard<span class="arrow" aria-hidden="true">→</span></a>
+        <a class="btn btn-secondary" data-repo href="#main" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+      </div>
+      <p class="hero-note">A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
     </section>
 
     <!-- 4. Built with -->
@@ -221,11 +224,84 @@
 
     <!-- 5. Three product blocks -->
     <section class="section band-alt" id="features">
-      <header class="section-head" data-io>
-        <p class="eyebrow">Gateway</p>
-        <h2>Connect, control, run.</h2>
-        <p>Three jobs, one deployment. Everything below is running in the demo now.</p>
-      </header>
+      <div class="band-head">
+        <header class="section-head" data-io>
+          <p class="eyebrow">Gateway</p>
+          <h2>Connect, control, run.</h2>
+          <p>Three jobs, one deployment. Everything below is running in the demo now.</p>
+        </header>
+      </div>
+      <!-- Lifecycle figure: the three real upstream servers, the single gateway
+           endpoint, and the merged namespaced tool list, exactly as the demo
+           runs today. Status names are the dashboard's real states. -->
+      <figure class="fig band-fig" id="figLifecycle" data-io>
+        <div class="fig-canvas" role="img" aria-label="Diagram of the gateway lifecycle: on the left, three upstream MCP servers named woo, time and notes, all with a teal Connected dot, with a legend for the Disabled and Unreachable states. In the middle, the gateway box labelled /mcp, one MCP endpoint, which checks the key and role on every call. On the right, the merged list of 13 tools with namespaced names like woo__list_products, time__get_current_time and notes__search_notes. Arrows flow left to right: many servers in, one endpoint out.">
+          <div class="fig-head">
+            <span class="fig-kicker">The pipeline</span>
+            <span class="fig-tag">live in the demo now</span>
+          </div>
+          <div class="lc">
+            <div class="lc-col">
+              <p class="lc-coltitle">3 upstream servers</p>
+              <div class="lc-card">
+                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-name">woo</span>
+                <span class="lc-status status-ok">Connected</span>
+                <span class="lc-meta">8 tools</span>
+              </div>
+              <div class="lc-card">
+                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-name">time</span>
+                <span class="lc-status status-ok">Connected</span>
+                <span class="lc-meta">2 tools</span>
+              </div>
+              <div class="lc-card">
+                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-name">notes</span>
+                <span class="lc-status status-ok">Connected</span>
+                <span class="lc-meta">3 tools</span>
+              </div>
+              <p class="lc-legend">
+                <span class="lc-dot" data-ink style="background: var(--accent)"></span><span>Connected</span>
+                <span class="lc-dot" data-ink style="background: var(--warn)"></span><span>Disabled</span>
+                <span class="lc-dot" data-ink style="background: var(--danger)"></span><span>Unreachable</span>
+              </p>
+              <p class="lc-note">Per-server timeouts and a circuit breaker: tool list 8s, tool call 10s. One dead server never breaks the rest.</p>
+            </div>
+            <div class="fig-link" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="M7 5l7 7-7 7"/></svg>
+            </div>
+            <div class="lc-gw">
+              <p class="lc-url">/mcp</p>
+              <p class="lc-gwname">one MCP endpoint</p>
+              <p class="lc-gwsub">checks the key and the role on every call</p>
+            </div>
+            <div class="fig-link" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="M7 5l7 7-7 7"/></svg>
+            </div>
+            <div class="lc-col lc-col-wide">
+              <p class="lc-coltitle">13 tools, namespaced</p>
+              <ul class="lc-chips">
+                <li>woo__list_products</li>
+                <li>woo__get_product</li>
+                <li>woo__create_product</li>
+                <li>woo__list_product_images</li>
+                <li>woo__add_product_image</li>
+                <li>woo__list_orders</li>
+                <li>woo__get_order</li>
+                <li>woo__update_order_status</li>
+                <li>time__get_current_time</li>
+                <li>time__convert_time</li>
+                <li>notes__create_note</li>
+                <li>notes__list_notes</li>
+                <li>notes__search_notes</li>
+              </ul>
+              <p class="lc-note">Every client sees one merged list; the <span class="mono">server__tool</span> prefix is what keeps names apart.</p>
+            </div>
+          </div>
+        </div>
+        <figcaption class="fig-caption">Many servers in, one endpoint out. What to notice: every tool name carries its server prefix, so names never collide.</figcaption>
+      </figure>
       <div class="cols3">
         <article class="card" data-io data-spot>
           <p class="card-tag">connect</p>
@@ -344,17 +420,19 @@
 
     <!-- 7. How a tool call travels -->
     <section class="section band-alt" id="tour">
-      <header class="section-head" data-io>
-        <p class="eyebrow">Under the hood</p>
-        <h2>How a tool call travels</h2>
-        <p>From the client to the store and back, every hop checked and written down.</p>
-      </header>
+      <div class="band-head">
+        <header class="section-head" data-io>
+          <p class="eyebrow">Under the hood</p>
+          <h2>How a tool call travels</h2>
+          <p>From the client to the store and back, every hop checked and written down.</p>
+        </header>
+      </div>
       <div class="tour-actions" data-io>
         <button class="pill" id="diagramReplay" type="button">Replay
           <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 2 6M4 10V4m0 6h6"/></svg>
         </button>
       </div>
-      <div class="diagram diagram-wide" role="img" aria-label="Six numbered steps: one, the MCP client or chat agent sends a call with a Bearer key. Two, the gateway checks the key hash, the caller's role and the rate limit. Three, routing picks the upstream server in-cluster. Four, the woo MCP server runs the namespaced tool. Five, the store is reached over REST with credentials held server-side. Six, an audit row records who called what, how long it took and the outcome. The result returns along the same path.">
+      <div class="diagram diagram-wide" role="img" aria-label="Six numbered steps: one, the MCP client or chat agent sends a call with a Bearer key. Two, the gateway checks the key hash, the caller's role and the rate limit. Three, routing picks the upstream server in-cluster. Four, the woo MCP server runs the namespaced tool. Five, the store is reached over REST with credentials held server-side. Six, an audit row records who called what, how long it took and the outcome. A dashed boundary between routing and the upstream server marks where the client key stops: upstream calls carry the gateway's own credential, never the client key. The result returns along the same path.">
         <svg id="tourWide" viewBox="0 0 960 340" aria-hidden="true" focusable="false">
           <g class="flow-lines">
             <path class="dpath" id="d12" d="M195 74 H260"/>
@@ -363,6 +441,10 @@
             <path class="dpath" id="d45" d="M845 118 C845 168 680 155 680 202"/>
             <path class="dpath" id="d56" d="M505 246 H440"/>
             <path class="dpath dpath-back" id="d61" d="M275 292 C150 322 108 200 104 122"/>
+          </g>
+          <g class="boundary" aria-hidden="false">
+            <path class="dline" d="M717 16 V132"/>
+            <text class="dline-label" x="717" y="12" text-anchor="middle">client key stops here</text>
           </g>
           <g class="node" data-step="1"><rect x="25" y="30" width="170" height="88" rx="12"/><circle class="badge" cx="45" cy="30" r="12"/><text class="badge-num" x="45" y="34">1</text><text class="node-title" x="110" y="66">MCP client</text><text class="node-sub" x="110" y="86">or chat agent</text><text class="node-sub" x="110" y="103">Bearer &lt;your-api-key&gt;</text></g>
           <g class="node" data-step="2"><rect x="260" y="30" width="180" height="88" rx="12"/><circle class="badge" cx="280" cy="30" r="12"/><text class="badge-num" x="280" y="34">2</text><text class="node-title" x="350" y="66">Gateway checks</text><text class="node-sub" x="350" y="86">key · role · rate</text></g>
@@ -378,7 +460,7 @@
           </g>
         </svg>
       </div>
-      <div class="diagram diagram-compact" role="img" aria-label="Same six steps, vertical: client, gateway checks, routing, the woo MCP server, the store, and the audit row; the result returns to the caller.">
+      <div class="diagram diagram-compact" role="img" aria-label="Same six steps, vertical: client, gateway checks, routing, the woo MCP server, the store, and the audit row; a dashed line between routing and the upstream server marks where the client key stops and the gateway's own credential takes over. The result returns to the caller.">
         <svg id="tourTall" viewBox="0 0 360 760" aria-hidden="true" focusable="false">
           <g class="flow-lines">
             <path class="dpath" id="e12" d="M180 108 V148"/>
@@ -386,6 +468,11 @@
             <path class="dpath" id="e34" d="M180 364 V404"/>
             <path class="dpath" id="e45" d="M180 492 V532"/>
             <path class="dpath" id="e56" d="M180 620 V660"/>
+          </g>
+          <g class="boundary">
+            <path class="dline" d="M14 384 H346"/>
+            <rect class="dline-plate" x="70" y="374" width="220" height="20" rx="5"/>
+            <text class="dline-label" x="180" y="388" text-anchor="middle">client key never forwarded</text>
           </g>
           <g class="node" data-step="1"><rect x="20" y="28" width="320" height="80" rx="12"/><circle class="badge" cx="40" cy="28" r="12"/><text class="badge-num" x="40" y="32">1</text><text class="node-title" x="180" y="62">MCP client or chat agent</text><text class="node-sub" x="180" y="84">Bearer &lt;your-api-key&gt;</text></g>
           <g class="node" data-step="2"><rect x="20" y="148" width="320" height="88" rx="12"/><circle class="badge" cx="40" cy="148" r="12"/><text class="badge-num" x="40" y="152">2</text><text class="node-title" x="180" y="186">Gateway checks</text><text class="node-sub" x="180" y="208">key · role · rate</text></g>
@@ -395,6 +482,7 @@
           <g class="node" data-step="6"><rect x="20" y="660" width="320" height="88" rx="12"/><circle class="badge" cx="40" cy="660" r="12"/><text class="badge-num" x="40" y="664">6</text><text class="node-title" x="180" y="698">Audit row</text><text class="node-sub" x="180" y="720">who · what · how long</text></g>
         </svg>
       </div>
+      <p class="diagram-note">The boundary: the client key is checked at step 2 and never forwarded. Steps 4 and 5 run with the gateway's own credential, which never reaches the client.</p>
     </section>
 
     <!-- 8. Break it yourself -->
@@ -474,13 +562,13 @@
             <div class="panel-head"><span class="panel-title">Audit log</span><span class="chip chip-sample">sample data</span></div>
             <div class="mock-scroll">
               <table class="mock-table">
-                <thead><tr><th scope="col">Time</th><th scope="col">User</th><th scope="col">Tool</th><th scope="col">Took</th><th scope="col">Outcome</th></tr></thead>
+                <thead><tr><th scope="col">Time</th><th scope="col">User</th><th scope="col">Server</th><th scope="col">Tool</th><th scope="col">Took</th><th scope="col">Outcome</th></tr></thead>
                 <tbody id="auditBody">
-                  <tr><td class="mono">14:02:11</td><td>alice</td><td class="mono">woo__list_orders</td><td class="mono">118 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
-                  <tr><td class="mono">14:01:54</td><td>bob</td><td class="mono">notes__search_notes</td><td class="mono">64 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
-                  <tr><td class="mono">14:01:02</td><td>bob</td><td class="mono">woo__update_order_status</td><td class="mono">—</td><td><span class="badge badge-warn">permission denied</span></td></tr>
-                  <tr><td class="mono">14:00:59</td><td>alice</td><td class="mono">time__convert_time</td><td class="mono">12 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
-                  <tr><td class="mono">14:00:31</td><td>bob</td><td class="mono">woo__get_order</td><td class="mono">210 ms</td><td><span class="badge badge-err">error</span></td></tr>
+                  <tr><td class="mono">14:02:11</td><td>alice</td><td class="mono">woo</td><td class="mono">woo__list_orders</td><td class="mono">118 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
+                  <tr><td class="mono">14:01:54</td><td>bob</td><td class="mono">notes</td><td class="mono">notes__search_notes</td><td class="mono">64 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
+                  <tr><td class="mono">14:01:02</td><td>bob</td><td class="mono">woo</td><td class="mono">woo__update_order_status</td><td class="mono">n/a</td><td><span class="badge badge-warn">permission denied</span></td></tr>
+                  <tr><td class="mono">14:00:59</td><td>alice</td><td class="mono">time</td><td class="mono">time__convert_time</td><td class="mono">12 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
+                  <tr><td class="mono">14:00:31</td><td>bob</td><td class="mono">woo</td><td class="mono">woo__get_order</td><td class="mono">210 ms</td><td><span class="badge badge-err">error</span></td></tr>
                 </tbody>
               </table>
             </div>
@@ -488,6 +576,31 @@
           </div>
         </div>
       </div>
+      <!-- Audit-row anatomy figure: what the gateway really writes per call
+           (the AuditLog columns), and the privacy line that matters. Full
+           width below the two columns so the graphic keeps a readable size. -->
+      <figure class="fig" id="figAudit" data-io>
+        <div class="fig-canvas" role="img" aria-label="What one audit row keeps: the user, the server, the tool, the outcome and the duration. It never stores argument values or result bodies, so payloads stay off the record.">
+          <div class="fig-head">
+            <span class="fig-kicker">One row per call</span>
+            <span class="fig-tag">the columns GET /api/audit returns</span>
+          </div>
+          <p class="aa-lede">The audit row keeps:</p>
+          <ul class="aa-chips">
+            <li>user</li>
+            <li>server</li>
+            <li>tool</li>
+            <li>outcome</li>
+            <li>duration</li>
+          </ul>
+          <p class="aa-never">
+            <svg class="aa-x" viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
+            Argument values and result bodies: never stored.
+          </p>
+          <p class="aa-note">The row says who called what and what happened. The payload itself stays off the record, and a revoked key is on it too: the denial is audited.</p>
+        </div>
+        <figcaption class="fig-caption">Who, what, how long: and never the arguments.</figcaption>
+      </figure>
     </section>
 
     <!-- 10. Fleet at a glance -->
@@ -520,11 +633,96 @@
 
     <!-- 11. What runs where -->
     <section class="section band-alt" id="kubernetes">
-      <header class="section-head" data-io>
-        <p class="eyebrow">Platform</p>
-        <h2>Public, private, and state.</h2>
-        <p>One Helm chart deploys all three tiers; only the values file changes between laptop and VPS.</p>
-      </header>
+      <div class="band-head">
+        <header class="section-head" data-io>
+          <p class="eyebrow">Platform</p>
+          <h2>Public, private, and state.</h2>
+          <p>One Helm chart deploys all three tiers; only the values file changes between laptop and VPS.</p>
+        </header>
+      </div>
+      <!-- Zone figure: the real tier split from the Helm chart. Public pods are
+           the only ones the ingress namespace can reach; the MCP servers are
+           ClusterIP-only with gateway-only ingress; state sits on PVCs. -->
+      <figure class="fig band-fig" id="figZones" data-io>
+        <div class="fig-canvas" role="img" aria-label="Zone diagram of the deployment. The public zone holds the nginx Ingress with TLS via cert-manager, the WooCommerce storefront, the React dashboard and the FastAPI gateway; it is the only zone the internet can reach. The private zone holds the woo-mcp, time and notes MCP servers on ClusterIP-only services; a default-deny NetworkPolicy means only the gateway may connect to them. The state zone holds Postgres, which only the gateway may reach, and MariaDB, which only the store may reach, both on persistent volumes.">
+          <div class="fig-head">
+            <span class="fig-kicker">What runs where</span>
+            <span class="fig-tag">the chart's real tier split</span>
+          </div>
+          <div class="zones">
+            <div class="zone zone-pub">
+              <div class="zone-head">
+                <span class="zone-name">Public</span>
+                <span class="zone-sub">the only zone the internet reaches, through one Ingress</span>
+              </div>
+              <div class="zone-row">
+                <div class="zone-node zone-node-in">
+                  <span class="zn-name">Ingress</span>
+                  <span class="zn-sub">nginx, TLS via cert-manager</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">storefront</span>
+                  <span class="zn-sub">WooCommerce store</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">dashboard</span>
+                  <span class="zn-sub">React</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">gateway</span>
+                  <span class="zn-sub">FastAPI</span>
+                </div>
+              </div>
+            </div>
+            <div class="zone-link" aria-hidden="true">
+              <svg class="zl-arrow" viewBox="0 0 24 24" focusable="false"><path d="M12 4v14M6 12l6 6 6-6"/></svg>
+              <span class="zl-label">only the gateway may cross: default-deny NetworkPolicy</span>
+            </div>
+            <div class="zone zone-priv">
+              <div class="zone-head">
+                <span class="zone-name">Private</span>
+                <span class="zone-sub">ClusterIP only: no route exists from the internet</span>
+              </div>
+              <div class="zone-row">
+                <div class="zone-node">
+                  <span class="zn-name">woo-mcp</span>
+                  <span class="zn-sub">gateway holds its credential</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">time</span>
+                  <span class="zn-sub">gateway holds its credential</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">notes</span>
+                  <span class="zn-sub">gateway holds its credential</span>
+                </div>
+              </div>
+              <p class="zone-note">Ingress rules select app: gateway and nothing else. Throwaway probes are blocked.</p>
+            </div>
+            <div class="zone-link" aria-hidden="true">
+              <svg class="zl-arrow" viewBox="0 0 24 24" focusable="false"><path d="M12 4v14M6 12l6 6 6-6"/></svg>
+              <span class="zl-label">state survives restarts, upgrades and rollbacks</span>
+            </div>
+            <div class="zone zone-state">
+              <div class="zone-head">
+                <span class="zone-name">State</span>
+                <span class="zone-sub">persistent volumes under the databases</span>
+              </div>
+              <div class="zone-row">
+                <div class="zone-node">
+                  <span class="zn-name">Postgres</span>
+                  <span class="zn-sub">gateway only</span>
+                </div>
+                <div class="zone-node">
+                  <span class="zn-name">MariaDB</span>
+                  <span class="zn-sub">store only</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption class="fig-caption">Three zones, one chart. What to notice: the private servers have no internet route at all; the only door in is the gateway.</figcaption>
+      </figure>
       <div class="tiers" data-io>
         <div class="tier-line" aria-hidden="true"></div>
         <article class="card tier" data-spot><p class="card-tag">public</p><h3>Public</h3><p>Ingress, the gateway, the dashboard, this page.</p></article>
@@ -604,11 +802,13 @@
 
     <!-- 13. From the design notes -->
     <section class="section band-alt" id="notes">
-      <header class="section-head" data-io>
-        <p class="eyebrow">Honest quotes</p>
-        <h2>From the design notes</h2>
-        <p>Statements from this project's own docs, linked to their source. Not testimonials; nobody said these but the docs.</p>
-      </header>
+      <div class="band-head">
+        <header class="section-head" data-io>
+          <p class="eyebrow">Honest quotes</p>
+          <h2>From the design notes</h2>
+          <p>Statements from this project's own docs, linked to their source. Not testimonials; nobody said these but the docs.</p>
+        </header>
+      </div>
       <div class="cols3 notes-grid">
         <blockquote class="card note-card" data-io data-spot>
           <p>"Client keys are never forwarded upstream. The gateway uses its own credential."</p>
@@ -653,11 +853,13 @@
 
     <!-- 15. Beyond the brief (features.js drives this; hidden until an item is enabled) -->
     <section class="section band-alt" id="beyond" hidden>
-      <header class="section-head">
-        <p class="eyebrow">Queue</p>
-        <h2>Beyond the brief</h2>
-        <p>Ideas queued past the assignment. Each ships switched off in <code>src/landing/features.js</code> and appears here only when it actually lands in the demo.</p>
-      </header>
+      <div class="band-head">
+        <header class="section-head">
+          <p class="eyebrow">Queue</p>
+          <h2>Beyond the brief</h2>
+          <p>Ideas queued past the assignment. Each ships switched off in <code>src/landing/features.js</code> and appears here only when it actually lands in the demo.</p>
+        </header>
+      </div>
       <div class="cols3" id="beyond-list"></div>
     </section>
 
