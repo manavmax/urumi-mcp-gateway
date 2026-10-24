@@ -43,31 +43,38 @@ CTA 158–279, toggles to 359 = viewport−16 at 375; no overflow, `scrollWidth 
 
 The alternate `band-alt` sections are: **#features, #tour, #control, #kubernetes, #notes**, plus
 **#beyond** (hidden until a feature is enabled in `features.js` — it got an illustration as well so it
-is never plain if switched on). Each opens with an original inline SVG strip (`.band-art`, 640×120
-viewBox, scales to 342×65 on mobile), drawn for this product, no text glyphs, no external files:
+is never plain if switched on).
 
-- `#features` — three client lanes converging through one accent-gated hexagon out to two servers
-  (connect · control · run).
-- `#tour` — a dashed trace with six checkpoint circles (the gateway check is an accent diamond), an
-  outbound teal pulse, a violet return pulse, and audit ticks below ("checked and written down").
-- `#control` — three ledger rows with time/tool/user/duration dashes, ok-circle and warn-triangle
-  outcome glyphs, and a blinking accent write-caret on the newest row.
-- `#kubernetes` — public (through-arrows), private (padlock) and state (volume cylinder) tiers sitting
-  on one wire, three live pod squares pulsing above the private tier.
-- `#notes` — two leaning quote bars, three passage lines (the pulled claim accented), a chain-link to
-  the source, a citation under-line.
-- `#beyond` — the queue: three switched-off toggles on a track, the next item's knob accented.
+Design (v2, after reviewer feedback that the first pass read as unexplained slivers): each section
+head and its illustration now share a `band-head` row — head text left, a compact **labeled**
+schematic right (`.band-art`, 360×120 viewBox rendered at min(380px, 100%), ~1:1 scale at every
+breakpoint, stacking under the head below 900px; #control's ledger sits inside its text column since
+that section has no head block). Every part is named with 10px mono labels using the same token fills
+as the hero diagram text (all AA against the band background in both themes):
 
-Rules followed: token-driven (`--flow-line`, `--hairline-strong`, `--surface`, `--accent`, `--violet`,
-`--warn`, `--faint`) so both themes work; `aria-hidden` wrappers; motion is calm, CSS-only, and
-directional (dash drift, a pulse per direction, pod pulse, caret blink) — and fully disabled under
-`prefers-reduced-motion` (the global rule stops them; the two pure-motion pulse paths are additionally
-`visibility: hidden` there). No copy, existing animation, or interactive behaviour changed; zero JS
-added (`js=37,413B` unchanged from baseline).
+- `#features` — clients → "one URL" → gateway (keyhole, accented) → "tools" → MCP servers.
+- `#tour` — a trace with checkpoints labeled client / checks / audit, an outbound teal pulse, a violet
+  return pulse with "result returns"; the full six-step diagram follows below in the section proper.
+- `#control` — the audit ledger: time/tool/user/took dashes per row, ok-circle and warn-triangle
+  outcomes, a blinking accent write-caret on the newest row.
+- `#kubernetes` — public (through-arrows) / private (padlock) / state (volume cylinder) boxes on one
+  wire, each labeled, with three pulsing pod squares above the private tier.
+- `#notes` — two leaning quote bars, three passage lines (the pulled claim accented) and the
+  chain-link to the source.
+- `#beyond` — the queue: three switched-off toggles on a track, the next item's knob accented
+  ("next up").
 
-Evidence: `artifacts/landing/qa/art-*.png` + `scripts/landing-artcolors.mjs` output — accent/violet/warn
-strokes present in all four size×theme variants of every strip (e.g. notes strip 2.9% teal pixels,
-kubernetes 0.5–0.75%, control warn glyph present); SVG geometry hand-checked to fit its viewBox.
+Rules followed: token-driven throughout (`--flow-line`, `--ba-box`, `--hairline-strong`, `--accent`,
+`--violet`, `--warn`, `--faint`, `--muted`) so both themes work; `aria-hidden` wrappers (the labels
+are for sighted readers; the section head text explains the section to AT); motion is calm, CSS-only,
+directional (dash drift, a pulse per direction, pod pulse, caret blink) and fully disabled under
+`prefers-reduced-motion` (the two pure-motion pulse paths are `visibility: hidden` there). No copy,
+existing animation, or interactive behaviour changed; zero JS added (`js=37,413B` unchanged from
+baseline).
+
+Evidence: `artifacts/landing/qa/art-*.png` + canvas histograms — raised boxes 22-24% of clip area over
+68-71% band background, label pixels present in dark and light at both widths; SVG geometry
+hand-checked to fit its viewBox.
 
 ## 3. BUDGETS AND GATES — DONE
 

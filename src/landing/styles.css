@@ -203,12 +203,19 @@ pre code { background: none; padding: 0; }
 .section-head p { margin-top: var(--s-sm); max-width: 560px; }
 .hl { font-style: italic; color: var(--accent-bright); }
 
-/* ---------- band art: original inline SVG illustrations for the alternate
-   bands. Decorative only: aria-hidden, no text, drawn from the same tokens
-   as the hero graphic (flow-line dashes, hairline boxes, accent dots).
-   Motion is calm and purely directional; the global reduced-motion rule
-   stops every animation below. ---------- */
-.band-art { max-width: 640px; margin-bottom: clamp(28px, 4vw, 44px); }
+/* ---------- band art: labeled inline schematics for the alternate bands.
+   Each sits beside its section head (below it on mobile) at ~1:1 scale with
+   mono labels, drawn from the same tokens as the hero graphic. Decorative:
+   aria-hidden wrappers. Motion is calm and directional; the global
+   reduced-motion rule stops every animation below. ---------- */
+.band-head {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(24px, 4vw, 56px); align-items: center;
+  margin-bottom: clamp(32px, 5vw, 56px);
+}
+.band-head .section-head { margin-bottom: 0; }
+.band-art { width: min(380px, 100%); }
+.col-text .band-art { margin-top: var(--s-lg); }
 .band-art svg { display: block; width: 100%; height: auto; }
 .ba-line { stroke: var(--flow-line); stroke-width: 1.5; fill: none; stroke-dasharray: 3 5; stroke-linecap: round; }
 .ba-solid { stroke: var(--hairline-strong); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -216,7 +223,6 @@ pre code { background: none; padding: 0; }
 .ba-acc { stroke: var(--accent); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .ba-vio { stroke: var(--violet); stroke-width: 1.5; fill: none; stroke-linecap: round; }
 .ba-dot { fill: var(--accent); }
-.ba-viodot { fill: var(--violet); }
 .ba-gate { fill: var(--ba-box); stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
 .ba-check { fill: var(--ba-box); stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
 .ba-tick { fill: var(--faint); }
@@ -227,6 +233,9 @@ pre code { background: none; padding: 0; }
 .ba-mark { fill: var(--accent); }
 .ba-quote { fill: var(--accent); opacity: 0.85; }
 .ba-knob { fill: var(--faint); }
+.ba-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.3px; fill: var(--muted); }
+.ba-label-acc { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.3px; fill: var(--accent-bright); }
+.ba-label-vio { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.3px; fill: var(--violet); }
 .ba-dash { animation: ba-dash 4.5s linear infinite; }
 @keyframes ba-dash { to { stroke-dashoffset: -64; } }
 .ba-pulse { transform-box: fill-box; transform-origin: center; animation: ba-pulse 3.2s ease-in-out infinite; }
@@ -234,8 +243,11 @@ pre code { background: none; padding: 0; }
 .ba-blink { animation: ba-blink 1.2s steps(1) infinite; }
 @keyframes ba-blink { 50% { opacity: 0; } }
 .ba-travel { animation: ba-travel 6.5s linear infinite; }
-@keyframes ba-travel { to { stroke-dashoffset: -560; } }
+@keyframes ba-travel { to { stroke-dashoffset: -320; } }
 .ba-travel-ret { animation: ba-travel 6.5s linear infinite; animation-delay: -3.25s; }
+@media (max-width: 899px) {
+  .band-head { grid-template-columns: 1fr; gap: var(--s-lg); }
+}
 
 /* entrance reveal (JS adds .io-pre, then .io-in) */
 [data-io] { transition: opacity var(--slow) var(--std), transform var(--slow) var(--std); }
