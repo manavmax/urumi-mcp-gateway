@@ -23,7 +23,7 @@ import logging
 import os
 
 from config import get_settings
-from slugs import StoreError, store_namespace, validate_slug
+from slugs import HOSTED_NAMESPACE_PREFIX, StoreError, store_namespace, validate_slug
 
 logger = logging.getLogger("provisioner.tasks")
 
@@ -377,6 +377,13 @@ class TaskManager:
         teardowns that never finished."""
         namespaces = await self.k8s.list_managed_namespaces()
         for ns_obj in namespaces:
+            # hosted-<name> namespaces carry the SAME managed label as stores
+            # but are NOT stores: treating one as a store would GET
+            # namespaces/store-<hosted-name> (404 every cycle) and could even
+            # re-drive a store install under a hosted name. Hosted servers
+            # derive their own state from their Deployment (hosted.py).
+            if ns_obj.get("metadata", {}).get("name", "").startswith(HOSTED_NAMESPACE_PREFIX):
+                continue
             slug = await self.k8s.store_slug_for_namespace(ns_obj)
             if not slug:
                 continue

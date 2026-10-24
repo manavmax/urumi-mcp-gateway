@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -262,3 +263,124 @@ def test_hosted_build_objects_shape(monkeypatch):
     import json as _json
 
     assert "sekrit" not in _json.dumps(dep)
+
+
+# ---- reconcile: hosted namespaces are never treated as stores ---------------
+
+def _load_provisioner_tasks():
+    """Load the provisioner's tasks.py by path under a unique module name: its
+    `from config import get_settings` must resolve against whatever `config`
+    is in sys.modules (the gateway's, in this test tree)."""
+    import importlib.util
+
+    p = Path(__file__).resolve().parents[2] / "provisioner" / "tasks.py"
+    spec = importlib.util.spec_from_file_location("urumi_provisioner_tasks", p)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.asyncio
+async def test_reconcile_skips_hosted_namespaces(monkeypatch):
+    """The store reconcile loop lists namespaces labeled
+    urumi.io/managed-by=provisioner - which ALSO matches hosted-<name>. Before
+    the fix every cycle GETs namespaces/store-<hosted-name> (a guaranteed 404)
+    and would even re-drive a store install under a hosted name. The loop must
+    skip hosted namespaces entirely while still processing stores."""
+    import k8s as prov_k8s
+
+    tasks_mod = _load_provisioner_tasks()
+
+    from datetime import UTC, datetime
+
+    hosted_ns = {"metadata": {"name": "hosted-weather",
+                              "labels": {"urumi.io/managed-by": "provisioner", "urumi.io/store-slug": "weather"}}}
+    store_ns = {"metadata": {"name": "store-alpha",
+                             "labels": {"urumi.io/managed-by": "provisioner", "urumi.io/store-slug": "alpha"},
+                             "annotations": {"urumi.io/created-at": datetime.now(UTC).isoformat()}}}
+
+    class FakeK8s(prov_k8s.K8sClient):
+        def __init__(self):
+            self.get_namespace_calls: list[str] = []
+
+        async def list_managed_namespaces(self):
+            return [hosted_ns, store_ns]
+
+        async def get_namespace(self, ns):
+            self.get_namespace_calls.append(ns)
+            for o in (hosted_ns, store_ns):
+                if o["metadata"]["name"] == ns:
+                    return o
+            return None
+
+    class FakeHelm:
+        async def release_deployed(self, slug):
+            return False
+
+        async def release_status(self, slug):
+            return None
+
+    fake_k8s = FakeK8s()
+    manager = tasks_mod.TaskManager(fake_k8s, FakeHelm())
+    started: list[tuple[str, str]] = []
+    monkeypatch.setattr(manager, "start_provision", lambda slug: started.append(("provision", slug)))
+    monkeypatch.setattr(manager, "start_deprovision", lambda slug: started.append(("deprovision", slug)))
+    # store_state reads the PROVISIONER settings; the gateway config in
+    # sys.modules has no provision_timeout_seconds, so stub the module's accessor
+    monkeypatch.setattr(tasks_mod, "get_settings",
+                        lambda: SimpleNamespace(provision_timeout_seconds=600, max_concurrent=2))
+
+    await manager.reconcile_once()
+
+    # the hosted namespace was skipped BEFORE any store-<name> lookup: the only
+    # GET is the real store's namespace, and no task was started for "weather"
+    assert "store-weather" not in manager.k8s.get_namespace_calls, manager.k8s.get_namespace_calls
+    # and the store was still processed (provisioning resumed)
+    assert ("provision", "alpha") in started, started
+    assert ("provision", "weather") not in started
+
+
+async def test_reconcile_never_gets_store_namespace_for_hosted(monkeypatch):
+    """Direct evidence: with a hosted-<name> namespace present, reconcile must
+    not issue the GET namespaces/store-<name> request at all."""
+    import k8s as prov_k8s
+
+    tasks_mod = _load_provisioner_tasks()
+
+    hosted_ns = {"metadata": {"name": "hosted-weather",
+                              "labels": {"urumi.io/managed-by": "provisioner", "urumi.io/store-slug": "weather"}}}
+
+    class FakeK8s(prov_k8s.K8sClient):
+        def __init__(self):
+            self.get_namespace_calls: list[str] = []
+
+        async def list_managed_namespaces(self):
+            return [hosted_ns]
+
+        async def get_namespace(self, ns):
+            self.get_namespace_calls.append(ns)
+            return hosted_ns if ns == "hosted-weather" else None
+
+        async def store_slug_for_namespace(self, ns_obj):
+            return (ns_obj.get("metadata", {}).get("labels", {}) or {}).get("urumi.io/store-slug")
+
+    class FakeHelm:
+        async def release_deployed(self, slug):
+            return False
+
+        async def release_status(self, slug):
+            return None
+
+    manager = tasks_mod.TaskManager(FakeK8s(), FakeHelm())
+    started: list[str] = []
+    monkeypatch.setattr(manager, "start_provision", lambda slug: started.append(slug))
+    monkeypatch.setattr(manager, "start_deprovision", lambda slug: started.append(slug))
+    monkeypatch.setattr(tasks_mod, "get_settings",
+                        lambda: SimpleNamespace(provision_timeout_seconds=600, max_concurrent=2))
+
+    await manager.reconcile_once()
+
+    assert manager.k8s.get_namespace_calls == [], (
+        f"reconcile must not GET any store-<hosted> namespace, got {manager.k8s.get_namespace_calls}"
+    )
+    assert started == []
