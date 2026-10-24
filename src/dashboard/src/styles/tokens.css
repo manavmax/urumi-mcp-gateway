@@ -159,29 +159,35 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   DARK MODE: complete dark token set.
+   DARK MODE: complete dark token set, matched to the landing page's
+   dark theme (src/landing/styles.css). Surface, border and text values
+   are the landing tokens verbatim: bg←canvas #040804, surface←surface
+   #1A1C19, sunken fills←surface-alt #131412, raised/hover fills←
+   surface-raised #2C2E2B, text←ink #E3E5E1 / body #A8ABA6 / muted
+   #8B8E89, hairlines rgba(255,255,255,.05/.10). Chart + focus + glow
+   accents use the landing accent/danger (teal #14B8A6, red #FF5B5B).
    Every surface, text, accent, status and shadow value lives here.
    No hex colours outside this block in the entire dashboard.
    ───────────────────────────────────────────────────────────── */
 [data-theme="dark"] {
-  /* Surfaces */
-  --bg: #14161B;
-  --surface: #1C1F26;
-  --surface-2: #22262F;
-  --tint-soft: #1E2128;
-  --hairline: rgba(255, 255, 255, 0.07);
+  /* Surfaces (landing: canvas / surface / surface-alt / surface-raised) */
+  --bg: #040804;
+  --surface: #1A1C19;
+  --surface-2: #131412;
+  --tint-soft: #2C2E2B;
+  --hairline: rgba(255, 255, 255, 0.05);
   --hairline-strong: rgba(255, 255, 255, 0.10);
-  /* Text */
-  --text: #ECEDEF;
-  --muted: #9AA1AE;
-  --text-faint: #9AA1AE;
+  /* Text (landing: ink / body / muted) */
+  --text: #E3E5E1;
+  --muted: #A8ABA6;
+  --text-faint: #8B8E89;
   /* Primary action: light pill in dark mode (ink text on light bg) */
-  --ink: #ECEDEF;
+  --ink: #E3E5E1;
   --ink-hover: #FFFFFF;
-  /* Primary tint: surface-2, darker than surface */
-  --primary-tint: #2A2E37;
+  /* Primary tint: raised surface (info banners, accent chips, hover pops) */
+  --primary-tint: #2C2E2B;
   /* Background deep */
-  --bg-deep: #0E1014;
+  --bg-deep: #131412;
   /* Accent tints (darkened for readability on dark surfaces) */
   --periwinkle: #7A8BAA;
   --peach: #C4957E;
@@ -190,48 +196,47 @@
   --lilac: #A398B5;
   --sky: #8EAAC8;
   --sand: #9EAD7E;
-  /* Dusk gradient: periwinkle→lilac→peach at lower brightness with light ink.
-     Stops darkened again in F1-2 so #ECEDEF text clears 4.5:1 on the
-     brightest stop (peach). */
-  --grad-a: linear-gradient(135deg, #3E4A63 0%, #5C5170 52%, #7A5648 100%);
-  /* Status badges: dark tints, light text */
-  --ok-bg: #1E3A2E;
-  --ok-text: #8ED4A8;
-  --bad-bg: #3A1E1E;
-  --bad-text: #E09090;
-  --off-bg: #2A2E37;
-  --off-text: #9AA1AE;
-  /* Focus ring */
-  --ring: rgba(100, 120, 160, 0.45);
+  /* Dusk gradient: landing deep accents (accent-deep → deep teal → violet-deep).
+     #E3E5E1 text clears 4.5:1 on the brightest stop (#114C42). */
+  --grad-a: linear-gradient(135deg, #0B3B36 0%, #114C42 52%, #2A2250 100%);
+  /* Status badges: landing dark tints, light text */
+  --ok-bg: #14352F;
+  --ok-text: #7CF0DE;
+  --bad-bg: #3A1717;
+  --bad-text: #FF9B9B;
+  --off-bg: #2C2E2B;
+  --off-text: #A8ABA6;
+  /* Focus ring: landing accent */
+  --ring: rgba(20, 184, 166, 0.45);
   /* Shadows: softer, darker for dark surfaces */
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 10px 30px rgba(0, 0, 0, 0.30);
   --shadow-pop: 0 2px 4px rgba(0, 0, 0, 0.30), 0 16px 40px rgba(0, 0, 0, 0.50);
   /* Deeper shadow under a lifted (hovered) tile */
   --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.32), 0 18px 44px rgba(0, 0, 0, 0.50);
-  /* Chart tokens */
-  --chart-bar: #6B7B9A;
-  --chart-bar-err: #C08070;
-  --chart-axis: rgba(255, 255, 255, 0.08);
-  --chart-axis-label: #9AA1AE;
-  --chart-track: #2A2E37;
-  --chart-text: #ECEDEF;
+  /* Chart tokens: landing accent/danger washes, raised track */
+  --chart-bar: rgba(20, 184, 166, 0.55);
+  --chart-bar-err: rgba(255, 91, 91, 0.80);
+  --chart-axis: rgba(255, 255, 255, 0.06);
+  --chart-axis-label: #8B8E89;
+  --chart-track: #131412;
+  --chart-text: #E3E5E1;
   /* Input tokens */
-  --input-bg: #1C1F26;
+  --input-bg: #131412;
   --input-border: rgba(255, 255, 255, 0.12);
   /* Avatar AI */
   --ai-avatar-bg: linear-gradient(135deg, rgba(90, 107, 138, 0.5), rgba(138, 122, 154, 0.5));
   /* Switch track dark */
   --switch-track: rgba(255, 255, 255, 0.15);
-  /* Connection status */
-  --live-dot-bg: #ECEDEF;
+  /* Connection status: landing accent-bright */
+  --live-dot-bg: #5EEAD4;
   /* Skeleton dark */
-  --sk-base: #22262F;
-  --sk-highlight: #2A2E37;
+  --sk-base: #22251F;
+  --sk-highlight: #2C2E2B;
   /* Delta on gradient (for hero stat) */
-  --delta-grad-bg: rgba(255, 255, 255, 0.12);
-  --delta-grad-text: #ECEDEF;
-  /* Sidebar + menu surfaces (spec: sidebar #1A1D23) */
-  --sidebar: #1A1D23;
+  --delta-grad-bg: rgba(4, 8, 4, 0.35);
+  --delta-grad-text: #E3E5E1;
+  /* Sidebar + menu surfaces (landing surface-alt, a step above the canvas) */
+  --sidebar: #131412;
   /* Solid white steps (kept white in dark mode for knobs + inset light) */
   --white: #FFFFFF;
   --white-85: rgba(255, 255, 255, 0.85);
@@ -245,33 +250,33 @@
   --ink-06: rgba(0, 0, 0, 0.06);
   --ink-05: rgba(0, 0, 0, 0.05);
   --ink-04: rgba(0, 0, 0, 0.04);
-  /* Inverse ink: dark text on light pills in dark mode */
-  --ink-inv: #14171C;
+  /* Inverse ink: dark text on light pills in dark mode (landing primary-fg) */
+  --ink-inv: #101810;
   /* Primary pill: light bg + dark text in dark mode */
-  --primary-pill-bg: #ECEDEF;
-  --primary-pill-text: #14171C;
+  --primary-pill-bg: #E3E5E1;
+  --primary-pill-text: #101810;
   /* Text and icons painted ON a primary/ink fill (dark: ink IS light, so
      on-primary stays dark for contrast against the light fill) */
-  --on-primary: #14171C;
-  --icon-on-primary: #14171C;
-  /* Table row hover wash (dark: tint, never ink) */
-  --row-hover: #22262F;
+  --on-primary: #101810;
+  --icon-on-primary: #101810;
+  /* Table row hover wash (dark: raised surface, never ink) */
+  --row-hover: #2C2E2B;
   /* Icon/text on an accent tint (dark tints are mid-tone; dark ink reads) */
   --on-tint: #14171C;
-  /* Page-edge background glow stops (muted in dark mode) */
-  --glow-periwinkle: rgba(90, 107, 138, 0.40);
-  --glow-peach: rgba(138, 96, 86, 0.30);
-  --glow-lilac: rgba(120, 105, 140, 0.25);
+  /* Page-edge background glow stops (landing accent / violet, dimmed) */
+  --glow-periwinkle: rgba(20, 184, 166, 0.12);
+  --glow-peach: rgba(167, 139, 250, 0.09);
+  --glow-lilac: rgba(94, 234, 212, 0.06);
   /* User card gradient wash (dark) */
   --user-card-grad: linear-gradient(135deg, rgba(90, 107, 138, 0.35), rgba(120, 105, 140, 0.30));
   /* Inset hairline highlight on dark fills */
   --inset-white: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   /* Hero stat sources + delta-on-gradient chips (dark) */
-  --hero-src-bg: rgba(0, 0, 0, 0.35);
+  --hero-src-bg: rgba(4, 8, 4, 0.35);
   /* Skeleton fill */
-  --sk-fill: #22262F;
+  --sk-fill: #22251F;
   /* Modal scrim + bottom-nav shadow (dark) */
-  --scrim: rgba(0, 0, 0, 0.55);
+  --scrim: rgba(0, 0, 0, 0.60);
   --nav-shadow: 0 -1px 2px rgba(0, 0, 0, 0.30), 0 -10px 30px rgba(0, 0, 0, 0.45);
   color-scheme: dark;
 }
