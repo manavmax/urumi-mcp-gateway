@@ -227,6 +227,26 @@
         <h2>Connect, control, run.</h2>
         <p>Three jobs, one deployment. Everything below is running in the demo now.</p>
       </header>
+      <!-- Band art (decorative): three lanes through one gate - connect, control, run. -->
+      <div class="band-art" data-io aria-hidden="true">
+        <svg viewBox="0 0 640 120" focusable="false">
+          <path class="ba-line ba-dash" d="M42 40 C130 40 200 50 272 50"/>
+          <path class="ba-line ba-dash" d="M42 66 C150 66 220 60 272 60"/>
+          <path class="ba-line ba-dash" d="M42 92 C130 92 200 70 272 70"/>
+          <rect class="ba-box" x="22" y="30" width="20" height="20" rx="5"/>
+          <rect class="ba-box" x="22" y="56" width="20" height="20" rx="5"/>
+          <rect class="ba-box" x="22" y="82" width="20" height="20" rx="5"/>
+          <path class="ba-gate" d="M320 22 L368 41 V79 L320 98 L272 79 V41 Z"/>
+          <circle class="ba-acc" cx="320" cy="53" r="5.5"/>
+          <path class="ba-acc" d="M315.5 58 L324.5 58 L322 71 L318 71 Z"/>
+          <path class="ba-line ba-dash" d="M368 50 C420 50 440 46 472 46"/>
+          <path class="ba-line ba-dash" d="M368 70 C420 70 440 78 472 78"/>
+          <rect class="ba-box" x="472" y="34" width="130" height="24" rx="6"/>
+          <rect class="ba-box" x="472" y="66" width="130" height="24" rx="6"/>
+          <circle class="ba-dot" cx="485" cy="46" r="2.5"/>
+          <circle class="ba-dot" cx="485" cy="78" r="2.5"/>
+        </svg>
+      </div>
       <div class="cols3">
         <article class="card" data-io data-spot>
           <p class="card-tag">connect</p>
@@ -350,6 +370,26 @@
         <h2>How a tool call travels</h2>
         <p>From the client to the store and back, every hop checked and written down.</p>
       </header>
+      <!-- Band art (decorative): a call travels the trace, is checked, and returns. -->
+      <div class="band-art" data-io aria-hidden="true">
+        <svg viewBox="0 0 640 120" focusable="false">
+          <path class="ba-line" d="M40 60 H600"/>
+          <path class="ba-travel" d="M40 60 H560" stroke-dasharray="18 542"/>
+          <path class="ba-vio ba-travel-ret" d="M600 78 L80 78" stroke-dasharray="10 550" opacity="0.7"/>
+          <circle class="ba-box" cx="80" cy="60" r="5"/>
+          <path class="ba-check" d="M168 53 L175 60 L168 67 L161 60 Z"/>
+          <circle class="ba-box" cx="256" cy="60" r="5"/>
+          <circle class="ba-box" cx="344" cy="60" r="5"/>
+          <circle class="ba-box" cx="432" cy="60" r="5"/>
+          <circle class="ba-box" cx="520" cy="60" r="5"/>
+          <rect class="ba-tick" x="71" y="92" width="18" height="2.5" rx="1.25"/>
+          <rect class="ba-tick" x="159" y="92" width="18" height="2.5" rx="1.25"/>
+          <rect class="ba-tick" x="247" y="92" width="18" height="2.5" rx="1.25"/>
+          <rect class="ba-tick" x="335" y="92" width="18" height="2.5" rx="1.25"/>
+          <rect class="ba-tick" x="423" y="92" width="18" height="2.5" rx="1.25"/>
+          <rect class="ba-tick" x="511" y="92" width="18" height="2.5" rx="1.25"/>
+        </svg>
+      </div>
       <div class="tour-actions" data-io>
         <button class="pill" id="diagramReplay" type="button">Replay
           <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 2 6M4 10V4m0 6h6"/></svg>
@@ -459,6 +499,33 @@
 
     <!-- 9. Control -->
     <section class="section band-alt" id="control">
+      <!-- Band art (decorative): calls landing in the audit ledger, newest first. -->
+      <div class="band-art" data-io aria-hidden="true">
+        <svg viewBox="0 0 640 120" focusable="false">
+          <rect class="ba-box" x="60" y="18" width="500" height="24" rx="6"/>
+          <rect class="ba-box" x="60" y="48" width="500" height="24" rx="6"/>
+          <rect class="ba-box" x="60" y="78" width="500" height="24" rx="6"/>
+          <rect class="ba-caret" x="70" y="24" width="2.5" height="12" rx="1"/>
+          <rect class="ba-tick" x="84" y="27.5" width="26" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="122" y="27.5" width="150" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="288" y="27.5" width="40" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="344" y="27.5" width="30" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="84" y="57.5" width="26" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="122" y="57.5" width="196" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="330" y="57.5" width="40" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="386" y="57.5" width="30" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="84" y="87.5" width="26" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="122" y="87.5" width="150" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="288" y="87.5" width="40" height="5" rx="2.5"/>
+          <rect class="ba-tick" x="344" y="87.5" width="30" height="5" rx="2.5"/>
+          <circle class="ba-ok" cx="536" cy="30" r="6"/>
+          <path class="ba-ok" d="M533 30 L535 32 L539.5 27.5"/>
+          <circle class="ba-ok" cx="536" cy="60" r="6"/>
+          <path class="ba-ok" d="M533 60 L535 62 L539.5 57.5"/>
+          <path class="ba-warn" d="M536 83.5 L542.5 95 L529.5 95 Z"/>
+          <circle class="ba-warnfill" cx="536" cy="91.5" r="1.2"/>
+        </svg>
+      </div>
       <div class="two-col">
         <div class="col-text" data-io>
           <p class="eyebrow">Control</p>
@@ -526,6 +593,26 @@
         <h2>Public, private, and state.</h2>
         <p>One Helm chart deploys all three tiers; only the values file changes between laptop and VPS.</p>
       </header>
+      <!-- Band art (decorative): public, private and state tiers on one wire, pods live above. -->
+      <div class="band-art" data-io aria-hidden="true">
+        <svg viewBox="0 0 640 120" focusable="false">
+          <path class="ba-solid" d="M40 84 H600"/>
+          <rect class="ba-box" x="56" y="40" width="96" height="44" rx="8"/>
+          <path class="ba-acc" d="M84 62 H124 M84 62 l5 -3.5 M84 62 l5 3.5 M124 62 l-5 -3.5 M124 62 l-5 3.5"/>
+          <rect class="ba-box" x="272" y="40" width="96" height="44" rx="8"/>
+          <rect class="ba-acc" x="308" y="58" width="24" height="17" rx="3.5"/>
+          <path class="ba-acc" d="M313 58 v-5 a7 7 0 0 1 14 0 v5"/>
+          <path class="ba-box" d="M508 46 V76 a28 8 0 0 0 56 0 V46"/>
+          <ellipse class="ba-box" cx="536" cy="46" rx="28" ry="8"/>
+          <path class="ba-solid" d="M301 24 V40 M320 24 V40 M339 24 V40"/>
+          <rect class="ba-box" x="296" y="14" width="10" height="10" rx="2.5"/>
+          <rect class="ba-box" x="315" y="14" width="10" height="10" rx="2.5"/>
+          <rect class="ba-box" x="334" y="14" width="10" height="10" rx="2.5"/>
+          <circle class="ba-dot ba-pulse" cx="301" cy="19" r="2"/>
+          <circle class="ba-dot ba-pulse" cx="320" cy="19" r="2"/>
+          <circle class="ba-dot ba-pulse" cx="339" cy="19" r="2"/>
+        </svg>
+      </div>
       <div class="tiers" data-io>
         <div class="tier-line" aria-hidden="true"></div>
         <article class="card tier" data-spot><p class="card-tag">public</p><h3>Public</h3><p>Ingress, the gateway, the dashboard, this page.</p></article>
@@ -610,6 +697,19 @@
         <h2>From the design notes</h2>
         <p>Statements from this project's own docs, linked to their source. Not testimonials; nobody said these but the docs.</p>
       </header>
+      <!-- Band art (decorative): a passage from the docs, quoted and linked. -->
+      <div class="band-art" data-io aria-hidden="true">
+        <svg viewBox="0 0 640 120" focusable="false">
+          <rect class="ba-quote" x="162" y="30" width="9" height="20" rx="4.5" transform="rotate(-14 166.5 40)"/>
+          <rect class="ba-quote" x="178" y="30" width="9" height="20" rx="4.5" transform="rotate(-14 182.5 40)"/>
+          <rect class="ba-tick" x="220" y="34" width="240" height="6" rx="3"/>
+          <rect class="ba-mark" x="220" y="52" width="320" height="6" rx="3" opacity="0.6"/>
+          <rect class="ba-tick" x="220" y="70" width="200" height="6" rx="3"/>
+          <rect class="ba-solid" x="432" y="64" width="16" height="11" rx="5.5"/>
+          <rect class="ba-solid" x="444" y="64" width="16" height="11" rx="5.5"/>
+          <rect class="ba-tick" x="220" y="88" width="140" height="3" rx="1.5" opacity="0.7"/>
+        </svg>
+      </div>
       <div class="cols3 notes-grid">
         <blockquote class="card note-card" data-io data-spot>
           <p>"Client keys are never forwarded upstream. The gateway uses its own credential."</p>
@@ -659,6 +759,22 @@
         <h2>Beyond the brief</h2>
         <p>Ideas queued past the assignment. Each ships switched off in <code>src/landing/features.js</code> and appears here only when it actually lands in the demo.</p>
       </header>
+      <!-- Band art (decorative): the queue - items ship switched off. -->
+      <div class="band-art" data-io aria-hidden="true">
+        <svg viewBox="0 0 640 120" focusable="false">
+          <path class="ba-line" d="M80 60 H560"/>
+          <path class="ba-solid" d="M560 54 l8 6 l-8 6"/>
+          <rect class="ba-tick" x="186" y="30" width="28" height="4" rx="2"/>
+          <rect class="ba-tick" x="306" y="30" width="28" height="4" rx="2"/>
+          <rect class="ba-tick" x="426" y="30" width="28" height="4" rx="2"/>
+          <rect class="ba-solid" x="176" y="48" width="48" height="24" rx="12"/>
+          <rect class="ba-solid" x="296" y="48" width="48" height="24" rx="12"/>
+          <rect class="ba-solid" x="416" y="48" width="48" height="24" rx="12"/>
+          <circle class="ba-knob" cx="188" cy="60" r="7"/>
+          <circle class="ba-knob" cx="308" cy="60" r="7"/>
+          <circle class="ba-dot" cx="428" cy="60" r="7"/>
+        </svg>
+      </div>
       <div class="cols3" id="beyond-list"></div>
     </section>
 
