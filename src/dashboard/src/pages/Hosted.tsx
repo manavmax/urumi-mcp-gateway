@@ -135,9 +135,6 @@ export default function Hosted() {
           <div>
             <h1>Hosted servers</h1>
           </div>
-          <div className="row wrap">
-            <span className="src">one namespace per server · tools are {"<name>__…"}</span>
-          </div>
         </div>
         {err && (
           <div className="note-banner" role="alert">
@@ -194,17 +191,12 @@ export default function Hosted() {
                   <label htmlFor="hosted-env">Environment variables (optional)</label>
                   <textarea
                     id="hosted-env"
-                    placeholder={"one NAME=value per line — values are stored in a cluster Secret and never shown again"}
+                    placeholder={"one NAME=value per line — values are never shown again"}
                     value={form.envText}
                     rows={2}
                     onChange={(e) => setForm({ ...form, envText: e.target.value })}
                   />
                 </div>
-              </div>
-              <div className="small muted">
-                The image runs non-root, read-only, no service-account token, with capped CPU/memory and ingress only
-                from the gateway. A version tag or digest is required — {"\":latest\""} is refused. Tools appear as{" "}
-                {"<name>__…"} once the server is Ready.
               </div>
             </>
           ) : (

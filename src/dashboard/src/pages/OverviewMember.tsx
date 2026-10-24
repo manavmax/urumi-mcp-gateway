@@ -300,7 +300,6 @@ export default function OverviewMember() {
           <p className="small muted">
             Point your MCP client at this URL and authenticate with an API key header
             (<span className="mono">Authorization: Bearer &lt;key&gt;</span>).
-            The gateway routes calls to enabled servers.
           </p>
           <div className="row wrap" style={{ gap: 8, alignItems: "center" }}>
             <span className="chip chip-accent">

@@ -177,13 +177,13 @@ verify-demo:
 # in code, otherwise the running pod is silently stale (docs/DECISIONS.md ADR-028).
 gateway-image:
 	$(DOCKER) build -t urumi/gateway:0.1.0 src/gateway
-	$(DOCKER) save urumi/gateway:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/gateway:0.1.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/gateway:0.1.0 into kind node"
 	@echo "REMINDER: pods are NOT restarted by an import - run 'make deploy' to restart"
 
 dashboard-image:
 	$(DOCKER) build -t urumi/dashboard:0.1.0 src/dashboard
-	$(DOCKER) save urumi/dashboard:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/dashboard:0.1.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/dashboard:0.1.0 into kind node"
 	@echo "REMINDER: pods are NOT restarted by an import - run 'make deploy' to restart"
 

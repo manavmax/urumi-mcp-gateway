@@ -123,6 +123,7 @@ export type AdminEventRow = {
 export type StatsRange = "day" | "week" | "month" | "14d";
 export type StatsDayPoint = { date: string; calls: number; errors: number; p95_ms: number };
 export type ServerStatSpark = { date: string; calls: number; errors: number };
+export type TopTool = { tool: string; calls: number; errors: number };
 export type ServerStat = {
   server: string;
   calls: number;
@@ -181,8 +182,10 @@ export type Stats = {
     p95_ms: number;
     per_day: StatsDayPoint[];
   };
-  /* admin only - members never receive by_server (docs/11_OBSERVABILITY.md §2) */
+  /* admin only - members never receive by_server (docs/11_OBSERVABILITY.md §2)
+     or top_tools (top exposed tools by calls, docs/POLISH_DASHBOARD.md) */
   by_server?: ServerStat[];
+  top_tools?: TopTool[];
   own_keys_active?: number;
   own_api_key_calls?: number;
   own_calls_total?: number;

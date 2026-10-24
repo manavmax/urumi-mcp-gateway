@@ -431,7 +431,7 @@ export default function Chat() {
                 </div>
               ))}
               {shownHistory.length === 0 && (
-                <div className="hist-item empty-drift"><b>No chats yet</b><span>Your conversations appear here, stored in this browser only</span></div>
+                <div className="hist-item empty-drift"><b>No chats yet</b><span>Your conversations appear here</span></div>
               )}
             </div>
             <button className="btn btn-ink" type="button" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={newChat}>

@@ -167,23 +167,13 @@ export default function Audit() {
                   </button>
                 </div>
                 <button className="btn btn-secondary" type="button" onClick={exportCsv} disabled={exporting}
-                  title="Exports the current filters, capped at 5000 rows">
+                  title="Export the current filters as CSV">
                   <Icon name="download" sm />{exporting ? "Exporting…" : "CSV export"}
                 </button>
               </>
             )}
           </div>
         </div>
-
-        {tab === "tool" && (
-          <div className="note-banner">
-            <Icon name="eye" />
-            <div>
-              <b>Scoping:</b> admins see all rows and can filter by user; members see only their own rows (enforced server-side).
-              The user filter below is hidden for members.
-            </div>
-          </div>
-        )}
 
         {/* filters (tool calls only) */}
         {tab === "tool" && (
@@ -248,7 +238,7 @@ export default function Audit() {
               <div>
                 <div className="card-title"><Icon name="shield" />Tool calls</div>
                 <div className="card-sub">
-                  Total <b className="mono">{total.toLocaleString("en-US")}</b>, showing <b className="mono">{rows.length ? filters.offset + 1 : 0} to {filters.offset + rows.length}</b> (limit {LIMIT}) · sorted newest first
+                  Total <b className="mono">{total.toLocaleString("en-US")}</b> · sorted newest first
                 </div>
               </div>
               <span className="row small muted">
@@ -303,7 +293,7 @@ export default function Audit() {
             )}
             <div className="pager">
               <span className="small muted">
-                Showing {rows.length ? filters.offset + 1 : 0} to {filters.offset + rows.length} of <b className="mono">{total.toLocaleString("en-US")}</b> · offset {filters.offset} · limit {LIMIT}
+                Showing {rows.length ? filters.offset + 1 : 0} to {filters.offset + rows.length} of <b className="mono">{total.toLocaleString("en-US")}</b>
               </span>
               <div className="row">
                 <button className="btn btn-secondary btn-sm" type="button" disabled={filters.offset === 0}
@@ -322,7 +312,7 @@ export default function Audit() {
               <div>
                 <div className="card-title"><Icon name="shield" />Admin activity</div>
                 <div className="card-sub">
-                  Total <b className="mono">{adminTotal.toLocaleString("en-US")}</b>, showing <b className="mono">{adminRows.length ? adminOffset + 1 : 0} to {adminOffset + adminRows.length}</b> (limit {LIMIT}) · sorted newest first
+                  Total <b className="mono">{adminTotal.toLocaleString("en-US")}</b> · sorted newest first
                 </div>
               </div>
             </div>
@@ -366,7 +356,7 @@ export default function Audit() {
             )}
             <div className="pager">
               <span className="small muted">
-                Showing {adminRows.length ? adminOffset + 1 : 0} to {adminOffset + adminRows.length} of <b className="mono">{adminTotal.toLocaleString("en-US")}</b> · offset {adminOffset} · limit {LIMIT}
+                Showing {adminRows.length ? adminOffset + 1 : 0} to {adminOffset + adminRows.length} of <b className="mono">{adminTotal.toLocaleString("en-US")}</b>
               </span>
               <div className="row">
                 <button className="btn btn-secondary btn-sm" type="button" disabled={adminOffset === 0}

@@ -57,7 +57,7 @@ export function ServerForm({
       <div className="field">
         <label htmlFor="f-slug">Slug</label>
         <input id="f-slug" value={v.slug} onChange={(e) => setV({ ...v, slug: e.target.value })} placeholder="my-mcp" />
-        <div className="hint">^[a-z0-9-]+$, becomes the tool-name prefix</div>
+        <div className="hint">lowercase letters, numbers and dashes</div>
       </div>
       <div className="field">
         <label htmlFor="f-url">URL</label>
@@ -89,7 +89,6 @@ export function ServerForm({
           <label htmlFor="f-cred">Credential (optional)</label>
           <input id="f-cred" type="password" value={v.credential} onChange={(e) => setV({ ...v, credential: e.target.value })}
             placeholder="encrypted at rest, never returned" />
-          <div className="hint">Stored with Fernet; the API only ever returns “***”</div>
         </div>
       )}
       <div className="field">
@@ -101,9 +100,6 @@ export function ServerForm({
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 4 }}>
         <button className="btn btn-ghost" type="button" onClick={onCancel}>Cancel</button>
         <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Saving…" : submitLabel}</button>
-      </div>
-      <div className="small faint">
-        POST /api/servers, admin + CSRF. Edit → PATCH /api/servers/{"{id}"}, enable/disable → POST …/{"{id}"}/enable · /disable, delete → DELETE …/{"{id}"}.
       </div>
     </form>
   );

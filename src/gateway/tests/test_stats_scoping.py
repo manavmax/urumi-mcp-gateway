@@ -171,6 +171,56 @@ async def test_stats_admin_sees_all_member_sees_own(harness):
 
 
 @pytest.mark.asyncio
+async def test_stats_top_tools_admin_only_exact_counts(harness):
+    """top_tools (Overview card): admin-only, one entry per exposed tool name
+    with exact call/error counts, ordered by calls desc then name, capped at 6.
+    Members never receive the field; the 40-day-old seeded row is excluded by
+    the window filter (same scope list as the headline aggregates)."""
+    app, _session_factory = harness
+    async with _role_client(app, ADMIN["email"], ADMIN["password"]) as (admin_client, admin_headers), \
+            _role_client(app, MEMBER["email"], MEMBER["password"]) as (member_client, member_headers):
+        ra = await admin_client.get("/api/stats", headers=admin_headers)
+        assert ra.status_code == 200
+        a = ra.json()
+        assert "top_tools" in a, "admins get the top_tools aggregate"
+        # seeded window rows: 5x t__ping (admin) + 3x time__now (members) +
+        # 1x t__bad (admin, upstream_error); the 40-day-old t__old is excluded
+        assert a["top_tools"] == [
+            {"tool": "t__ping", "calls": 5, "errors": 0},
+            {"tool": "time__now", "calls": 3, "errors": 0},
+            {"tool": "t__bad", "calls": 1, "errors": 1},
+        ], "top_tools is exact, window-scoped and ordered by calls desc"
+        for row in a["top_tools"]:
+            assert set(row.keys()) == {"tool", "calls", "errors"}, "counts only, never argument values"
+
+        rm = await member_client.get("/api/stats", headers=member_headers)
+        assert rm.status_code == 200
+        assert "top_tools" not in rm.json(), "members never receive top_tools"
+
+
+@pytest.mark.asyncio
+async def test_stats_top_tools_cap_and_ties(harness):
+    """The list is capped at 6 tools; ties break alphabetically by tool name."""
+    app, session_factory = harness
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        admin_id = (await db.execute(select(User.id).where(User.email == ADMIN["email"]))).scalar_one()
+        for i in range(8):
+            db.add(AuditLog(id=9000 + i, ts=now - timedelta(hours=1), user_id=admin_id, server_slug="s9",
+                            tool_exposed_name=f"t__tool{i}", tool_upstream_name="ping",
+                            request_id=uuid.uuid4(), duration_ms=5, outcome="success"))
+        await db.commit()
+    async with _role_client(app, ADMIN["email"], ADMIN["password"]) as (client, headers):
+        a = (await client.get("/api/stats", headers=headers)).json()
+    tools = [row["tool"] for row in a["top_tools"]]
+    # ranking: t__ping (5), time__now (3), then nine 1-call tools where the
+    # alphabetical tie-break keeps t__bad and the earliest t__tool* names
+    assert len(a["top_tools"]) == 6
+    assert tools == ["t__ping", "time__now", "t__bad"] + [f"t__tool{i}" for i in range(3)]
+    assert all(row["calls"] == 1 for row in a["top_tools"][2:]), "ties break by tool name"
+
+
+@pytest.mark.asyncio
 async def test_stats_range_parameter_and_fallback(harness):
     app, _session_factory = harness
     async with _role_client(app, ADMIN["email"], ADMIN["password"]) as (client, headers):

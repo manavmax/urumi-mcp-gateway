@@ -132,9 +132,6 @@ export default function Stores() {
           <div>
             <h1>Stores</h1>
           </div>
-          <div className="row wrap">
-            <span className="src">one namespace per store · tools are {"<slug>__…"}</span>
-          </div>
         </div>
         {err && (
           <div className="note-banner" role="alert">
@@ -164,10 +161,7 @@ export default function Stores() {
               Create store
             </button>
           </div>
-          <div className="small muted">
-            Provisioning takes a couple of minutes (WordPress + MariaDB + WooCommerce setup). Your store gets its own
-            namespace, its own host at {"<slug>"}.localhost, and its tools appear as {"<slug>__list_orders"}.
-          </div>
+          <div className="small muted">Provisioning takes a couple of minutes.</div>
         </section>
         <section className="card" aria-label="Stores">
           <div className="card-head">

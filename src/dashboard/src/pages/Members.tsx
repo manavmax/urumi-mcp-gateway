@@ -182,11 +182,6 @@ export default function Members() {
               <span className="chip chip-neutral"><Icon name="pause" />{revokedKeys.length} revoked</span>
             </div>
           </div>
-          <div className="card stat">
-            <div className="stat-label">Key storage</div>
-            <div className="stat-num" style={{ fontSize: 26 }}>SHA-256</div>
-            <div className="stat-foot"><span className="chip chip-accent"><Icon name="lock" />raw key shown once</span></div>
-          </div>
         </section>
 
         {/* users (admin) */}
