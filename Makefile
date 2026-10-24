@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint template helm-local helm-prod helm-prod-first rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image landing-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
+.PHONY: kind-up kind-down ingress lint chart-parity template helm-local helm-prod helm-prod-first rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image landing-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -40,8 +40,17 @@ ingress:
 lint:
 	helm lint ./helm -f helm/values-local.yaml
 	helm lint ./helm -f helm/values-prod.yaml
+	$(MAKE) chart-parity
 	@if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check .; \
 	  else echo "ERROR: .venv/bin/ruff missing - run 'make test' once to bootstrap .venv from requirements-dev.txt" >&2; exit 1; fi
+
+# Drift guard (ADR-083): the main chart and the per-store chart each carry a
+# copy of the wp-setup seed + storefront config and the store-assets copy step.
+# This check fails when the copies diverge (allow-list for genuinely
+# store-specific lines lives IN the script). How to update it:
+# scripts/check-store-chart-parity.py docstring.
+chart-parity:
+	python3 scripts/check-store-chart-parity.py
 
 template:
 	helm template $(RELEASE) ./helm -n $(NAMESPACE) -f helm/values-local.yaml
@@ -262,6 +271,7 @@ test:
 	cd src/gateway && ../../.venv/bin/python -m pytest tests -q
 	cd src/woo-mcp && ../../.venv/bin/python -m pytest tests -q
 	cd src/demo-mcp-time && ../../.venv/bin/python -m pytest tests -q
+	$(MAKE) chart-parity
 
 # LOCAL USE ONLY - prints the gateway administrator password held in the chart-generated
 # `gateway-admin` Secret (never printed by any automated target, never written to a
