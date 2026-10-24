@@ -18,6 +18,11 @@ CREATED_AT_ANNOTATION = "urumi.io/created-at"
 DELETING_LABEL = "urumi.io/deleting"
 FAILURE_ANNOTATION = "urumi.io/provision-failure"
 STORE_NAMESPACE_PREFIX = "store-"
+# hosted-<name> namespaces carry the SAME managed label (Phase 6, ADR-062) but
+# are NOT stores: reconcile must skip them (the store loop would otherwise GET
+# namespaces/store-<hosted-name>, a guaranteed 404 every cycle, and could even
+# re-drive a store install for a hosted name).
+HOSTED_NAMESPACE_PREFIX = "hosted-"
 
 # DNS-1123 label: lowercase alphanumerics + '-', 1..30 chars (namespace limit is
 # 63; the store-<slug> prefix eats 6, and tool prefixes want headroom)

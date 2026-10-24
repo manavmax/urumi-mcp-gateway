@@ -116,6 +116,14 @@ spec:
               value: {{ .Values.gateway.health.intervalSeconds | default 5 | quote }}
             - name: HEALTH_TIMEOUT_SECONDS
               value: {{ .Values.gateway.health.timeoutSeconds | default 2 | quote }}
+            # Per-upstream timeouts (ADR-089): the tools/list fan-out cut-off and
+            # the default tools/call budget. A server whose stored timeout_ms is
+            # the legacy sentinel 10000 follows the global call default here; a
+            # different per-server value still wins for that server.
+            - name: LIST_TIMEOUT_SECONDS
+              value: {{ .Values.gateway.timeouts.listSeconds | default 3 | quote }}
+            - name: CALL_TIMEOUT_SECONDS
+              value: {{ .Values.gateway.timeouts.callSeconds | default 15 | quote }}
             # F3: chat image upload byte cap (default 5 MB, validated by magic bytes
             # and re-encoded with Pillow before anything is stored).
             - name: IMAGE_UPLOAD_MAX_BYTES

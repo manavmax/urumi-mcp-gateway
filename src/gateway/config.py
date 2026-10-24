@@ -86,8 +86,15 @@ class Settings(BaseSettings):
     # Empty => allow any public host that passes private-net checks (useful for dev).
     allowed_domains: str = ""  # e.g. "example.com"
 
-    # upstream defaults
-    default_timeout_ms: int = 10000
+    # upstream defaults. Per-upstream timeouts (ADR-089): the tools/list fan-out
+    # is cut off at list_timeout_seconds and a tools/call without an explicit
+    # per-server value gets call_timeout_seconds. Helm gateway.timeouts.listSeconds
+    # / callSeconds wire these as LIST_TIMEOUT_SECONDS / CALL_TIMEOUT_SECONDS.
+    # A servers.timeout_ms that equals the column's historic default (10000,
+    # db.models.LEGACY_TIMEOUT_MS) means "follow the global call default" - see
+    # gw_mcp.router.effective_call_timeout_seconds.
+    list_timeout_seconds: int = 3
+    call_timeout_seconds: int = 15
     # Health loop interval / per-check timeout (Helm gateway.health.intervalSeconds /
     # timeoutSeconds, default 5s / 2s - docs/11_OBSERVABILITY.md). 5s lets a bare
     # `kubectl delete pod` Unreachable window be observed, and the recovery flip lands
@@ -211,6 +218,8 @@ def get_settings() -> Settings:
         "OPENAI_MAX_MODELS_PER_TURN": "openai_max_models_per_turn",
         "HEALTH_INTERVAL_SECONDS": "health_interval_seconds",
         "HEALTH_TIMEOUT_SECONDS": "health_timeout_seconds",
+        "LIST_TIMEOUT_SECONDS": "list_timeout_seconds",
+        "CALL_TIMEOUT_SECONDS": "call_timeout_seconds",
         "SESSION_SECRET": "session_secret",
         "SESSION_COOKIE_SECURE": "session_cookie_secure",
         "LOGIN_LOCKOUT_ATTEMPTS": "login_lockout_attempts",

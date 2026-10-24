@@ -110,7 +110,7 @@ Layer 4: Chat Agent    — LLM tool loop via gateway, acting as logged-in user
 | Add/edit/disable/remove upstreams (Streamable HTTP + static cred) | `servers` table + admin REST CRUD, `auth_type: bearer/header` |
 | One MCP endpoint aggregating tools, routing calls | `POST /mcp` + `GET /mcp` (SSE), prefix `slug__tool` collision scheme |
 | Same tool name on 2 servers -> handle + document | Prefix `serverSlug__toolName`, mapping table, description `[slug]` |
-| Slow/dead upstream must not break others (timeout + error) | Per-server `httpx.Timeout`, `asyncio.wait_for(10s)`, `gather(return_exceptions)`, circuit breaker |
+| Slow/dead upstream must not break others (timeout + error) | Per-server `httpx.Timeout`, `asyncio.wait_for(15s call default)`, `gather(return_exceptions)`, circuit breaker |
 | Upstream creds stay server-side | Fernet-encrypted column, never serialized to API, injected at proxy time |
 | At least 3 upstreams | Woo + 2 chosen (recommend: `Time MCP` + `Filesystem/Memory MCP` or `GitHub MCP`) — rationale in 01 |
 

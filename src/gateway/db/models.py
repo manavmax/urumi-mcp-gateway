@@ -25,6 +25,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+# servers.timeout_ms "follow the global call default" sentinel (ADR-089): 10000
+# was the column's original DEFAULT, so every pre-existing row carries it and
+# must resolve to config.call_timeout_seconds instead of being pinned to 10s.
+LEGACY_TIMEOUT_MS = 10000
+
 
 def _now():
     return datetime.now(UTC)
@@ -106,7 +111,12 @@ class Server(Base):
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_error_category: Mapped[str | None] = mapped_column(Text, nullable=True)
-    timeout_ms: Mapped[int] = mapped_column(Integer, default=10000, nullable=False)
+    # Per-server call timeout in ms. The column's historic default 10000 is kept
+    # as the "follow the global call default" sentinel (LEGACY_TIMEOUT_MS): the
+    # resolver (gw_mcp.router.effective_call_timeout_seconds) maps it (and 0) to
+    # config.call_timeout_seconds (Helm gateway.timeouts.callSeconds, default 15s,
+    # ADR-089). An admin-entered value differing from the sentinel still wins.
+    timeout_ms: Mapped[int] = mapped_column(Integer, default=LEGACY_TIMEOUT_MS, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
 

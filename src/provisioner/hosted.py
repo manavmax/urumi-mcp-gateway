@@ -26,14 +26,15 @@ import logging
 from typing import TYPE_CHECKING
 
 from config import get_settings
-from slugs import StoreError, is_managed, validate_slug
+from slugs import HOSTED_NAMESPACE_PREFIX, StoreError, is_managed, validate_slug
 
 if TYPE_CHECKING:
     from k8s import K8sClient
 
 logger = logging.getLogger("provisioner.hosted")
 
-HOSTED_NAMESPACE_PREFIX = "hosted-"
+# HOSTED_NAMESPACE_PREFIX (the hosted-<name> namespace contract) is imported
+# from slugs.py, next to the store prefix, so reconcile shares one definition.
 CREATED_AT_ANNOTATION = "urumi.io/created-at"
 MANAGED_LABEL = "urumi.io/managed-by"
 MANAGED_LABEL_VALUE = "provisioner"
@@ -60,7 +61,7 @@ def validate_image(image: str) -> str:
 
 
 def hosted_namespace(name: str) -> str:
-    return f"hosted-{validate_slug(name)}"
+    return f"{HOSTED_NAMESPACE_PREFIX}{validate_slug(name)}"
 
 
 def _probe(port: int, path: str) -> dict:

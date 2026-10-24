@@ -202,9 +202,9 @@ provisioner-image:
 # Same build + import pattern as dashboard-image. A chart change (values) still
 # needs `make helm-local`; this is the content-change deploy path.
 landing-image:
-	$(DOCKER) build -t urumi/landing:0.1.0 src/landing
-	$(DOCKER) save urumi/landing:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
-	@echo "loaded urumi/landing:0.1.0 into kind node"
+	$(DOCKER) build -t urumi/landing:0.2.0 src/landing
+	$(DOCKER) save urumi/landing:0.2.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	@echo "loaded urumi/landing:0.2.0 into kind node"
 	@echo "REMINDER: pods are NOT restarted by an import - restart with: kubectl rollout restart deployment/urumi-landing -n $(NAMESPACE)"
 
 # Rebuild Layer 3 images, import them into the kind node, then RESTART the pods so
@@ -257,29 +257,47 @@ sdk-oauth:
 	test -n "$$ADMIN_PASSWORD" || { echo "could not read admin password" >&2; exit 2; }; \
 	GATEWAY_ADMIN_PASSWORD="$$ADMIN_PASSWORD" .venv/bin/python scripts/phase7_sdk_oauth_client.py
 
-# Unit tests for the gateway modules (docs/04): password hashing + verify-fails-closed,
-# tool namespacing/routing, timeout isolation + circuit breaker, RBAC/CSRF 403, audit
-# redaction, admin-endpoint RBAC through the real router, and the MCP tool servers'
-# blank-optional-argument contract. No cluster and no network needed. First run
-# bootstraps ./.venv from requirements-dev.txt (never shipped in the image, gitignored).
+# Unit tests for every src/ service that HAS a suite (docs/04): gateway (incl.
+# the provisioner unit tests, which live under gateway/tests), woo-mcp and
+# demo-mcp-time; tool namespacing/routing, timeout defaults + isolation, circuit
+# breaker, RBAC/CSRF 403, audit redaction, admin-endpoint RBAC through the real
+# router, and the MCP tool servers' blank-optional-argument contract. No cluster
+# and no network needed. First run bootstraps ./.venv from requirements-dev.txt
+# (never shipped in the image, gitignored). -q comes from each pytest.ini; the
+# recipe must NOT add another -q or the final "N passed" summary disappears.
 test:
 	@if [ ! -x .venv/bin/pytest ]; then \
 		echo "bootstrapping .venv for the test suite (first run only)..."; \
 		python3 -m venv .venv; \
 		.venv/bin/pip install -q -r requirements-dev.txt; \
 	fi
-	cd src/gateway && ../../.venv/bin/python -m pytest tests -q
-	cd src/woo-mcp && ../../.venv/bin/python -m pytest tests -q
-	cd src/demo-mcp-time && ../../.venv/bin/python -m pytest tests -q
+	@echo "== src/gateway tests =="
+	cd src/gateway && ../../.venv/bin/python -m pytest tests
+	@echo "== src/woo-mcp tests =="
+	cd src/woo-mcp && ../../.venv/bin/python -m pytest tests
+	@echo "== src/demo-mcp-time tests =="
+	cd src/demo-mcp-time && ../../.venv/bin/python -m pytest tests
+	@echo "note: src/provisioner unit tests run inside the gateway suite (gateway/tests/test_provisioner_units.py)"
+	@echo "note: src/demo-mcp-notes has no test suite (none invented here)"
 	$(MAKE) chart-parity
 
 # LOCAL USE ONLY - prints the gateway administrator password held in the chart-generated
 # `gateway-admin` Secret (never printed by any automated target, never written to a
 # committed file - docs/DECISIONS.md ADR-021). The gateway reads the same Secret as
 # GATEWAY_ADMIN_PASSWORD and syncs it to the admin row on every start, so this value is
-# always the one that works.
+# always the one that works. GUARD: reads the LOCAL kind cluster only - the current
+# kubectl context is printed first and anything other than kind-urumi is refused
+# (a bare kubectl may be pointed at a VPS via KUBECONFIG, and this value must never
+# be read from a remote cluster into a local shell).
 gateway-admin-password:
-	@RAW=$$(kubectl get secret gateway-admin -n $(NAMESPACE) -o jsonpath='{.data.password}' 2>&1); RC=$$?; \
+	@CTX=$$(kubectl config current-context 2>/dev/null || true); \
+	echo "kubectl context: $${CTX:-<unset>}"; \
+	if [ "$$CTX" != "$(CONTEXT)" ]; then \
+	  echo "ERROR: gateway-admin-password reads the LOCAL cluster only (context '$(CONTEXT)')." >&2; \
+	  echo "       current kubectl context is '$${CTX:-<none>}': refusing to read the password from it." >&2; \
+	  echo "       switch first with: kubectl config use-context $(CONTEXT)" >&2; \
+	  exit 1; fi; \
+	RAW=$$(kubectl get secret gateway-admin -n $(NAMESPACE) -o jsonpath='{.data.password}' 2>&1); RC=$$?; \
 	if [ $$RC -ne 0 ]; then \
 	  echo "ERROR: kubectl failed to read Secret gateway-admin (namespace $(NAMESPACE)) - this is a kubectl/connect problem, not an empty Secret. kubectl said:" >&2; \
 	  echo "$$RAW" >&2; \

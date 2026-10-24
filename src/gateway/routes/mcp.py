@@ -231,9 +231,10 @@ async def mcp_post(request: Request, db: AsyncSession = Depends(get_db)):
         # respects the caller's role permissions when searching.
         if compact:
             return JSONResponse(_jsonrpc_result(msg_id, {"tools": [dict(t) for t in COMPACT_TOOLS]}))
-        # Try fan-out with timeout 8s; on failure fall back to cached tools
+        # Fan-out with the global list timeout (gateway.timeouts.listSeconds,
+        # default 3s, ADR-089); on failure fall back to cached tools
         try:
-            tools, warnings = await fanout_list_tools(db, servers, timeout_seconds=8)
+            tools, warnings = await fanout_list_tools(db, servers)
         except Exception as exc:
             logger.warning("fanout failed, falling back to cache: %s", exc)
             tools = await list_cached_tools(db, [s.id for s in servers])

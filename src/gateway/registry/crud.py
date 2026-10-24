@@ -6,7 +6,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from db.models import Server
+from db.models import LEGACY_TIMEOUT_MS, Server
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,7 +47,10 @@ async def create_server(
     auth_type: str = "none",
     header_name: str | None = None,
     credential: str | None = None,
-    timeout_ms: int = 10000,
+    # timeout_ms LEGACY_TIMEOUT_MS = "follow the global call default"
+    # (config.call_timeout_seconds, ADR-089); any other value 1000..60000 pins
+    # that server's call timeout explicitly.
+    timeout_ms: int = LEGACY_TIMEOUT_MS,
     enabled: bool = True,
     allowed_host_suffixes: list[str] | None = None,
     allowed_domains: list[str] | None = None,
@@ -165,7 +168,7 @@ async def seed_default_servers(db: AsyncSession):
                     credential_encrypted=None,
                     enabled=True,
                     status="Unknown",
-                    timeout_ms=10000,
+                    timeout_ms=LEGACY_TIMEOUT_MS,  # sentinel: follows the global call default (ADR-089)
                 )
                 db.add(srv)
             except Exception:

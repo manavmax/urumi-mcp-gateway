@@ -19,9 +19,10 @@ async def get_tools(request: Request, db: AsyncSession = Depends(get_db), user=D
     servers = list(res.scalars().all())
     if not servers:
         return {"tools": [], "warnings": []}
-    # try live fan-out; fallback to cache
+    # try live fan-out; fallback to cache. The fan-out uses the global list
+    # timeout (gateway.timeouts.listSeconds, default 3s, ADR-089).
     try:
-        tools, warnings = await fanout_list_tools(db, servers, timeout_seconds=5)
+        tools, warnings = await fanout_list_tools(db, servers)
     except Exception:
         tools = await list_cached_tools(db, [s.id for s in servers])
         warnings = []

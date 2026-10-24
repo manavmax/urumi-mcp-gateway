@@ -90,7 +90,7 @@ sequenceDiagram
 
   Note over C,GW: 2. Discover tools (aggregated)
   C->>GW: POST /mcp {method: tools/list}
-  GW->>REG: fan-out asyncio.gather with per-server timeout 8s
+  GW->>REG: fan-out asyncio.gather with per-server timeout 3s (gateway.timeouts.listSeconds)
   REG->>W: POST /mcp {tools/list} (internal, mTLS/DNS)
   REG->>TIME: POST /mcp {tools/list}
   W-->>REG: [{name:list_products},{name:create_product},...]
@@ -111,7 +111,7 @@ sequenceDiagram
   Note over C,GW: 4. Failure isolation
   C->>GW: POST /mcp {tools/call, name: time__get_current_time}
   GW->>TIME: POST /mcp ...
-  TIME--xGW: timeout 10s
+  TIME--xGW: timeout 15s (callSeconds default)
   GW->>GW: circuit breaker increment, audit timeout
   GW-->>C: {error: -32000, message: upstream time timed out}
   Note over GW: other servers unaffected; tools/list still returns woo tools
@@ -266,7 +266,7 @@ Namespace: urumi
 | Woo API | REST `wc/v3` + CK/CS | No extra plugin, stable, Woo hooks preserved; WP-CLI only for seeding Job |
 | MCP transport | Streamable HTTP (2025-03-26) | Spec current, single endpoint, JSON + SSE, SDK native |
 | Aggregation pattern | Prefix `slug__tool` | Deterministic, no collision, LLM-friendly, easy audit routing |
-| Timeout isolation | `httpx.Timeout` + `asyncio.wait_for(10s)` + `gather(return_exceptions)` | Dead server never blocks healthy; circuit breaker for repeated fails |
+| Timeout isolation | `httpx.Timeout` + `asyncio.wait_for(15s call default)` + `gather(return_exceptions)` | Dead server never blocks healthy; circuit breaker for repeated fails |
 | API key storage | SHA-256 digest of the key (64 hex, indexed) | Raw key shown once, never stored; lookup by digest + `hmac.compare_digest`; no slow KDF (ADR-025). argon2id only for user passwords |
 | Credential encryption | Fernet (key from Secret, rotation via `key_id`) | Simple, at-rest encryption, never logged |
 | DB | Postgres + async SQLAlchemy | Concurrent audit, multi-replica safe, partitioning |

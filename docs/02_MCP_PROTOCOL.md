@@ -110,7 +110,7 @@ class Upstream:
   last_checked: datetime
 ```
 
-- `tools/list` fans out to all `enabled` upstreams with `asyncio.gather(return_exceptions=True)` + `wait_for(8s)` per upstream.
+- `tools/list` fans out to all `enabled` upstreams with `asyncio.gather(return_exceptions=True)` + `wait_for(3s)` per upstream (`gateway.timeouts.listSeconds`, ADR-089); a call gets 15s by default (`gateway.timeouts.callSeconds`).
 - Success -> upsert `tools` table (`exposed_name = slug__original`), cache in memory + PG.
 - Failure -> mark `Unreachable`, keep stale cache for 30s or return partial `warnings`.
 
