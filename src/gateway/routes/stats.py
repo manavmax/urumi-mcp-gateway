@@ -6,7 +6,8 @@ Counts are exact SQL aggregates; only the duration percentiles come from a
 bounded sample (newest rows first, so the cap degrades deterministically).
 All queries are parameterized SQLAlchemy selects; no raw SQL, no argument
 values or credentials in the response. Admins additionally get by_server
-(docs/11_OBSERVABILITY.md §2) - members never receive it.
+(docs/11_OBSERVABILITY.md §2) and top_tools (top exposed tool names by
+calls) - members never receive either.
 """
 
 from __future__ import annotations
@@ -38,6 +39,11 @@ DURATION_FETCH_CAP = 50000
 # by_server sparkline: daily points over the range, capped at 14 (the 7 or
 # 14-point sparkline per server, docs/11_OBSERVABILITY.md §2).
 SPARKLINE_MAX_POINTS = 14
+
+# Admin top-tools aggregate for the Overview page (docs/POLISH_DASHBOARD.md):
+# top N exposed tool names by calls over the selected window. Counts only -
+# never argument values or credentials.
+TOP_TOOLS_MAX = 6
 
 
 def _percentile(sorted_values: list[int], q: float) -> int:
@@ -142,6 +148,24 @@ async def _by_server(db: AsyncSession, start: datetime, now: datetime, window: t
     return rows
 
 
+async def _top_tools(db: AsyncSession, scope: list) -> list[dict]:
+    """Admin top exposed tools by calls over the window (one group-by, no row
+    fetch). Ordered by calls descending, then name; capped at TOP_TOOLS_MAX."""
+    res = await db.execute(
+        select(AuditLog.tool_exposed_name, AuditLog.outcome, func.count())
+        .where(*scope)
+        .group_by(AuditLog.tool_exposed_name, AuditLog.outcome)
+    )
+    tools: dict[str, dict] = {}
+    for name, outcome, n in res.all():
+        row = tools.setdefault(name, {"tool": name, "calls": 0, "errors": 0})
+        row["calls"] += int(n)
+        if outcome != "success":
+            row["errors"] += int(n)
+    rows = sorted(tools.values(), key=lambda r: (-r["calls"], r["tool"]))
+    return rows[:TOP_TOOLS_MAX]
+
+
 @router.get("")
 async def get_stats(
     request: Request,
@@ -237,6 +261,7 @@ async def get_stats(
     }
     if is_admin:
         out["by_server"] = await _by_server(db, start, now, window)
+        out["top_tools"] = await _top_tools(db, scope)
     if not is_admin:
         keys_res = await db.execute(
             select(func.count())
