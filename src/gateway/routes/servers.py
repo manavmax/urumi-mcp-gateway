@@ -16,7 +16,7 @@ import uuid
 from audit.admin_events import record_admin_event
 from auth.rbac import get_current_user_via_session, require_admin, verify_csrf
 from config import get_settings
-from db.models import Server
+from db.models import LEGACY_TIMEOUT_MS, Server
 from db.session import get_db
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -32,7 +32,9 @@ class ServerCreate(BaseModel):
     auth_type: str = Field(default="none", pattern=r"^(none|bearer|header)$")
     header_name: str | None = None
     credential: str | None = None  # plaintext, encrypted server-side
-    timeout_ms: int = Field(default=10000, ge=1000, le=60000)
+    # The legacy column default 10000 is the "follow the global call default"
+    # sentinel (ADR-089); any other value 1000..60000 pins this server's timeout.
+    timeout_ms: int = Field(default=LEGACY_TIMEOUT_MS, ge=1000, le=60000)
     enabled: bool = True
 
 

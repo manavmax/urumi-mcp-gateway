@@ -89,7 +89,7 @@ CREATE TABLE servers (
   url TEXT NOT NULL, auth_type TEXT CHECK (auth_type IN ('none','bearer','header')) NOT NULL DEFAULT 'none',
   header_name TEXT, credential_encrypted BYTEA, credential_key_id TEXT,
   enabled BOOL DEFAULT true, status TEXT DEFAULT 'Unknown', last_error TEXT,
-  timeout_ms INT DEFAULT 10000, created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
+  timeout_ms INT DEFAULT 10000, created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()  -- 10000 is the legacy sentinel: stored 10000 resolves to the global call default (gateway.timeouts.callSeconds, 15s, ADR-089)
 );
 
 -- tools (cached catalog)

@@ -142,6 +142,14 @@ gateway:
   health:
     intervalSeconds: 5
     timeoutSeconds: 2
+  # Per-upstream timeouts (ADR-089). listSeconds bounds the tools/list fan-out to
+  # one upstream (LIST_TIMEOUT_SECONDS); callSeconds is the default tools/call
+  # budget for every server whose stored timeout_ms is the legacy "follow the
+  # global default" sentinel 10000 (CALL_TIMEOUT_SECONDS) - an admin-entered
+  # per-server value other than 10000 still wins for that server.
+  timeouts:
+    listSeconds: 3
+    callSeconds: 15
   # Hardening (ADR-044): dashboard login lockout - after `attempts` failed logins
   # inside `windowSeconds`, per username AND per client IP, the next attempt gets
   # 429 and an audit row. In-memory, so the counter is per replica (documented).

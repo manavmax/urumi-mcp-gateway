@@ -48,7 +48,7 @@ def _auth_headers(server: Server) -> dict[str, str]:
     return {}
 
 
-async def _fetch_tools_for_server(server: Server, timeout_seconds: float = 8.0) -> list[dict[str, Any]]:
+async def _fetch_tools_for_server(server: Server, timeout_seconds: float) -> list[dict[str, Any]]:
     """Call tools/list on one upstream via MCP SDK; return list of tool dicts."""
     from urllib.parse import urlparse as _urlparse
 
@@ -93,8 +93,16 @@ async def _fetch_tools_for_server(server: Server, timeout_seconds: float = 8.0) 
         return out
 
 
-async def fetch_and_cache_tools(db: AsyncSession, server: Server, timeout_seconds: float = 8.0) -> list[Tool]:
-    """Fetch from upstream and upsert into tools table with prefix. Returns Tool rows."""
+async def fetch_and_cache_tools(db: AsyncSession, server: Server, timeout_seconds: float | None = None) -> list[Tool]:
+    """Fetch from upstream and upsert into tools table with prefix. Returns Tool rows.
+
+    timeout_seconds defaults to the global list timeout
+    (config.list_timeout_seconds, Helm gateway.timeouts.listSeconds, ADR-089);
+    the health loop passes its own (shorter) probe timeout explicitly."""
+    from config import get_settings
+
+    if timeout_seconds is None:
+        timeout_seconds = get_settings().list_timeout_seconds
     try:
         upstream_tools = await asyncio.wait_for(_fetch_tools_for_server(server, timeout_seconds), timeout=timeout_seconds + 2)
     except Exception as exc:
@@ -159,14 +167,22 @@ async def _cache_fallback(db: AsyncSession, s: Server, err: str) -> list[dict] |
     return cached or None
 
 
-async def fanout_list_tools(db: AsyncSession, servers: list[Server], timeout_seconds: float = 8.0) -> tuple[list[dict], list[dict]]:
+async def fanout_list_tools(db: AsyncSession, servers: list[Server], timeout_seconds: float | None = None) -> tuple[list[dict], list[dict]]:
     """Fan-out tools/list across enabled servers with isolation (gather+return_exceptions).
 
     A server whose live fetch fails (timeout, breaker open) still contributes its
     last-known cached tools, with a warning entry carrying "stale_cache": True.
-    Returns (tools, warnings) where tools are exposed tool dicts.
+    Returns (tools, warnings) where tools are exposed tool dicts. Each fetch is
+    bounded by timeout_seconds — the global list timeout when not given
+    (config.list_timeout_seconds, Helm gateway.timeouts.listSeconds, ADR-089) —
+    so one slow upstream delays nobody beyond its own budget.
     """
+    from config import get_settings
+
     from gw_mcp.breaker import breaker
+
+    if timeout_seconds is None:
+        timeout_seconds = get_settings().list_timeout_seconds
 
     async def fetch_one(s: Server):
         from gw_mcp.categorize import classify

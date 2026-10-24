@@ -2011,3 +2011,40 @@ seed script and the store-assets copy into ONE shared file (helm library chart
 or a file rendered into both charts / baked into an image) so the duplication
 disappears; that touches the provisioner image build and both charts, so it is
 deliberately deferred, and until then this guard is the contract.
+
+## 2026-10-25: Per-upstream timeouts set to the brief: list 3s, call 15s (ADR-089)
+
+**Decision.** The two per-upstream timeouts are now explicit, configurable
+globals in ONE settings module (src/gateway/config.py): `list_timeout_seconds`
+(default 3, the tools/list fan-out cut-off per upstream) and
+`call_timeout_seconds` (default 15, the default tools/call budget). Helm wires
+them as `gateway.timeouts.listSeconds` / `gateway.timeouts.callSeconds` ->
+`LIST_TIMEOUT_SECONDS` / `CALL_TIMEOUT_SECONDS` env on the gateway Deployment
+(values.yaml defaults 3/15; values-local and values-prod need no change). The
+hardcoded `timeout_seconds=8` in the /mcp tools/list fan-out and the ad-hoc 5s
+in /api/tools are gone; the old `config.default_timeout_ms = 10000` knob is
+removed and replaced by `call_timeout_seconds: 15`. Existing rows and the
+seeded internal servers (woo/time/notes) keep their stored `timeout_ms = 10000`
+- the column's historic DEFAULT - which the code now treats as a SENTINEL for
+"follow the global call default" (`gw_mcp.router.effective_call_timeout_seconds`,
+db.models.LEGACY_TIMEOUT_MS); an admin-entered value other than 10000 still
+pins that server's timeout. The list fan-out keeps its stale-cache fallback
+(served with a `stale_cache` warning when a fetch is cut). Docs
+(00/01/02/04) and the landing figure note now say 3s/15s.
+
+**Alternatives.** (1) A forward-only Alembic migration rewriting stored
+`timeout_ms = 10000` rows to 15000: rejected - it mutates data on every
+existing deployment, silently rewrites rows an admin may have set to 10000 on
+purpose, and needs the usual forward-only + schema-gate care for zero gain.
+(2) Changing only the column default: useless for existing rows. The sentinel
+needs no migration, is idempotent, and is the only option that keeps every
+explicit per-server value working. One trade-off is accepted and documented:
+a server pinned to exactly 10000ms is no longer expressible (10000 now means
+"follow global"); an admin can pin 10001 or any other value in 1000..60000.
+
+**Why.** The brief requires list ≈ 3s / call ≈ 15s; before this change the list
+cut-off was hardcoded 8s in two call sites, the call default was 10000ms from
+config AND duplicated per-server in seeded rows, and nothing in Helm exposed
+either, so an operator could not tune them. Sentinel resolution keeps old
+databases correct without touching data, and the new defaults apply to new and
+existing servers alike on the next deploy.

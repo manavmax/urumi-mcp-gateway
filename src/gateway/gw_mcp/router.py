@@ -8,7 +8,7 @@ import logging
 import time
 
 from config import get_settings
-from db.models import Server
+from db.models import LEGACY_TIMEOUT_MS, Server
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.shared.exceptions import McpError
@@ -188,6 +188,26 @@ def _auth_headers(server: Server) -> dict[str, str]:
     return {}
 
 
+def effective_call_timeout_seconds(server: Server, settings=None) -> float:
+    """The call timeout that actually applies to one server, in seconds.
+
+    A per-server timeout_ms differing from the LEGACY_TIMEOUT_MS sentinel (and
+    from 0/None) is an explicit admin choice and wins. The sentinel — 10000, the
+    column's historic DEFAULT that every pre-existing row and every seeded
+    internal server carries — means "follow the global default"
+    (config.call_timeout_seconds, Helm gateway.timeouts.callSeconds, ADR-089).
+    Treating the old default as the sentinel (rather than rewriting stored rows
+    with a migration) needs no data mutation, is idempotent, and keeps every
+    explicit per-server value working; an admin who truly wants 10s pins 10001
+    or any value inside the API's 1000..60000 range other than the sentinel.
+    """
+    if settings is None:
+        settings = get_settings()
+    if not server.timeout_ms or server.timeout_ms == LEGACY_TIMEOUT_MS:
+        return settings.call_timeout_seconds
+    return server.timeout_ms / 1000.0
+
+
 async def proxy_call(
     server: Server,
     upstream_tool: str,
@@ -196,7 +216,7 @@ async def proxy_call(
 ) -> dict:
     """Proxy a single tools/call to one upstream via MCP SDK."""
     settings = get_settings()
-    timeout_seconds = timeout_seconds or (server.timeout_ms / 1000.0 if server.timeout_ms else settings.default_timeout_ms / 1000.0)
+    timeout_seconds = timeout_seconds or effective_call_timeout_seconds(server, settings)
 
     # SSRF DNS re-validate at request time (TOCTOU prevention)
     from urllib.parse import urlparse
@@ -287,7 +307,7 @@ async def call_tool_routed(
     try:
         result = await asyncio.wait_for(
             proxy_call(server, upstream, arguments, timeout_seconds=timeout_seconds),
-            timeout=(timeout_seconds or server.timeout_ms / 1000.0) + 1,
+            timeout=(timeout_seconds or effective_call_timeout_seconds(server)) + 1,
         )
         breaker.record_success(server.id)
         # keep status connected on success + record health timings
