@@ -12,18 +12,21 @@ Exits non-zero on any failure. (The session that wrote this could not view
 images - the model rejects image input - so the screenshots still deserve a
 human look; these checks only catch structural problems.)
 """
-from PIL import Image
 import sys
+
+from PIL import Image
 
 A = "artifacts/store/"
 
 
 def region(path, fx1, fy1, fx2, fy2):
     im = Image.open(path).convert("RGB")
-    W, H = im.size
-    l = max(0, int(fx1 * W)); t = max(0, int(fy1 * H))
-    r = min(W, int(fx2 * W)); b = min(H, int(fy2 * H))
-    px = [im.getpixel((x, y)) for y in range(t, b, 3) for x in range(l, r, 3)]
+    w, h = im.size
+    x0 = max(0, int(fx1 * w))
+    y0 = max(0, int(fy1 * h))
+    x1 = min(w, int(fx2 * w))
+    y1 = min(h, int(fy2 * h))
+    px = [im.getpixel((x, y)) for y in range(y0, y1, 3) for x in range(x0, x1, 3)]
     if not px:
         return None
     lum = sum(0.2126 * a + 0.7152 * b2 + 0.0722 * c for a, b2, c in px) / len(px)

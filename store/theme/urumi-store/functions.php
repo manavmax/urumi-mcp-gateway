@@ -532,6 +532,11 @@ function urumi_store_tile( $product ) {
 			'loading' => 'lazy',
 			'decoding' => 'async',
 			'class' => 'urumi-photo',
+			// tiles render at ~286px on a 1280px container: without an exact
+			// sizes hint the browser assumes 100vw and pulls the 819px (or
+			// 960px) derivative for every tile, which pushed the home page
+			// over its 800KB weight cap
+			'sizes' => '(max-width: 767px) 46vw, (max-width: 1023px) 30vw, 286px',
 		) );
 	} else {
 		$img = '<span class="urumi-photo urumi-photo--empty" aria-hidden="true"></span>';
