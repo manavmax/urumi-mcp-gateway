@@ -77,9 +77,6 @@ export default function Metrics() {
           <div>
             <h1>Metrics</h1>
           </div>
-          <div className="row wrap">
-            <span className="src">last {windowHours}h, from the audit table</span>
-          </div>
         </div>
         {err && (
           <div className="note-banner" role="alert">
@@ -89,7 +86,6 @@ export default function Metrics() {
         <section className="card" aria-label="Per-server metrics, last 24 hours">
           <div className="card-head">
             <h3 className="card-title">Upstream tool calls, last {windowHours}h</h3>
-            <span className="src">audit_logs via GET /api/metrics</span>
           </div>
           {loading ? (
             <div className="empty">Loading metrics...</div>
@@ -141,10 +137,6 @@ export default function Metrics() {
               </table>
             </div>
           )}
-          <p className="table-note">
-            Latency percentiles and failure reasons come from the audit table (failed rows carry a classified reason
-            such as timeout, connection refused or http_error:502). Raw error text is never stored.
-          </p>
         </section>
       </main>
     </>

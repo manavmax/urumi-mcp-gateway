@@ -169,7 +169,6 @@ h1 { font-size: 28px; letter-spacing: -.02em; line-height: 1.1; font-weight: 700
 .card { background: var(--surface); border-radius: var(--r-card); box-shadow: var(--shadow-card); padding: var(--pad, 24px); }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .card-title { font-size: var(--t-lg); font-weight: 650; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
-.src { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); background: var(--surface-2); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
 /* Metrics page: classified failure-reason chips (Phase 1) */
 .reasons { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .reason-chip { font-family: var(--font-mono); font-size: 10px; color: var(--text); background: var(--surface-2); border: 1px solid var(--hairline); border-radius: var(--r-pill); padding: 2px 8px; white-space: nowrap; }
@@ -253,7 +252,6 @@ h1 { font-size: 28px; letter-spacing: -.02em; line-height: 1.1; font-weight: 700
 .stat.hero { background: var(--grad-A); box-shadow: var(--shadow-card); color: var(--text); }
 .stat.hero .stat-label, .stat.hero .stat-unit, .stat.hero .stat-sub { color: var(--text); }
 .stat.hero .stat-num { color: var(--text); }
-.stat.hero .src { background: var(--hero-src-bg); color: var(--text); }
 /* floating white mini-cards: REMOVED with the old gauge card; the Overview
    right column is now the real-data Top tools card (see .tt-* below). */
 .chart-card { position: relative; }
@@ -330,6 +328,9 @@ details.tools[open] { border-radius: var(--r-inner); padding: 0; }
 .tool-item { display: flex; gap: var(--s2); align-items: baseline; font-size: var(--t-xs); }
 .tool-item .mono { font-weight: 750; color: var(--text); }
 .tool-item span { color: var(--text-muted); }
+
+/* quiet empty/loading lines inside cards (Metrics, Stores, Hosted) */
+.empty { padding: 24px 8px; text-align: center; color: var(--text-muted); font-size: var(--t-sm); }
 
 /* ---------- note banner, invite, reveal, keybox (family F) ---------- */
 .note-banner { display: flex; gap: var(--s3); align-items: flex-start; background: var(--primary-tint); border: 1px solid var(--primary-tint); border-radius: var(--r-inner); padding: var(--s3) var(--s4); font-size: var(--t-sm); color: var(--text); }
@@ -576,7 +577,6 @@ tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--ink); }
 .fam-f .page-head { align-items: flex-start; }
 .fam-f .card-title { font-weight: 750; }
 .fam-f .stat-num { font-weight: 750; }
-.fam-f .src { border: 1px solid var(--hairline); }
 .fam-f .bottomnav { border-top: 1px solid var(--hairline); }
 /* servers/members.html pad table cells a flat 12px; audit.html uses 11px 12px */
 .pg-audit td { padding: 11px var(--s3); }
