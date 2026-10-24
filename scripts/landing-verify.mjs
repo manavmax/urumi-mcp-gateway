@@ -320,12 +320,17 @@ try {
     }
     await page.evaluate(() => window.scrollTo(0, 0));
 
-    // screenshots (reveal everything first: scroll through, settle, return)
+    // screenshots (reveal everything first: scroll through, settle, return).
+    // The jumps must be instant: html has scroll-behavior smooth, so plain
+    // scrollTo(0, y) starts an animation that the next jump interrupts - the
+    // real scroll position never reaches the lower page, IntersectionObserver
+    // never reveals those sections, and the full-page capture shows them at
+    // opacity 0 (large blank runs below ~2400px).
     if (c.shots) {
       await page.evaluate(async () => {
         const step = window.innerHeight * 0.8;
-        for (let y = 0; y <= document.body.scrollHeight; y += step) { window.scrollTo(0, y); await new Promise(r => setTimeout(r, 60)); }
-        window.scrollTo(0, 0);
+        for (let y = 0; y <= document.body.scrollHeight; y += step) { window.scrollTo({ top: y, behavior: "instant" }); await new Promise(r => setTimeout(r, 60)); }
+        window.scrollTo({ top: 0, behavior: "instant" });
       });
       await page.waitForTimeout(900);
       await page.screenshot({ path: join(OUT, `landing-${c.name}.png`), fullPage: !!c.full });
@@ -375,8 +380,12 @@ try {
       problems(c.name, `open state wrong: ${JSON.stringify(open)}`);
       caseFails++;
     }
-    // body scroll is locked while open
-    await page.evaluate(() => window.scrollTo(0, 300));
+    // body scroll is locked while open. Tested with a real user wheel: the
+    // page's lock (html.nav-open { overflow: hidden }) stops user scrolling
+    // but not programmatic scrollTo, and the old scrollTo+immediate-read was
+    // a race against the smooth-scroll first frame (flaky scrollY=1).
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(150);
     const scrollY = await page.evaluate(() => window.scrollY);
     if (scrollY !== 0) { problems(c.name, `scroll lock failed: scrollY=${scrollY}`); caseFails++; }
     // contrast of the pills inside the OPEN sheet
