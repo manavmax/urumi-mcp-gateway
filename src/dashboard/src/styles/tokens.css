@@ -214,7 +214,7 @@
   /* Deeper shadow under a lifted (hovered) tile */
   --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.32), 0 18px 44px rgba(0, 0, 0, 0.50);
   /* Chart tokens: landing accent/danger washes, raised track */
-  --chart-bar: rgba(20, 184, 166, 0.55);
+  --chart-bar: rgba(20, 184, 166, 0.62);
   --chart-bar-err: rgba(255, 91, 91, 0.80);
   --chart-axis: rgba(255, 255, 255, 0.06);
   --chart-axis-label: #8B8E89;
