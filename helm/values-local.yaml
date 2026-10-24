@@ -60,7 +60,10 @@ dashboard:
 # it (pullPolicy Never). TLS stays off locally (global.tlsEnabled false).
 landing:
   enabled: true
-  image: { repository: urumi/landing, tag: "0.1.0", pullPolicy: Never }
+  # 0.2.0: the rebuilt landing (post-polish) needs a NEW tag - an import under
+  # the same tag does not restart the pod, so a bump is what makes helm-local
+  # roll the landing pod onto the new content (ADR-080 deploy path).
+  image: { repository: urumi/landing, tag: "0.2.0", pullPolicy: Never }
   port: 8080
   servicePort: 80
   host: 127.0.0.1.nip.io
