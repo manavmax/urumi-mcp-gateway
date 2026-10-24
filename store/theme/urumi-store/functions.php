@@ -364,7 +364,7 @@ function urumi_store_image_url_safe( $file ) {
  * from the catalog's "hero" entry (set during photo curation); without it the
  * hero falls back to a taupe block so the page never breaks.
  */
-function urumi_store_hero_render() {
+function urumi_store_hero_render( $attributes ) {
 	$cat = urumi_store_catalog();
 	$hero = $cat['hero'] ?? array();
 	$headline = $hero['headline'] ?? 'Warm things for quiet rooms.';
@@ -372,7 +372,11 @@ function urumi_store_hero_render() {
 	$file = $hero['image'] ?? '';
 	$alt = $hero['alt'] ?? 'A quiet still life of ceramics and linen';
 
-	$out = '<section class="urumi-hero" aria-labelledby="urumi-hero-title">';
+	// The hero is a full-bleed photograph: carry the block's align attribute
+	// onto the wrapper so the constrained layout lets it span the viewport
+	// instead of capping it at the content width.
+	$cls = 'urumi-hero' . ( ( $attributes['align'] ?? '' ) === 'full' ? ' alignfull' : '' );
+	$out = '<section class="' . esc_attr( $cls ) . '" aria-labelledby="urumi-hero-title">';
 	$out .= '<div class="urumi-hero__media" aria-hidden="false">';
 	if ( $file && urumi_store_image_url( array( 'image' => $file ) ) && file_exists( urumi_store_data_dir() . '/images/' . $file ) ) {
 		$out .= '<img class="urumi-photo" src="' . esc_url( urumi_store_asset_url( 'images/' . $file ) ) . '" alt="' . esc_attr( $alt ) . '" fetchpriority="high" decoding="async" />';
@@ -399,7 +403,7 @@ register_block_type( 'urumi-store/hero', array(
  * (banner-<slug>.webp, set during photo curation); without it the archive
  * head renders exactly as before, so nothing breaks.
  */
-function urumi_store_category_banner_render() {
+function urumi_store_category_banner_render( $attributes ) {
 	if ( ! is_tax( 'product_cat' ) ) {
 		return '';
 	}
@@ -419,7 +423,10 @@ function urumi_store_category_banner_render() {
 	if ( '' === $file || ! file_exists( urumi_store_data_dir() . '/images/' . $file ) ) {
 		return '';
 	}
-	return '<div class="urumi-cat-banner" aria-hidden="false">'
+	// Full-bleed banner photograph, as the templates ask via the align
+	// attribute; without the class the constrained layout would inset it.
+	$cls = 'urumi-cat-banner' . ( ( $attributes['align'] ?? '' ) === 'full' ? ' alignfull' : '' );
+	return '<div class="' . esc_attr( $cls ) . '" aria-hidden="false">'
 		. '<img class="urumi-photo" src="' . esc_url( urumi_store_asset_url( 'images/' . $file ) ) . '"'
 		. ' alt="' . esc_attr( $alt ) . '" loading="eager" decoding="async" />'
 		. '</div>';
@@ -1084,6 +1091,13 @@ function urumi_store_block_flags( $block_content, $block ) {
 	}
 	$product = wc_get_product( get_the_ID() );
 	$flags = $product ? urumi_store_tile_flags( $product ) : '';
+	// The theme renders its own overlaid flag chip, so WooCommerce's built-in
+	// sale badge (a second "Sale" label on the same image) is always removed.
+	$block_content = preg_replace(
+		'#<div class="wc-block-components-product-sale-badge[^"]*"[^>]*>.*?</div>#s',
+		'',
+		$block_content
+	);
 	if ( ! $flags ) {
 		return $block_content;
 	}

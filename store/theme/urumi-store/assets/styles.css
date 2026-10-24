@@ -80,10 +80,35 @@ details:focus-visible,
 
 /* layout */
 
-body .is-layout-constrained > .alignwide,
-body .is-layout-constrained > .alignfull {
-	max-width: 1360px;
+/*
+ * ONE container for the whole storefront. Header content, breadcrumb, page
+ * title, category pills, toolbar, product grid, related products and footer
+ * all share the same max-width, the same horizontal gutter and therefore the
+ * same left and right edges, centered. Full-bleed sections (hero, category
+ * banner, the collections band) opt out via .alignfull and centre their own
+ * content with the same two tokens.
+ */
+:root {
+	--urumi-container: 1280px;
+	--urumi-gutter: clamp(16px, 3vw, 32px);
 }
+
+.urumi-nav,
+.urumi-footer,
+.urumi-hero__text,
+main > :not(.alignfull):not(.urumi-sticky-atc):not(.urumi-intro),
+.urumi-archive-head > *,
+.urumi-band--alt > .wp-block-group.alignwide {
+	max-width: var(--urumi-container);
+	margin-left: auto;
+	margin-right: auto;
+	padding-left: var(--urumi-gutter);
+	padding-right: var(--urumi-gutter);
+	box-sizing: border-box;
+}
+
+/* breathing room between the last section and the footer hairline */
+main { padding-bottom: clamp(32px, 4vw, 64px); }
 
 .urumi-section {
 	padding-top: clamp(56px, 8vw, 120px);
@@ -248,8 +273,9 @@ button.single_add_to_cart_button:hover,
 	gap: 32px;
 	min-height: 64px;
 	width: 100%;
-	max-width: 1360px;
-	padding: 0 clamp(16px, 3vw, 32px);
+	max-width: var(--urumi-container);
+	padding: 0 var(--urumi-gutter);
+	box-sizing: border-box;
 }
 
 .urumi-nav__logo {
@@ -261,6 +287,7 @@ button.single_add_to_cart_button:hover,
 	color: var(--urumi-ink);
 	margin-right: 16px;
 	white-space: nowrap;
+	flex: 0 0 auto;
 }
 
 .urumi-nav__links {
@@ -268,6 +295,7 @@ button.single_add_to_cart_button:hover,
 	align-items: center;
 	gap: 28px;
 	flex: 1;
+	min-width: 0;
 }
 
 .urumi-nav__links > a,
@@ -282,6 +310,7 @@ button.single_add_to_cart_button:hover,
 	min-height: 44px;
 	display: inline-flex;
 	align-items: center;
+	white-space: nowrap;
 }
 
 .urumi-nav__links > a:hover,
@@ -366,6 +395,14 @@ button.single_add_to_cart_button:hover,
 }
 
 .urumi-nav__icon:hover { color: var(--urumi-ink); text-decoration: underline; }
+
+/* narrow desktop: tighten gaps and the search width so one row always fits */
+@media (max-width: 1279px) and (min-width: 1024px) {
+	.urumi-nav { gap: 20px; }
+	.urumi-nav__links { gap: 20px; }
+	.urumi-nav__search .urumi-search-input { width: 150px; }
+	.urumi-nav__logo { margin-right: 4px; }
+}
 
 /* mini-cart: plain text */
 
@@ -511,9 +548,10 @@ body:has(.urumi-menu-toggle:checked) { overflow: hidden; }
 	position: relative;
 	z-index: 2;
 	width: 100%;
-	max-width: 1360px;
+	max-width: var(--urumi-container);
 	margin: 0 auto;
-	padding: clamp(24px, 4vw, 64px);
+	padding: clamp(24px, 4vw, 64px) var(--urumi-gutter);
+	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
@@ -661,24 +699,35 @@ a:hover .urumi-frame img,
 	.urumi-cat-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* product grid */
+/* product grid: shop, category, search results, related and home all share
+   one grid and one identical card structure (image, title, excerpt, price,
+   button) so every card in a row lines up. */
 
-ul.urumi-grid {
+ul.urumi-grid,
+.urumi-collection ul.wc-block-product-template,
+main > .wp-block-query .wp-block-post-template {
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
 	gap: 32px 24px;
 	list-style: none;
 	margin: 0;
 	padding: 0;
+	width: 100%;
 }
 
-.urumi-tile {
+/* every card: flex column so the price/button block pins to the card bottom
+   and all images in a row start at the same y regardless of text length */
+.urumi-tile,
+.urumi-collection .wc-block-product,
+main > .wp-block-query .wp-block-post-template > li {
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
+	position: relative;
 	background: transparent;
 	border: none;
 	border-radius: 0;
-	padding: 0;
+	padding: 0 0 12px;
 	box-shadow: none;
 	list-style: none;
 }
@@ -689,6 +738,7 @@ ul.urumi-grid {
 	background: var(--urumi-beige);
 	display: block;
 	position: relative;
+	width: 100%;
 }
 
 .urumi-tile__media img {
@@ -701,7 +751,47 @@ ul.urumi-grid {
 
 .urumi-tile__media:hover img { transform: scale(1.03); }
 
-.urumi-tile__name {
+/* WooCommerce product-image block inside the collection/search grids: same
+   fixed 4/5 frame as the theme tiles */
+.urumi-collection .wc-block-components-product-image,
+main > .wp-block-query .wc-block-components-product-image {
+	position: relative;
+	display: block;
+	width: 100%;
+	aspect-ratio: 4 / 5;
+	overflow: hidden;
+	background: var(--urumi-beige);
+	margin: 0;
+}
+
+.urumi-collection .wc-block-components-product-image a,
+main > .wp-block-query .wc-block-components-product-image a {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.urumi-collection .wc-block-components-product-image img,
+main > .wp-block-query .wc-block-components-product-image img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+	transition: transform 500ms var(--urumi-ease);
+}
+
+.urumi-collection .wc-block-components-product-image:hover img { transform: scale(1.03); }
+
+/* WooCommerce's own on-image sale badge is always suppressed: the theme
+   renders the one overlaid flag chip instead (never two labels) */
+.urumi-collection .wc-block-components-product-sale-badge,
+main > .wp-block-query .wc-block-components-product-sale-badge {
+	display: none;
+}
+
+.urumi-tile__name,
+.urumi-collection .urumi-tile-name,
+main > .wp-block-query .urumi-tile-name {
 	font-family: "Newsreader Variable", serif;
 	font-size: 16px;
 	font-weight: 500;
@@ -711,19 +801,52 @@ ul.urumi-grid {
 	margin-top: 12px;
 }
 
-.urumi-tile__name:hover { text-decoration: underline; }
+.urumi-tile__name:hover,
+.urumi-collection .urumi-tile-name a:hover,
+main > .wp-block-query .urumi-tile-name a:hover { text-decoration: underline; }
 
-.urumi-tile__price {
+/* archive-card descriptions: clamped to two lines, never clipped or
+   overlapping the price below */
+.urumi-tile-desc,
+main > .wp-block-query .wp-block-post-excerpt {
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 1.35;
+	letter-spacing: 0.26px;
+	color: var(--urumi-n4);
+	margin: 4px 0 0;
+}
+
+.urumi-tile-desc p { margin: 0; }
+
+.urumi-tile__price,
+.urumi-collection .wc-block-components-product-price,
+main > .wp-block-query .wc-block-components-product-price {
 	font-family: "Hanken Grotesk Variable", sans-serif;
 	font-size: 14px;
 	font-weight: 400;
 	color: var(--urumi-body);
 	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* price block pinned to the card bottom: prices and buttons align across a
+   row no matter how long the title or description is */
+.urumi-collection .wp-block-woocommerce-product-price,
+main > .wp-block-query .wp-block-woocommerce-product-price {
+	margin-top: auto;
+	padding-top: 12px;
 }
 
 /* Struck-through old prices: neutral-4, not neutral-1 - #999999 on canvas is
    2.75:1 and fails WCAG AA; the spec's contrast gate outranks the token note. */
-.urumi-tile__price del {
+.urumi-tile__price del,
+.urumi-collection .wc-block-components-product-price del {
 	color: var(--urumi-n4);
 	text-decoration: line-through;
 	margin-right: 6px;
@@ -734,22 +857,38 @@ ul.urumi-grid {
 
 .urumi-tile__row {
 	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 8px;
-	margin-top: 2px;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 2px;
+	margin-top: auto;
+	padding-top: 8px;
 }
 
-/* add-to-cart inside a tile: quiet text link */
+/* price line above the button line: both pinned to the card bottom, so they
+   align across a row no matter how long the title is */
+.urumi-tile__row .urumi-tile__price { display: block; }
 
-.urumi-tile__add .button,
-.urumi-tile__add .added_to_cart {
+.urumi-tile__row .urumi-tile__add { display: block; }
+
+.urumi-tile__row .urumi-tile__add .button,
+.urumi-tile__row .urumi-tile__add .added_to_cart {
+	width: 100%;
+	justify-content: flex-start;
+	text-align: left;
+	white-space: nowrap;
+}
+
+/* add-to-cart inside a theme tile: quiet text link, compact, same on every
+   card (specificity above Woo's `.woocommerce a.button` outline) */
+
+.urumi-tile .urumi-tile__add .button,
+.urumi-tile .urumi-tile__add .added_to_cart {
 	background: none;
 	border: none;
 	box-shadow: none;
-	padding: 7px 0;
+	padding: 4px 0;
 	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 400;
 	letter-spacing: 0.26px;
 	text-transform: uppercase;
@@ -759,20 +898,54 @@ ul.urumi-grid {
 	line-height: 1.35;
 }
 
-.urumi-tile__add .button:hover,
-.urumi-tile__add .added_to_cart:hover {
+.urumi-tile .urumi-tile__add .button:hover,
+.urumi-tile .urumi-tile__add .added_to_cart:hover {
 	text-decoration: underline;
 	opacity: 0.7;
 	background: none;
 	color: var(--urumi-body);
 }
 
-/* flags: plain text, no fill, no colour */
+/* add-to-cart inside the collection/search grid (Woo block button): compact,
+   full card width, identical on every card, inside the card bounds */
+.urumi-collection .urumi-tile-add {
+	margin: 8px 0 0;
+}
+
+.urumi-collection .urumi-tile-add .wc-block-components-product-button__button {
+	width: 100%;
+	min-height: 36px;
+	padding: 0 12px;
+	font-size: 12px;
+	box-sizing: border-box;
+	justify-content: center;
+}
+
+/* flags: one small chip overlaid inside the image box (top-left, absolutely
+   positioned, never in normal flow, shown once) */
 
 .urumi-flags {
 	display: flex;
-	gap: 12px;
-	margin-bottom: 8px;
+	gap: 8px;
+	background: var(--urumi-canvas);
+	padding: 3px 8px;
+}
+
+/* on a theme tile the flags sit directly inside the card, above the media */
+.urumi-tile > .urumi-flags,
+.urumi-flags-host > .urumi-flags {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	z-index: 2;
+	margin: 0;
+}
+
+/* the host wraps flags + image block: relative so the chip lands inside the
+   image box and takes no flow space */
+.urumi-flags-host {
+	position: relative;
+	display: block;
 }
 
 .urumi-flag--sale { text-decoration: underline; }
@@ -787,9 +960,10 @@ ul.urumi-grid {
 	gap: 40px;
 	align-items: center;
 	width: 100%;
-	max-width: 1360px;
+	max-width: var(--urumi-container);
 	margin: 0 auto;
-	padding: clamp(56px, 8vw, 120px) clamp(16px, 3vw, 32px);
+	padding: clamp(56px, 8vw, 120px) var(--urumi-gutter);
+	box-sizing: border-box;
 	background: var(--urumi-surface-alt);
 }
 
@@ -891,7 +1065,8 @@ ul.urumi-grid {
 	justify-content: space-between;
 	border-top: 1px solid var(--urumi-hairline);
 	border-bottom: 1px solid var(--urumi-hairline);
-	padding: 4px 0;
+	padding: 4px var(--urumi-gutter);
+	box-sizing: border-box;
 	margin-bottom: 32px;
 }
 
@@ -899,36 +1074,6 @@ ul.urumi-grid {
 	font-family: "Hanken Grotesk Variable", sans-serif;
 	font-size: 13px;
 	color: var(--urumi-n3);
-}
-
-.urumi-collection .wc-block-layout {
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 28px 24px;
-}
-
-.urumi-collection .wc-block-layout > * { min-width: 0; }
-
-.urumi-collection .wp-block-post-title,
-.urumi-tile-name {
-	font-family: "Newsreader Variable", serif;
-	font-size: 16px;
-	font-weight: 500;
-	line-height: 1.35;
-	color: var(--urumi-ink);
-}
-
-.urumi-tile-name a { color: var(--urumi-ink); text-decoration: none; }
-.urumi-tile-name a:hover { text-decoration: underline; }
-
-.urumi-tile-desc {
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
-	font-weight: 400;
-	line-height: 1.35;
-	letter-spacing: 0.26px;
-	color: var(--urumi-n4);
-	margin: 4px 0 0;
 }
 
 /* pagination: plain text */
@@ -1491,8 +1636,8 @@ table.shop_table td.product-name,
 /* 404 + search */
 
 .urumi-404 {
-	padding: clamp(56px, 8vw, 120px) 16px;
-	max-width: 720px;
+	padding: clamp(56px, 8vw, 120px) var(--urumi-gutter);
+	max-width: var(--urumi-container);
 	margin: 0 auto;
 	text-align: left;
 }
@@ -1534,9 +1679,10 @@ table.shop_table td.product-name,
 }
 
 .urumi-footer {
-	max-width: 1360px;
+	max-width: var(--urumi-container);
 	margin: 0 auto;
-	padding: 0 clamp(16px, 3vw, 32px);
+	padding: 0 var(--urumi-gutter);
+	box-sizing: border-box;
 }
 
 .urumi-footer__cols {
@@ -1665,17 +1811,24 @@ select:disabled,
 	}
 }
 
-/* responsive grids: 4 / 3 / 2 columns */
+/* responsive grids: shop-family 4 / 3 / 2 (1440+, ~1024, 768 and below);
+   the related row keeps 4 on desktop and drops to 2 on tablet and mobile */
 
-@media (max-width: 1023px) {
-	ul.urumi-grid { grid-template-columns: repeat(3, 1fr); }
-	.urumi-collection .wc-block-layout { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 1439px) and (min-width: 769px) {
+	ul.urumi-grid,
+	.urumi-collection ul.wc-block-product-template,
+	main > .wp-block-query .wp-block-post-template { grid-template-columns: repeat(3, 1fr); }
 }
 
-@media (max-width: 767px) {
-	ul.urumi-grid { grid-template-columns: repeat(2, 1fr); gap: 24px 16px; }
-	.urumi-collection .wc-block-layout { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 768px) {
+	ul.urumi-grid,
+	.urumi-collection ul.wc-block-product-template,
+	main > .wp-block-query .wp-block-post-template { grid-template-columns: repeat(2, 1fr); gap: 24px 16px; }
 	.urumi-nav { gap: 16px; }
+}
+
+@media (max-width: 1023px) {
+	.urumi-related ul.urumi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* guards */
