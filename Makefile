@@ -105,7 +105,7 @@ verify-store:
 # issues on this machine, so we pipe the image straight into containerd).
 woo-mcp-image:
 	$(DOCKER) build -t urumi/woo-mcp:0.1.0 src/woo-mcp
-	$(DOCKER) save urumi/woo-mcp:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/woo-mcp:0.1.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/woo-mcp:0.1.0 into kind node"
 
 # Layer 2 verification: probes, MCP handshake + 6 tools, isolation, no public ingress.
@@ -122,12 +122,12 @@ verify-mcp:
 # Extra demo upstreams (Day 5-7 seeds): build + import into the kind node.
 demo-time-image:
 	$(DOCKER) build -t urumi/demo-mcp-time:0.1.0 src/demo-mcp-time
-	$(DOCKER) save urumi/demo-mcp-time:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/demo-mcp-time:0.1.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/demo-mcp-time:0.1.0 into kind node"
 
 demo-notes-image:
 	$(DOCKER) build -t urumi/demo-mcp-notes:0.1.0 src/demo-mcp-notes
-	$(DOCKER) save urumi/demo-mcp-notes:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/demo-mcp-notes:0.1.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/demo-mcp-notes:0.1.0 into kind node"
 
 demo-images: demo-time-image demo-notes-image
@@ -137,14 +137,14 @@ demo-images: demo-time-image demo-notes-image
 # the kind node; `make helm-local` (or a rollout restart) lands it.
 wordpress-image:
 	$(DOCKER) build -t urumi/wordpress:6.6-php8.2-apache-hardened src/wordpress
-	$(DOCKER) save urumi/wordpress:6.6-php8.2-apache-hardened | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/wordpress:6.6-php8.2-apache-hardened | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/wordpress:6.6-php8.2-apache-hardened into kind node"
 
 # Hardened wp-cli runner for the wp-setup hook job (ADR-043): upstream
 # wordpress:cli-php8.2 with /var/www/html owned by www-data, job runs as uid 33.
 wp-cli-image:
 	$(DOCKER) build -t urumi/wp-cli:cli-php8.2-hardened src/wp-cli
-	$(DOCKER) save urumi/wp-cli:cli-php8.2-hardened | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/wp-cli:cli-php8.2-hardened | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/wp-cli:cli-php8.2-hardened into kind node"
 
 # Static storefront assets (theme + catalog + images). Local Kind: build and
@@ -194,7 +194,7 @@ provisioner-image:
 	rm -rf src/provisioner/chart
 	cp -R helm/store src/provisioner/chart
 	$(DOCKER) build -t urumi/provisioner:0.1.0 src/provisioner
-	$(DOCKER) save urumi/provisioner:0.1.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/provisioner:0.1.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	rm -rf src/provisioner/chart
 	@echo "loaded urumi/provisioner:0.1.0 into kind node"
 
@@ -203,7 +203,7 @@ provisioner-image:
 # needs `make helm-local`; this is the content-change deploy path.
 landing-image:
 	$(DOCKER) build -t urumi/landing:0.2.0 src/landing
-	$(DOCKER) save urumi/landing:0.2.0 | docker exec -i urumi-control-plane ctr -n k8s.io images import -
+	$(DOCKER) save urumi/landing:0.2.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/landing:0.2.0 into kind node"
 	@echo "REMINDER: pods are NOT restarted by an import - restart with: kubectl rollout restart deployment/urumi-landing -n $(NAMESPACE)"
 
