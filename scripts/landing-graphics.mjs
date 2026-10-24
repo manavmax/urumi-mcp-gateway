@@ -98,6 +98,9 @@ window.__measure = (rootId) => {
   const widthPct = contentW > 0 ? (100 * rootW / contentW) : 0;
 
   const walker = (el) => {
+    // hidden subtrees (e.g. the other hero variant, hidden diagrams) render
+    // nothing and cannot be measured; skip them wholesale
+    if (getComputedStyle(el).display === "none") return;
     for (const child of el.children) walker(child);
     if (decor(el)) return;
     // text nodes owned by this element
@@ -130,10 +133,11 @@ window.__measure = (rootId) => {
         if (r < 3) problems.push("svg stroke contrast " + r.toFixed(2) + " < 3 on <" + tag + ">");
       }
       if (el.hasAttribute("data-ink")) {
-        const fill = parse(getComputedStyle(el).fill);
         const bgc = parse(getComputedStyle(el).backgroundColor);
+        const fill = parse(getComputedStyle(el).fill);
         const bg = effBg(el);
-        const col = (fill && fill[3] > 0.02) ? fill : bgc;
+        // HTML ink shapes colour their background; SVG ink shapes their fill
+        const col = (bgc && bgc[3] > 0.02) ? bgc : fill;
         if (col) {
           const cc = col[3] < 1 ? blend(col, col[3], bg) : col;
           const r = ratio(cc, bg);
@@ -248,8 +252,9 @@ for (const theme of THEMES) {
       if (m.problems.length) m.problems.forEach((p) => fail(`${caseName} ${fig.id}: ${p}`));
     }
     const measured = Object.values(caseReport.figs).filter(f => f.widthPct !== undefined);
-    if (measured.length && !measured.some(f => f.problems?.length))
-      ok(`${caseName}: ${measured.length} graphics measured, minText ${Math.min(...measured.filter(f => f.minText != null).map(f => f.minText)).toFixed(1)}px, widths ${measured.map(f => f.widthPct + "%").join(", ")}`);
+    const sizes = measured.filter(f => f.minText != null).map(f => f.minText);
+    if (measured.length && !measured.some(f => f.problems?.length) && sizes.length)
+      ok(`${caseName}: ${measured.length} graphics measured, minText ${Math.min(...sizes).toFixed(1)}px, widths ${measured.map(f => f.widthPct + "%").join(", ")}`);
 
     // 5a: horizontal overflow
     const overflow = await page.evaluate(() => {
@@ -287,10 +292,12 @@ for (const theme of THEMES) {
     if (linkState.empties.length) fail(`${caseName}: empty hrefs: ${linkState.empties.join(", ")}`);
     if (linkState.nonRepo.length) fail(`${caseName}: non-repo external links: ${linkState.nonRepo.join(", ")}`);
     // repo blob paths exist on main
-    const blobPaths = await page.evaluate(() =>
-      [...new Set([...document.querySelectorAll("a[href]")].map(a => a.getAttribute("href")))
-        .filter(h => h.includes("/blob/main/")).map(h => h.split("/blob/main/")[1])]
-    );
+    const blobPaths = await page.evaluate(() => {
+      const hrefs = [...document.querySelectorAll("a[href]")].map(a => a.getAttribute("href"));
+      return [...new Set(hrefs)]
+        .filter(h => h && h.includes("/blob/main/"))
+        .map(h => h.split("/blob/main/")[1]);
+    });
     const missingPaths = blobPaths.filter((p) => !repoTree.has(p));
     if (missingPaths.length) fail(`${caseName}: blob/main paths not on main: ${missingPaths.join(", ")}`);
     caseReport.checks.links = { anchors: linkState.anchors.length, empties: linkState.empties.length, blobPaths: blobPaths.length, missingPaths: missingPaths.length };
@@ -340,11 +347,12 @@ for (const theme of THEMES) {
           const res = await page.request.get(u);
           const n = (await res.body()).length;
           sizes.total += n;
-          if (u.endsWith(".css")) sizes.css += n;
-          else if (u.endsWith(".js")) sizes.js += n;
-          else if (u.endsWith(".svg") || u.endsWith(".png") || u.endsWith(".jpg") || u.endsWith(".ico")) sizes.images += n;
-          else if (u.endsWith(".woff2")) sizes.fonts += n;
-          else if (u.endsWith("/") || u.endsWith(".html")) sizes.html += n;
+          const path = u.split("?")[0];
+          if (path.endsWith(".css")) sizes.css += n;
+          else if (path.endsWith(".js")) sizes.js += n;
+          else if (path.endsWith(".svg") || path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".ico")) sizes.images += n;
+          else if (path.endsWith(".woff2")) sizes.fonts += n;
+          else if (path.endsWith("/") || path.endsWith(".html")) sizes.html += n;
           else sizes.other += n;
         } catch (e) {}
       }

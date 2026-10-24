@@ -669,8 +669,8 @@ html.nav-open { overflow: hidden; }
 .hv-title { font-size: 14px; font-weight: 500; fill: var(--ink); }
 .hv-sub { font-size: 11px; fill: var(--muted); }
 .hv-dot { fill: var(--accent); }
-.hv-up-empty rect { fill: none; stroke: var(--faint); stroke-dasharray: 4 4; }
-.hv-up-empty .hv-dot { fill: var(--faint); }
+.hv-up-empty rect { fill: none; stroke: var(--muted); stroke-dasharray: 4 4; }
+.hv-up-empty .hv-dot { fill: var(--muted); }
 .hv-up.flash rect { stroke: var(--accent-bright); }
 /* the tall hero variant renders at ~0.95 scale on a 390px screen; 13px user
    units keep its secondary text at 12px+ rendered, the mobile minimum */
@@ -833,7 +833,7 @@ html.nav-open { overflow: hidden; }
 .node rect { fill: var(--surface); stroke: var(--hairline-strong); transition: stroke var(--base) var(--soft); }
 .node-title { font-size: 15px; font-weight: 500; fill: var(--ink); text-anchor: middle; }
 .node-sub { font-size: 11px; fill: var(--muted); text-anchor: middle; font-family: var(--font-mono); }
-.badge { fill: var(--surface); stroke: var(--hairline-strong); transition: fill var(--base) var(--soft), stroke var(--base) var(--soft); }
+.badge { fill: var(--surface); stroke: var(--flow-line); transition: fill var(--base) var(--soft), stroke var(--base) var(--soft); }
 .badge-num { font-size: 12px; fill: var(--muted); text-anchor: middle; transition: fill var(--base) var(--soft); }
 .dpath { fill: none; stroke: var(--flow-line); stroke-width: 1.5; stroke-dasharray: 4 6; transition: stroke var(--base) var(--soft), opacity var(--base) var(--soft); }
 .dpath-back { opacity: 0.6; }
