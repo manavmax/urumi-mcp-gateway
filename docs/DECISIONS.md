@@ -1979,3 +1979,35 @@ lands the new content, per the Makefile comment).
 **Why.** The six banners are static files, so the one-image, one-file theme
 pattern (hero/editorial) extends with zero new seeding or REST surface; the
 idempotent seed contract stays untouched.
+
+## 2026-10-24: Store chart seeded to parity + a drift guard over both seed copies (ADR-084)
+
+**Decision.** The per-store chart (helm/store, baked into the provisioner
+image at /charts/store) had been frozen at the pre-store-v2 wp-setup since
+Phase 5 while the main chart got the whole v2 rewrite. A store provisioned with
+the frozen chart + the v2 catalog created all 29 products but assigned none:
+the old seed resolved a product's category by NAME while products.json
+references categories by SLUG, so the lookup was always empty and every
+product stayed in "Uncategorized" with count=0 collection pages (reproduced on
+kind before the fix; the /image-credits/ page also 404'd because the page and
+the photos-manifest copy were both missing). The fix copies the main chart's
+seed + storefront blocks into helm/store byte-for-byte: wp-setup.yaml and
+deployment-wordpress.yaml are now IDENTICAL between the two charts; every
+store-specific difference (hostnames, secrets, namespaces, quotas, resource
+requests) lives in values/other templates, untouched. A drift guard -
+scripts/check-store-chart-parity.py, wired into `make lint` (chart-parity
+target) and `make test` - extracts the seeding blocks from both charts,
+normalizes whitespace, and fails with a unified diff when they differ; the only
+escape hatch is an explicit ALLOWLIST in the script (empty today) for genuinely
+store-specific lines. How to update it is documented in the script docstring.
+
+**Why.** Duplicating the seed in two charts was accepted at Phase 5 because
+the provisioner image must carry its own chart and the main release must stay
+self-contained - but nothing checked the copies against each other, so v2
+work on the main chart silently bypassed the store chart and only surfaced on
+a live provisioned store. The guard makes any future divergence fail `make
+lint` instead of shipping. The later option remains the proper fix: extract the
+seed script and the store-assets copy into ONE shared file (helm library chart
+or a file rendered into both charts / baked into an image) so the duplication
+disappears; that touches the provisioner image build and both charts, so it is
+deliberately deferred, and until then this guard is the contract.
