@@ -79,23 +79,9 @@
       <h1 class="display">One MCP endpoint for your <em class="hl">whole team</em>.</h1>
       <p class="lead">Register your MCP servers once. Give every teammate a key. Their editor and the built-in chat get every tool, while the upstream credentials stay on the server.</p>
 
-      <div class="terminal" id="terminal">
-        <div class="term-head">
-          <span class="term-title">urumi · chat</span>
-          <span class="chip chip-sample">sample</span>
-        </div>
-        <p class="term-line"><span class="term-prompt" aria-hidden="true">›</span><span class="term-text" id="termText">What orders came in today?</span><span class="term-caret" aria-hidden="true"></span></p>
-        <p class="term-call" id="termCall">woo__list_orders&ensp;118&thinsp;ms&ensp;<span class="term-ok">ok</span></p>
-        <p class="term-answer" id="termAnswer">3 orders today, latest #1042 (processing).<br>Combined total 184.90 across the three.</p>
-      </div>
-
-      <div class="hero-actions">
-        <a class="btn btn-primary" data-link-dashboard href="#main">Open dashboard<span class="arrow" aria-hidden="true">→</span></a>
-        <a class="btn btn-secondary" data-repo href="#main" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-      </div>
-      <p class="hero-note">A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
-
-      <!-- Hero graphic: "the gateway prism". Original inline SVG artwork. -->
+      <!-- Hero graphic: "the gateway prism". Original inline SVG artwork.
+           Owner-decided hero order: heading, subtext, this flow graphic
+           (clients to /mcp to servers), the sample chat card, the buttons. -->
       <div class="hero-visual" id="heroVisual" role="img" aria-label="Diagram: an editor, a chat agent and a CLI send calls through the Urumi gateway, which routes them to the woo, time and notes MCP servers and a dashed placeholder for your own server. Teal packets travel to the gateway and on to the servers; violet packets return.">
         <div class="hv-glow" aria-hidden="true"></div>
         <div class="hv-dots" aria-hidden="true"></div>
@@ -202,8 +188,23 @@
           <g class="hv-up" id="hvT2"><rect x="120" y="546" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="564" r="3.5"/><text class="hv-title" x="154" y="569">notes</text><text class="hv-sub" x="136" y="586">3 tools</text></g>
           <g class="hv-up hv-up-empty" id="hvT3"><rect x="120" y="604" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="622" r="3.5"/><text class="hv-title" x="154" y="627">your server</text><text class="hv-sub" x="136" y="644">register it</text></g>
         </svg>
-        <div class="hv-fade" aria-hidden="true"></div>
       </div>
+
+      <div class="terminal" id="terminal">
+        <div class="term-head">
+          <span class="term-title">urumi · chat</span>
+          <span class="chip chip-sample">sample</span>
+        </div>
+        <p class="term-line"><span class="term-prompt" aria-hidden="true">›</span><span class="term-text" id="termText">What orders came in today?</span><span class="term-caret" aria-hidden="true"></span></p>
+        <p class="term-call" id="termCall">woo__list_orders&ensp;118&thinsp;ms&ensp;<span class="term-ok">ok</span></p>
+        <p class="term-answer" id="termAnswer">3 orders today, latest #1042 (processing).<br>Combined total 184.90 across the three.</p>
+      </div>
+
+      <div class="hero-actions">
+        <a class="btn btn-primary" data-link-dashboard href="#main">Open dashboard<span class="arrow" aria-hidden="true">→</span></a>
+        <a class="btn btn-secondary" data-repo href="#main" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+      </div>
+      <p class="hero-note">A take-home project built for the Urumi AI FDE internship, not a product of Urumi.</p>
     </section>
 
     <!-- 4. Built with -->
