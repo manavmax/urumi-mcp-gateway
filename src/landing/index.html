@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Urumi Gateway — one MCP endpoint for your whole team</title>
+  <title>Urumi Gateway - one MCP endpoint for your whole team</title>
   <meta name="description" content="One MCP endpoint for a whole team: register MCP servers once, give every teammate a key, keep upstream credentials on the server. A take-home project built for the Urumi AI FDE internship, not a product of Urumi.">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/dm-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <script src="/theme-init.js"></script>
-  <!-- ?v=2: one-time cache-bust; browsers holding the old 7-day-public
-       styles.css never revalidate on their own (nginx now sends no-cache). -->
-  <link rel="stylesheet" href="/styles.css?v=2">
+  <!-- ?v=3: cache-bust for the band-art removal + new band figures; browsers
+       holding the old styles.css never revalidate on their own without it. -->
+  <link rel="stylesheet" href="/styles.css?v=3">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -230,32 +230,6 @@
           <h2>Connect, control, run.</h2>
           <p>Three jobs, one deployment. Everything below is running in the demo now.</p>
         </header>
-        <!-- Band art (decorative): clients reach one gateway URL; the gateway
-             checks keys and hands namespaced tools to the MCP servers. -->
-        <div class="band-art" data-io aria-hidden="true">
-          <svg viewBox="0 0 360 120" focusable="false">
-            <rect class="ba-box" x="8" y="42" width="56" height="30" rx="6"/>
-            <circle class="ba-dot" cx="20" cy="57" r="2.5"/>
-            <text class="ba-label" x="36" y="92" text-anchor="middle">clients</text>
-            <path class="ba-line ba-dash" d="M64 57 H98"/>
-            <path class="ba-solid" d="M94 52 l6 5 l-6 5"/>
-            <text class="ba-label" x="81" y="48" text-anchor="middle">one URL</text>
-            <path class="ba-gate" d="M150 16 L198 38 V82 L150 104 L102 82 V38 Z"/>
-            <circle class="ba-acc" cx="150" cy="52" r="6"/>
-            <path class="ba-acc" d="M145 57.5 L155 57.5 L152 72 L148 72 Z"/>
-            <text class="ba-label-acc" x="150" y="114" text-anchor="middle">gateway</text>
-            <path class="ba-line ba-dash" d="M198 60 H232"/>
-            <path class="ba-solid" d="M228 55 l6 5 l-6 5"/>
-            <text class="ba-label" x="215" y="51" text-anchor="middle">tools</text>
-            <rect class="ba-box" x="238" y="30" width="62" height="20" rx="5"/>
-            <rect class="ba-box" x="238" y="58" width="62" height="20" rx="5"/>
-            <rect class="ba-box" x="238" y="86" width="62" height="20" rx="5"/>
-            <circle class="ba-dot" cx="249" cy="40" r="2.5"/>
-            <circle class="ba-dot" cx="249" cy="68" r="2.5"/>
-            <circle class="ba-dot" cx="249" cy="96" r="2.5"/>
-            <text class="ba-label" x="269" y="114" text-anchor="middle">MCP servers</text>
-          </svg>
-        </div>
       </div>
       <div class="cols3">
         <article class="card" data-io data-spot>
@@ -381,26 +355,6 @@
           <h2>How a tool call travels</h2>
           <p>From the client to the store and back, every hop checked and written down.</p>
         </header>
-        <!-- Band art (decorative): the journey as a trace - a call goes out,
-             passes the gateway checks, and the result returns; the last hop
-             lands in the audit row. The full six-step version is below. -->
-        <div class="band-art" data-io aria-hidden="true">
-          <svg viewBox="0 0 360 120" focusable="false">
-            <path class="ba-line" d="M20 60 H340"/>
-            <path class="ba-travel" d="M20 60 H340" stroke-dasharray="14 306"/>
-            <path class="ba-vio ba-travel-ret" d="M340 78 L20 78" stroke-dasharray="8 312" opacity="0.7"/>
-            <circle class="ba-box" cx="20" cy="60" r="5"/>
-            <path class="ba-check" d="M84 51 L93 60 L84 69 L75 60 Z"/>
-            <circle class="ba-box" cx="148" cy="60" r="5"/>
-            <circle class="ba-box" cx="212" cy="60" r="5"/>
-            <circle class="ba-box" cx="276" cy="60" r="5"/>
-            <circle class="ba-box" cx="340" cy="60" r="5"/>
-            <text class="ba-label" x="20" y="100" text-anchor="middle">client</text>
-            <text class="ba-label-acc" x="84" y="100" text-anchor="middle">checks</text>
-            <text class="ba-label" x="340" y="100" text-anchor="middle">audit</text>
-            <text class="ba-label-vio" x="180" y="94" text-anchor="middle">result returns</text>
-          </svg>
-        </div>
       </div>
       <div class="tour-actions" data-io>
         <button class="pill" id="diagramReplay" type="button">Replay
@@ -521,44 +475,19 @@
             <li><strong>Restrict a tool</strong> and it is hidden and refused.</li>
           </ul>
           <p class="col-note">Admins do this from the dashboard; members see the change on their next call.</p>
-          <!-- Band art (decorative): the audit ledger the changes are written to. -->
-          <div class="band-art" data-io aria-hidden="true">
-            <svg viewBox="0 0 360 120" focusable="false">
-              <rect class="ba-box" x="10" y="14" width="340" height="24" rx="6"/>
-              <rect class="ba-box" x="10" y="48" width="340" height="24" rx="6"/>
-              <rect class="ba-box" x="10" y="82" width="340" height="24" rx="6"/>
-              <rect class="ba-caret ba-blink" x="20" y="20" width="2.5" height="12" rx="1"/>
-              <rect class="ba-tick" x="30" y="23.5" width="26" height="5" rx="2.5"/>
-              <rect class="ba-tick" x="68" y="23.5" width="150" height="5" rx="2.5"/>
-              <rect class="ba-tick" x="230" y="23.5" width="36" height="5" rx="2.5"/>
-              <rect class="ba-tick" x="278" y="23.5" width="26" height="5" rx="2.5"/>
-              <circle class="ba-ok" cx="330" cy="26" r="6"/>
-              <path class="ba-ok" d="M327 26 L329 28 L333.5 23.5"/>
-              <rect class="ba-tick" x="30" y="57.5" width="26" height="5" rx="2.5"/>
-              <rect class="ba-tick" x="68" y="57.5" width="196" height="5" rx="2.5"/>
-              <rect class="ba-tick" x="276" y="57.5" width="26" height="5" rx="2.5"/>
-              <circle class="ba-ok" cx="330" cy="60" r="6"/>
-              <path class="ba-ok" d="M327 60 L329 62 L333.5 57.5"/>
-              <rect class="ba-tick" x="30" y="91.5" width="26" height="5" rx="2.5"/>
-              <rect class="ba-tick" x="68" y="91.5" width="150" height="5" rx="2.5"/>
-              <rect class="ba-tick" x="230" y="91.5" width="36" height="5" rx="2.5"/>
-              <path class="ba-warn" d="M330 86.5 L336.5 98 L323.5 98 Z"/>
-              <circle class="ba-warnfill" cx="330" cy="93.5" r="1.2"/>
-            </svg>
-          </div>
         </div>
         <div class="col-panel" data-io>
           <div class="panel" data-spot>
             <div class="panel-head"><span class="panel-title">Audit log</span><span class="chip chip-sample">sample data</span></div>
             <div class="mock-scroll">
               <table class="mock-table">
-                <thead><tr><th scope="col">Time</th><th scope="col">User</th><th scope="col">Tool</th><th scope="col">Took</th><th scope="col">Outcome</th></tr></thead>
+                <thead><tr><th scope="col">Time</th><th scope="col">User</th><th scope="col">Server</th><th scope="col">Tool</th><th scope="col">Took</th><th scope="col">Outcome</th></tr></thead>
                 <tbody id="auditBody">
-                  <tr><td class="mono">14:02:11</td><td>alice</td><td class="mono">woo__list_orders</td><td class="mono">118 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
-                  <tr><td class="mono">14:01:54</td><td>bob</td><td class="mono">notes__search_notes</td><td class="mono">64 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
-                  <tr><td class="mono">14:01:02</td><td>bob</td><td class="mono">woo__update_order_status</td><td class="mono">—</td><td><span class="badge badge-warn">permission denied</span></td></tr>
-                  <tr><td class="mono">14:00:59</td><td>alice</td><td class="mono">time__convert_time</td><td class="mono">12 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
-                  <tr><td class="mono">14:00:31</td><td>bob</td><td class="mono">woo__get_order</td><td class="mono">210 ms</td><td><span class="badge badge-err">error</span></td></tr>
+                  <tr><td class="mono">14:02:11</td><td>alice</td><td class="mono">woo</td><td class="mono">woo__list_orders</td><td class="mono">118 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
+                  <tr><td class="mono">14:01:54</td><td>bob</td><td class="mono">notes</td><td class="mono">notes__search_notes</td><td class="mono">64 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
+                  <tr><td class="mono">14:01:02</td><td>bob</td><td class="mono">woo</td><td class="mono">woo__update_order_status</td><td class="mono">n/a</td><td><span class="badge badge-warn">permission denied</span></td></tr>
+                  <tr><td class="mono">14:00:59</td><td>alice</td><td class="mono">time</td><td class="mono">time__convert_time</td><td class="mono">12 ms</td><td><span class="badge badge-ok">ok</span></td></tr>
+                  <tr><td class="mono">14:00:31</td><td>bob</td><td class="mono">woo</td><td class="mono">woo__get_order</td><td class="mono">210 ms</td><td><span class="badge badge-err">error</span></td></tr>
                 </tbody>
               </table>
             </div>
@@ -604,30 +533,6 @@
           <h2>Public, private, and state.</h2>
           <p>One Helm chart deploys all three tiers; only the values file changes between laptop and VPS.</p>
         </header>
-        <!-- Band art (decorative): the three tiers on one wire, with live pods
-             on top of the private tier. -->
-        <div class="band-art" data-io aria-hidden="true">
-          <svg viewBox="0 0 360 120" focusable="false">
-            <path class="ba-solid" d="M12 88 H348"/>
-            <rect class="ba-box" x="14" y="42" width="92" height="46" rx="8"/>
-            <path class="ba-acc" d="M40 65 H80 M40 65 l6 -4 M40 65 l6 4 M80 65 l-6 -4 M80 65 l-6 4"/>
-            <text class="ba-label" x="60" y="108" text-anchor="middle">public</text>
-            <rect class="ba-box" x="134" y="42" width="92" height="46" rx="8"/>
-            <rect class="ba-acc" x="168" y="60" width="24" height="17" rx="3.5"/>
-            <path class="ba-acc" d="M173 60 v-5 a7 7 0 0 1 14 0 v5"/>
-            <text class="ba-label" x="180" y="108" text-anchor="middle">private</text>
-            <path class="ba-solid" d="M163 26 V42 M180 26 V42 M197 26 V42"/>
-            <rect class="ba-box" x="158" y="16" width="10" height="10" rx="2.5"/>
-            <rect class="ba-box" x="175" y="16" width="10" height="10" rx="2.5"/>
-            <rect class="ba-box" x="192" y="16" width="10" height="10" rx="2.5"/>
-            <circle class="ba-dot ba-pulse" cx="163" cy="21" r="2"/>
-            <circle class="ba-dot ba-pulse" cx="180" cy="21" r="2"/>
-            <circle class="ba-dot ba-pulse" cx="197" cy="21" r="2"/>
-            <path class="ba-box" d="M280 50 V81 a26 7 0 0 0 52 0 V50"/>
-            <ellipse class="ba-box" cx="306" cy="50" rx="26" ry="7"/>
-            <text class="ba-label" x="306" y="108" text-anchor="middle">state</text>
-          </svg>
-        </div>
       </div>
       <div class="tiers" data-io>
         <div class="tier-line" aria-hidden="true"></div>
@@ -714,20 +619,6 @@
           <h2>From the design notes</h2>
           <p>Statements from this project's own docs, linked to their source. Not testimonials; nobody said these but the docs.</p>
         </header>
-        <!-- Band art (decorative): a passage pulled from the docs, with the
-             chain-link to its source. -->
-        <div class="band-art" data-io aria-hidden="true">
-          <svg viewBox="0 0 360 120" focusable="false">
-            <rect class="ba-quote" x="14" y="28" width="13" height="30" rx="6.5" transform="rotate(-12 20.5 43)"/>
-            <rect class="ba-quote" x="33" y="28" width="13" height="30" rx="6.5" transform="rotate(-12 39.5 43)"/>
-            <rect class="ba-tick" x="62" y="30" width="210" height="7" rx="3.5"/>
-            <rect class="ba-mark" x="62" y="52" width="252" height="7" rx="3.5" opacity="0.6"/>
-            <rect class="ba-tick" x="62" y="74" width="160" height="7" rx="3.5"/>
-            <rect class="ba-solid" x="234" y="70" width="16" height="12" rx="6"/>
-            <rect class="ba-solid" x="246" y="70" width="16" height="12" rx="6"/>
-            <rect class="ba-tick" x="62" y="96" width="110" height="3.5" rx="1.75" opacity="0.7"/>
-          </svg>
-        </div>
       </div>
       <div class="cols3 notes-grid">
         <blockquote class="card note-card" data-io data-spot>
@@ -779,23 +670,6 @@
           <h2>Beyond the brief</h2>
           <p>Ideas queued past the assignment. Each ships switched off in <code>src/landing/features.js</code> and appears here only when it actually lands in the demo.</p>
         </header>
-        <!-- Band art (decorative): the queue - items ship switched off. -->
-        <div class="band-art" data-io aria-hidden="true">
-          <svg viewBox="0 0 360 120" focusable="false">
-            <path class="ba-line" d="M20 70 H320"/>
-            <path class="ba-solid" d="M320 64 l8 6 l-8 6"/>
-            <rect class="ba-tick" x="66" y="38" width="30" height="4" rx="2"/>
-            <rect class="ba-tick" x="156" y="38" width="30" height="4" rx="2"/>
-            <rect class="ba-tick" x="246" y="38" width="30" height="4" rx="2"/>
-            <rect class="ba-solid" x="56" y="58" width="50" height="24" rx="12"/>
-            <rect class="ba-solid" x="146" y="58" width="50" height="24" rx="12"/>
-            <rect class="ba-solid" x="236" y="58" width="50" height="24" rx="12"/>
-            <circle class="ba-knob" cx="69" cy="70" r="8"/>
-            <circle class="ba-knob" cx="159" cy="70" r="8"/>
-            <circle class="ba-dot" cx="249" cy="70" r="8"/>
-            <text class="ba-label-acc" x="261" y="100" text-anchor="middle">next up</text>
-          </svg>
-        </div>
       </div>
       <div class="cols3" id="beyond-list"></div>
     </section>
