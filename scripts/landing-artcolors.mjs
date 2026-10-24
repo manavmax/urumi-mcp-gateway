@@ -1,4 +1,4 @@
-// Colour-presence audit for band-art QA clips: does each strip contain teal
+// Colour-presence audit for band-figure QA clips: does each figure contain teal
 // (accent), violet, warn and ink strokes as designed? Prints per-clip counts.
 import { createRequire } from "node:module";
 import { readdirSync, readFileSync } from "node:fs";
@@ -8,7 +8,7 @@ const { chromium } = require("../src/dashboard/node_modules/playwright-core");
 const DIR = "artifacts/landing/qa";
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
-for (const f of readdirSync(DIR).filter((n) => n.startsWith("art-") && n.endsWith(".png")).sort()) {
+for (const f of readdirSync(DIR).filter((n) => n.startsWith("fig-") && n.endsWith(".png")).sort()) {
   const b64 = readFileSync(join(DIR, f)).toString("base64");
   const out = await page.evaluate(async (b64) => {
     const img = new Image();

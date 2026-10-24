@@ -47,6 +47,9 @@
   --on-accent: #04100E;
   /* text on accent-deep fills (chips, tabs, step numbers) */
   --on-deep: #5EEAD4;
+  /* secondary text on accent-deep fills: ~82% on-deep blended over the deep
+     fill, precomputed as a solid colour so contrast stays measurable */
+  --on-deep-soft: #4FCAB8;
   --violet: #A78BFA;
   --violet-deep: #2A2250;
   --danger: #FF5B5B;
@@ -104,6 +107,7 @@
   --accent-deep: #0B3B36;
   --on-accent: #FFFFFF;
   --on-deep: #99F6E4;
+  --on-deep-soft: #7FD5C5;
   --violet: #6D28D9;
   --violet-deep: #E5DDF7;
   --danger: #B3261E;
@@ -213,7 +217,7 @@ pre code { background: none; padding: 0; }
    --flow-line and the status colours. No animation: calm and editorial. */
 .fig { margin: 0; }
 .band-fig { margin-bottom: clamp(32px, 5vw, 56px); }
-.col-fig { margin-top: var(--s-lg); }
+.two-col + .fig { margin-top: clamp(28px, 4vw, 48px); }
 .fig-canvas {
   background: var(--surface); border: 1px solid var(--hairline);
   border-radius: var(--r-lg); box-shadow: var(--shadow-micro);
@@ -285,7 +289,7 @@ pre code { background: none; padding: 0; }
   letter-spacing: 0.36px;
 }
 .lc-gwname { font-size: 13.5px; font-weight: 500; color: var(--on-deep); }
-.lc-gwsub { font-size: 13px; line-height: 1.4; color: var(--on-deep); opacity: 0.82; }
+.lc-gwsub { font-size: 13px; line-height: 1.4; color: var(--on-deep-soft); }
 .lc-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 7px; }
 .lc-chips li {
   font-family: var(--font-mono); font-size: 13px; color: var(--body);

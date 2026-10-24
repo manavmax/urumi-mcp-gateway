@@ -60,17 +60,18 @@ for (const size of [{ name: "desktop", width: 1440, height: 900 }, { name: "mobi
       try { await loc.screenshot({ path: clip }); produced.push(clip); }
       catch (e) { console.log("clip failed:", s.id, e.message.split("\n")[0]); }
     }
-    // QA clips of each VISIBLE band-art strip (did the art actually paint?)
-    const artCount = await page.locator(".band-art").count();
-    for (let i = 0; i < artCount; i++) {
-      const art = page.locator(".band-art").nth(i);
-      if (!(await art.isVisible())) continue;
-      const clip = join(OUT, "qa", `art-${i}-${size.name}-${theme}.png`);
-      try { await art.screenshot({ path: clip }); produced.push(clip); }
-      catch (e) { console.log("art clip failed:", i, e.message.split("\n")[0]); }
+    // QA clips of each VISIBLE band figure (did the graphic actually paint?)
+    const figs = await page.locator(".fig-canvas").count();
+    for (let i = 0; i < figs; i++) {
+      const fig = page.locator(".fig-canvas").nth(i);
+      if (!(await fig.isVisible())) continue;
+      const fid = await fig.evaluate((el) => el.closest("figure")?.id || `fig${i}`);
+      const clip = join(OUT, "qa", `fig-${fid}-${size.name}-${theme}.png`);
+      try { await fig.screenshot({ path: clip }); produced.push(clip); }
+      catch (e) { console.log("fig clip failed:", fid, e.message.split("\n")[0]); }
     }
     await ctx.close();
-    console.log(`${size.name}-${theme}: full page + ${sections.filter(s => s.visible).length} clips + ${artCount} art clips`);
+    console.log(`${size.name}-${theme}: full page + ${sections.filter(s => s.visible).length} clips + ${figs} fig clips`);
   }
 }
 

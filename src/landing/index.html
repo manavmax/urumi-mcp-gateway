@@ -137,25 +137,25 @@
 
             <g class="hv-up" id="hvU0">
               <rect x="800" y="48" width="180" height="76" rx="10"/>
-              <circle class="hv-dot" cx="822" cy="70" r="4"/>
+              <circle class="hv-dot" data-ink="" cx="822" cy="70" r="4"/>
               <text class="hv-title" x="838" y="75">woo</text>
               <text class="hv-sub" x="816" y="102">8 tools · WooCommerce</text>
             </g>
             <g class="hv-up" id="hvU1">
               <rect x="800" y="168" width="180" height="76" rx="10"/>
-              <circle class="hv-dot" cx="822" cy="190" r="4"/>
+              <circle class="hv-dot" data-ink="" cx="822" cy="190" r="4"/>
               <text class="hv-title" x="838" y="195">time</text>
               <text class="hv-sub" x="816" y="222">2 tools</text>
             </g>
             <g class="hv-up" id="hvU2">
               <rect x="800" y="288" width="180" height="76" rx="10"/>
-              <circle class="hv-dot" cx="822" cy="310" r="4"/>
+              <circle class="hv-dot" data-ink="" cx="822" cy="310" r="4"/>
               <text class="hv-title" x="838" y="315">notes</text>
               <text class="hv-sub" x="816" y="342">3 tools</text>
             </g>
             <g class="hv-up hv-up-empty" id="hvU3">
               <rect x="800" y="408" width="180" height="76" rx="10"/>
-              <circle class="hv-dot" cx="822" cy="430" r="4"/>
+              <circle class="hv-dot" data-ink="" cx="822" cy="430" r="4"/>
               <text class="hv-title" x="838" y="435">your server</text>
               <text class="hv-sub" x="816" y="462">register it in the dashboard</text>
             </g>
@@ -185,10 +185,10 @@
             <text class="hv-hub-label" x="180" y="342">/mcp</text>
             <text class="hv-hub-sub" x="180" y="366">gateway</text>
           </g>
-          <g class="hv-up" id="hvT0"><rect x="120" y="430" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="448" r="3.5"/><text class="hv-title" x="154" y="453">woo</text><text class="hv-sub" x="136" y="470">8 tools</text></g>
-          <g class="hv-up" id="hvT1"><rect x="120" y="488" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="506" r="3.5"/><text class="hv-title" x="154" y="511">time</text><text class="hv-sub" x="136" y="528">2 tools</text></g>
-          <g class="hv-up" id="hvT2"><rect x="120" y="546" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="564" r="3.5"/><text class="hv-title" x="154" y="569">notes</text><text class="hv-sub" x="136" y="586">3 tools</text></g>
-          <g class="hv-up hv-up-empty" id="hvT3"><rect x="120" y="604" width="220" height="48" rx="10"/><circle class="hv-dot" cx="140" cy="622" r="3.5"/><text class="hv-title" x="154" y="627">your server</text><text class="hv-sub" x="136" y="644">register it</text></g>
+          <g class="hv-up" id="hvT0"><rect x="120" y="430" width="220" height="48" rx="10"/><circle class="hv-dot" data-ink="" cx="140" cy="448" r="3.5"/><text class="hv-title" x="154" y="453">woo</text><text class="hv-sub" x="136" y="470">8 tools</text></g>
+          <g class="hv-up" id="hvT1"><rect x="120" y="488" width="220" height="48" rx="10"/><circle class="hv-dot" data-ink="" cx="140" cy="506" r="3.5"/><text class="hv-title" x="154" y="511">time</text><text class="hv-sub" x="136" y="528">2 tools</text></g>
+          <g class="hv-up" id="hvT2"><rect x="120" y="546" width="220" height="48" rx="10"/><circle class="hv-dot" data-ink="" cx="140" cy="564" r="3.5"/><text class="hv-title" x="154" y="569">notes</text><text class="hv-sub" x="136" y="586">3 tools</text></g>
+          <g class="hv-up hv-up-empty" id="hvT3"><rect x="120" y="604" width="220" height="48" rx="10"/><circle class="hv-dot" data-ink="" cx="140" cy="622" r="3.5"/><text class="hv-title" x="154" y="627">your server</text><text class="hv-sub" x="136" y="644">register it</text></g>
         </svg>
       </div>
 
@@ -556,27 +556,6 @@
             <li><strong>Restrict a tool</strong> and it is hidden and refused.</li>
           </ul>
           <p class="col-note">Admins do this from the dashboard; members see the change on their next call.</p>
-          <!-- Audit-row anatomy figure: what the gateway really writes per call
-               (the AuditLog columns), and the privacy line that matters. -->
-          <figure class="fig col-fig" id="figAudit" data-io>
-            <div class="fig-canvas" role="img" aria-label="What one audit row keeps: the user, the server, the tool, the outcome and the duration. It never stores argument values or result bodies, so payloads stay off the record.">
-              <p class="fig-kicker">One row per call</p>
-              <p class="aa-lede">The audit row keeps:</p>
-              <ul class="aa-chips">
-                <li>user</li>
-                <li>server</li>
-                <li>tool</li>
-                <li>outcome</li>
-                <li>duration</li>
-              </ul>
-              <p class="aa-never">
-                <svg class="aa-x" viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
-                Argument values and result bodies: never stored.
-              </p>
-              <p class="aa-note">The row says who called what and what happened. The payload itself stays off the record, and a revoked key is on it too: the denial is audited.</p>
-            </div>
-            <figcaption class="fig-caption">Who, what, how long: and never the arguments.</figcaption>
-          </figure>
         </div>
         <div class="col-panel" data-io>
           <div class="panel" data-spot>
@@ -597,6 +576,31 @@
           </div>
         </div>
       </div>
+      <!-- Audit-row anatomy figure: what the gateway really writes per call
+           (the AuditLog columns), and the privacy line that matters. Full
+           width below the two columns so the graphic keeps a readable size. -->
+      <figure class="fig" id="figAudit" data-io>
+        <div class="fig-canvas" role="img" aria-label="What one audit row keeps: the user, the server, the tool, the outcome and the duration. It never stores argument values or result bodies, so payloads stay off the record.">
+          <div class="fig-head">
+            <span class="fig-kicker">One row per call</span>
+            <span class="fig-tag">the columns GET /api/audit returns</span>
+          </div>
+          <p class="aa-lede">The audit row keeps:</p>
+          <ul class="aa-chips">
+            <li>user</li>
+            <li>server</li>
+            <li>tool</li>
+            <li>outcome</li>
+            <li>duration</li>
+          </ul>
+          <p class="aa-never">
+            <svg class="aa-x" viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
+            Argument values and result bodies: never stored.
+          </p>
+          <p class="aa-note">The row says who called what and what happened. The payload itself stays off the record, and a revoked key is on it too: the denial is audited.</p>
+        </div>
+        <figcaption class="fig-caption">Who, what, how long: and never the arguments.</figcaption>
+      </figure>
     </section>
 
     <!-- 10. Fleet at a glance -->
