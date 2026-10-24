@@ -19,7 +19,11 @@
 			<!-- wp:post-title {"level":1,"className":"urumi-pdp__title","__woocommerceNamespace":"woocommerce/product-query/product-title"} /-->
 			<!-- wp:woocommerce/product-price {"isDescendentOfSingleProductTemplate":true,"className":"urumi-pdp__price"} /-->
 			<!-- wp:post-excerpt {"__woocommerceNamespace":"woocommerce/product-query/product-summary","excerptLength":100,"className":"urumi-pdp__excerpt"} /-->
-			<!-- wp:woocommerce/add-to-cart-form {"className":"urumi-pdp__form"} /-->
+			<!-- wp:group {"anchor":"urumi-pdp-form","className":"urumi-pdp__form-wrap"} -->
+			<div id="urumi-pdp-form" class="wp-block-group urumi-pdp__form-wrap">
+				<!-- wp:woocommerce/add-to-cart-form {"className":"urumi-pdp__form"} /-->
+			</div>
+			<!-- /wp:group -->
 			<!-- wp:urumi-store/product-meta /-->
 		</div>
 		<!-- /wp:column -->
@@ -48,7 +52,9 @@
 	</div>
 	<!-- /wp:columns -->
 
-	<!-- wp:pattern {"slug":"woocommerce-blocks/related-products","align":"wide"} /-->
+	<!-- wp:urumi-store/related {"align":"wide"} /-->
+
+	<!-- wp:urumi-store/sticky-atc /-->
 </main>
 <!-- /wp:group -->
 

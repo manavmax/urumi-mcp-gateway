@@ -3,32 +3,20 @@
 	<!-- wp:group {"className":"urumi-nav","layout":{"type":"constrained"}} -->
 	<div class="wp-block-group urumi-nav">
 		<!-- wp:html -->
-		<a class="urumi-nav__logo" href="/" aria-label="Loam &amp; Ember home">
-			<span class="urumi-nav__logo-word">Loam &amp; Ember</span>
+		<a class="urumi-nav__logo" href="/" aria-label="Loam & Ember home">
+			<span class="urumi-nav__logo-word">Loam & Ember</span>
 		</a>
+		<!-- /wp:html -->
 
-		<nav class="urumi-nav__links" aria-label="Primary">
-			<a href="/shop/">Shop</a>
-			<details class="urumi-nav__dropdown">
-				<summary>Collections</summary>
-				<div class="urumi-nav__dropdown-menu">
-					<a href="/product-category/ceramics/">Ceramics</a>
-					<a href="/product-category/textiles/">Textiles</a>
-					<a href="/product-category/candles-care/">Candles &amp; Care</a>
-					<a href="/product-category/desk-paper/">Desk &amp; Paper</a>
-					<a href="/product-category/kitchen/">Kitchen</a>
-					<a href="/product-category/carry/">Carry</a>
-				</div>
-			</details>
-			<a href="/about/">About</a>
-			<a href="/shipping-and-returns/">Shipping</a>
-		</nav>
+		<!-- wp:urumi-store/category-nav /-->
 
+		<!-- wp:html -->
 		<div class="urumi-nav__actions">
 			<form class="urumi-nav__search" role="search" method="get" action="/">
 				<label class="urumi-search-label" for="urumi-search-input">Search products</label>
-				<input id="urumi-search-input" type="search" name="s" value="" placeholder="Search" autocomplete="off" />
+				<input id="urumi-search-input" class="urumi-search-input" type="search" name="s" value="" placeholder="Search the shop" autocomplete="off" />
 				<input type="hidden" name="post_type" value="product" />
+				<button class="urumi-nav__search-submit" type="submit">Search</button>
 			</form>
 			<a class="urumi-nav__icon urumi-nav__account" href="/my-account/">Account</a>
 		</div>
@@ -45,18 +33,15 @@
 		<nav class="urumi-menu-overlay" aria-label="Menu">
 			<form class="urumi-menu-overlay__search" role="search" method="get" action="/">
 				<label class="urumi-search-label" for="urumi-search-input-mobile">Search products</label>
-				<input id="urumi-search-input-mobile" type="search" name="s" value="" placeholder="Search the shop" autocomplete="off" />
+				<input id="urumi-search-input-mobile" class="urumi-search-input" type="search" name="s" value="" placeholder="Search the shop" autocomplete="off" />
 				<input type="hidden" name="post_type" value="product" />
+				<button class="urumi-nav__search-submit" type="submit">Search</button>
 			</form>
-			<a href="/shop/">Shop</a>
-			<a href="/product-category/ceramics/">Ceramics</a>
-			<a href="/product-category/textiles/">Textiles</a>
-			<a href="/product-category/candles-care/">Candles &amp; Care</a>
-			<a href="/product-category/desk-paper/">Desk &amp; Paper</a>
-			<a href="/product-category/kitchen/">Kitchen</a>
-			<a href="/product-category/carry/">Carry</a>
-			<a href="/about/">About</a>
-			<a href="/shipping-and-returns/">Shipping and returns</a>
+		<!-- /wp:html -->
+
+		<!-- wp:urumi-store/category-nav {"variant":"overlay"} /-->
+
+		<!-- wp:html -->
 		</nav>
 		<!-- /wp:html -->
 	</div>

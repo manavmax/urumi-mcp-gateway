@@ -150,9 +150,11 @@ function urumi_store_menus_and_sizes() {
 }
 
 /**
- * Enqueue the theme stylesheet. The block theme's theme.json handles the base
- * styles; assets/styles.css carries everything blocks cannot express (nav,
- * hero overlay, tile hover, block cart/checkout restyle, focus, motion).
+ * Enqueue the theme stylesheet and the small vanilla JS for the storefront
+ * (search suggestions, mobile sticky add-to-cart, filter form guards). The
+ * block theme's theme.json handles the base styles; assets/styles.css carries
+ * everything blocks cannot express (nav, hero overlay, tile hover, block
+ * cart/checkout restyle, focus, motion).
  */
 function urumi_store_enqueue() {
 	wp_enqueue_style(
@@ -161,8 +163,92 @@ function urumi_store_enqueue() {
 		array(),
 		URUMI_STORE_VERSION
 	);
+	wp_enqueue_script(
+		'urumi-store-js',
+		get_stylesheet_directory_uri() . '/assets/store.js',
+		array(),
+		URUMI_STORE_VERSION,
+		true
+	);
 }
 add_action( 'wp_enqueue_scripts', 'urumi_store_enqueue' );
+
+/**
+ * Cart and checkout blocks (mini-cart drawer, block cart, block checkout) read
+ * their data from the Store API, and every URL generated inside /wp-json/ uses
+ * https because the urumi-internal-rest mu-plugin marks REST requests as SSL
+ * (so in-cluster Basic auth works over plain HTTP). When the request itself
+ * arrived over plain HTTP through the ingress, that makes product thumbnails
+ * and other links in the JSON unusable in the browser (no TLS on the local
+ * ingress). Rewrite same-host https URLs to http for those responses only;
+ * production (TLS) and in-cluster callers (no forwarded proto) are untouched.
+ */
+function urumi_store_rest_scheme_walk( &$data, $host ) {
+	if ( is_string( $data ) ) {
+		$from = 'https://' . $host;
+		$to = 'http://' . $host;
+		if ( 0 === strpos( $data, $from ) ) {
+			$data = substr_replace( $data, $to, 0, strlen( $from ) );
+		}
+		return;
+	}
+	if ( is_array( $data ) ) {
+		foreach ( $data as &$value ) {
+			urumi_store_rest_scheme_walk( $value, $host );
+		}
+		return;
+	}
+	if ( is_object( $data ) ) {
+		foreach ( $data as $key => $value ) {
+			urumi_store_rest_scheme_walk( $data->$key, $host );
+		}
+	}
+}
+
+function urumi_store_rest_scheme( $result, $request, $server ) {
+	$proto = isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) ? strtolower( strtok( (string) wp_unslash( $_SERVER['HTTP_X_FORWARDED_PROTO'] ), ',' ) ) : '';
+	if ( 'http' !== $proto || empty( $result ) ) {
+		return $result;
+	}
+	$host = wp_parse_url( home_url(), PHP_URL_HOST );
+	if ( ! $host ) {
+		return $result;
+	}
+	urumi_store_rest_scheme_walk( $result, $host );
+	return $result;
+}
+add_filter( 'rest_pre_echo_response', 'urumi_store_rest_scheme', 10, 3 );
+
+/**
+ * Catalog sorting: keep only the honest options. Popularity (seeded sales
+ * figures) and rating (no reviews exist) would mislead; keep the shop order,
+ * newest and both price directions, with plain labels.
+ */
+function urumi_store_catalog_orderby( $options ) {
+	unset( $options['popularity'], $options['rating'] );
+	if ( isset( $options['date'] ) ) {
+		$options['date'] = __( 'Newest first', 'urumi-store' );
+	}
+	return $options;
+}
+add_filter( 'woocommerce_catalog_orderby', 'urumi_store_catalog_orderby' );
+
+/**
+ * Drop empty min_price/max_price arguments before WooCommerce reads them so
+ * the price filter form never narrows the grid to nothing when a field is
+ * submitted blank (Woo core treats an empty max_price as 0).
+ */
+function urumi_store_price_query_guard( $query ) {
+	if ( ! $query->is_main_query() ) {
+		return;
+	}
+	foreach ( array( 'min_price', 'max_price' ) as $key ) {
+		if ( isset( $_GET[ $key ] ) && '' === trim( (string) wp_unslash( $_GET[ $key ] ) ) ) {
+			unset( $_GET[ $key ] );
+		}
+	}
+}
+add_action( 'pre_get_posts', 'urumi_store_price_query_guard', 9 );
 
 /**
  * Preload the two fonts used above the fold on every page (serif display and
@@ -278,7 +364,7 @@ function urumi_store_image_url_safe( $file ) {
  * from the catalog's "hero" entry (set during photo curation); without it the
  * hero falls back to a taupe block so the page never breaks.
  */
-function urumi_store_hero_render() {
+function urumi_store_hero_render( $attributes ) {
 	$cat = urumi_store_catalog();
 	$hero = $cat['hero'] ?? array();
 	$headline = $hero['headline'] ?? 'Warm things for quiet rooms.';
@@ -286,7 +372,11 @@ function urumi_store_hero_render() {
 	$file = $hero['image'] ?? '';
 	$alt = $hero['alt'] ?? 'A quiet still life of ceramics and linen';
 
-	$out = '<section class="urumi-hero" aria-labelledby="urumi-hero-title">';
+	// The hero is a full-bleed photograph: carry the block's align attribute
+	// onto the wrapper so the constrained layout lets it span the viewport
+	// instead of capping it at the content width.
+	$cls = 'urumi-hero' . ( ( $attributes['align'] ?? '' ) === 'full' ? ' alignfull' : '' );
+	$out = '<section class="' . esc_attr( $cls ) . '" aria-labelledby="urumi-hero-title">';
 	$out .= '<div class="urumi-hero__media" aria-hidden="false">';
 	if ( $file && urumi_store_image_url( array( 'image' => $file ) ) && file_exists( urumi_store_data_dir() . '/images/' . $file ) ) {
 		$out .= '<img class="urumi-photo" src="' . esc_url( urumi_store_asset_url( 'images/' . $file ) ) . '" alt="' . esc_attr( $alt ) . '" fetchpriority="high" decoding="async" />';
@@ -313,7 +403,7 @@ register_block_type( 'urumi-store/hero', array(
  * (banner-<slug>.webp, set during photo curation); without it the archive
  * head renders exactly as before, so nothing breaks.
  */
-function urumi_store_category_banner_render() {
+function urumi_store_category_banner_render( $attributes ) {
 	if ( ! is_tax( 'product_cat' ) ) {
 		return '';
 	}
@@ -333,7 +423,10 @@ function urumi_store_category_banner_render() {
 	if ( '' === $file || ! file_exists( urumi_store_data_dir() . '/images/' . $file ) ) {
 		return '';
 	}
-	return '<div class="urumi-cat-banner" aria-hidden="false">'
+	// Full-bleed banner photograph, as the templates ask via the align
+	// attribute; without the class the constrained layout would inset it.
+	$cls = 'urumi-cat-banner' . ( ( $attributes['align'] ?? '' ) === 'full' ? ' alignfull' : '' );
+	return '<div class="' . esc_attr( $cls ) . '" aria-hidden="false">'
 		. '<img class="urumi-photo" src="' . esc_url( urumi_store_asset_url( 'images/' . $file ) ) . '"'
 		. ' alt="' . esc_attr( $alt ) . '" loading="eager" decoding="async" />'
 		. '</div>';
@@ -344,28 +437,29 @@ register_block_type( 'urumi-store/category-banner', array(
 
 /**
  * Category tiles: six photo tiles in a 3 by 2 grid (2 by 3 on mobile). Each is
- * the category's first product photo; the category name sits below in
- * label-caps. Without photos the tile is a beige block.
+ * the category's first product photo, taken from the sideloaded attachment so
+ * the 600px derivative ships through srcset (the full 1200px file would cost
+ * ~3x the bytes for a tile the grid renders at ~430px). Without an attachment
+ * the tile falls back to the raw catalog file, and without any photo to a
+ * beige block.
  */
 function urumi_store_categories_render() {
 	$json = urumi_store_catalog();
 	$cats = array();
 	foreach ( $json['categories'] ?? array() as $c ) {
 		$cats[ $c['slug'] ] = array(
-			'name' => $c['name'],
-			'count' => 0,
-			'img' => '',
-			'alt' => '',
+			'name'     => $c['name'],
+			'sku'      => '',
+			'img'      => '',
+			'alt'      => '',
 		);
 	}
 	foreach ( $json['products'] ?? array() as $p ) {
 		$slug = sanitize_title( $p['category'] ?? '' );
-		if ( isset( $cats[ $slug ] ) ) {
-			$cats[ $slug ]['count']++;
-			if ( '' === $cats[ $slug ]['img'] && isset( $p['image'] ) ) {
-				$cats[ $slug ]['img'] = $p['image'];
-				$cats[ $slug ]['alt'] = $p['alt'] ?? $p['name'];
-			}
+		if ( isset( $cats[ $slug ] ) && '' === $cats[ $slug ]['img'] && isset( $p['image'] ) ) {
+			$cats[ $slug ]['img'] = $p['image'];
+			$cats[ $slug ]['alt'] = $p['alt'] ?? $p['name'];
+			$cats[ $slug ]['sku'] = $p['sku'] ?? '';
 		}
 	}
 
@@ -375,9 +469,26 @@ function urumi_store_categories_render() {
 		if ( is_wp_error( $link ) ) {
 			$link = get_permalink( wc_get_page_id( 'shop' ) );
 		}
+		$img = '';
+		$product_id = $c['sku'] ? wc_get_product_id_by_sku( $c['sku'] ) : 0;
+		if ( $product_id ) {
+			$product = wc_get_product( $product_id );
+			$img_id = $product ? $product->get_image_id() : 0;
+			if ( $img_id ) {
+				$img = wp_get_attachment_image( $img_id, 'woocommerce_single', false, array(
+					'class'    => 'urumi-photo',
+					'loading'  => 'lazy',
+					'decoding' => 'async',
+					'sizes'    => '(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 430px',
+				) );
+			}
+		}
+		if ( '' === $img ) {
+			$img = urumi_store_photo_img( $c['img'], $c['alt'] ? $c['alt'] : $c['name'], 480, 600 );
+		}
 		$out .= '<a class="urumi-cat-tile" href="' . esc_url( $link ) . '" role="listitem">';
 		$out .= '<span class="urumi-cat-tile__media urumi-frame">';
-		$out .= urumi_store_photo_img( $c['img'], $c['alt'] ? $c['alt'] : $c['name'], 480, 600 );
+		$out .= $img;
 		$out .= '</span>';
 		$out .= '<span class="urumi-cat-tile__label">' . esc_html( $c['name'] ) . '</span>';
 		$out .= '</a>';
@@ -421,6 +532,11 @@ function urumi_store_tile( $product ) {
 			'loading' => 'lazy',
 			'decoding' => 'async',
 			'class' => 'urumi-photo',
+			// tiles render at ~286px on a 1280px container: without an exact
+			// sizes hint the browser assumes 100vw and pulls the 819px (or
+			// 960px) derivative for every tile, which pushed the home page
+			// over its 800KB weight cap
+			'sizes' => '(max-width: 767px) 46vw, (max-width: 1023px) 30vw, 286px',
 		) );
 	} else {
 		$img = '<span class="urumi-photo urumi-photo--empty" aria-hidden="true"></span>';
@@ -563,6 +679,409 @@ register_block_type( 'urumi-store/product-meta', array(
 ) );
 
 // ---------------------------------------------------------------------------
+// Navigation, filters and related products (shopping-flow polish)
+// ---------------------------------------------------------------------------
+
+/**
+ * Category links in the catalog's own order (ceramics first, carry last). The
+ * order comes from products.json so the nav matches the designed catalogue,
+ * not the alphabetical term order.
+ */
+function urumi_store_category_links() {
+	$links = array();
+	$catalog_slugs = array();
+	foreach ( urumi_store_catalog()['categories'] ?? array() as $c ) {
+		if ( ! empty( $c['slug'] ) ) {
+			$catalog_slugs[] = sanitize_title( $c['slug'] );
+		}
+	}
+	$by_slug = array();
+	$terms = get_terms( array(
+		'taxonomy'   => 'product_cat',
+		'hide_empty' => false,
+	) );
+	if ( is_wp_error( $terms ) ) {
+		return $links;
+	}
+	foreach ( $terms as $term ) {
+		// Dead terms from older seed runs (empty categories) never appear in
+		// the nav: a link must lead to products. A term is kept when it is in
+		// the current catalogue or still has published products.
+		if ( 'uncategorized' === $term->slug || $term->count < 1 ) {
+			continue;
+		}
+		$by_slug[ $term->slug ] = $term;
+	}
+	foreach ( $catalog_slugs as $slug ) {
+		if ( isset( $by_slug[ $slug ] ) ) {
+			$links[ $slug ] = array(
+				'name' => $by_slug[ $slug ]->name,
+				'url'  => get_term_link( $by_slug[ $slug ], 'product_cat' ),
+			);
+			unset( $by_slug[ $slug ] );
+		}
+	}
+	foreach ( $by_slug as $slug => $term ) {
+		$links[ $slug ] = array(
+			'name' => $term->name,
+			'url'  => get_term_link( $term, 'product_cat' ),
+		);
+	}
+	return $links;
+}
+
+/**
+ * Static page links for the nav (only when the page exists).
+ */
+function urumi_store_page_links() {
+	$out = array();
+	foreach ( array( 'about' => 'About', 'shipping-and-returns' => 'Shipping and returns' ) as $path => $label ) {
+		$page = get_page_by_path( $path );
+		if ( $page ) {
+			$out[] = array( 'name' => $label, 'url' => get_permalink( $page ) );
+		}
+	}
+	return $out;
+}
+
+/**
+ * Items of the theme-registered 'primary' menu, but only when every link
+ * still resolves (the seeded menu predates the current catalogue and carries
+ * dead category links; a stale menu is never shown - the taxonomy fallback
+ * is used instead). Custom-item URLs are checked against the live shop,
+ * categories, products and the static pages.
+ */
+function urumi_store_validated_menu_items() {
+	$locations = get_nav_menu_locations();
+	if ( empty( $locations['primary'] ) ) {
+		return null;
+	}
+	$menu = wp_get_nav_menu_object( $locations['primary'] );
+	if ( ! $menu ) {
+		return null;
+	}
+	$items = wp_get_nav_menu_items( $menu->term_id );
+	if ( ! $items ) {
+		return null;
+	}
+	$cat_slugs = array();
+	foreach ( urumi_store_category_links() as $slug => $link ) {
+		$cat_slugs[] = $slug;
+	}
+	$out = array();
+	foreach ( $items as $item ) {
+		$url = $item->url;
+		$ok = false;
+		if ( 0 === strpos( $url, home_url() ) ) {
+			$path = trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' );
+			if ( '' === $path || 'shop' === $path || 'cart' === $path || 'checkout' === $path || 'my-account' === $path ) {
+				$ok = true;
+			} elseif ( 0 === strpos( $path, 'product-category/' ) ) {
+				$ok = in_array( substr( $path, strlen( 'product-category/' ) ), $cat_slugs, true );
+			} elseif ( 0 === strpos( $path, 'product/' ) ) {
+				$ok = (bool) get_page_by_path( $path, OBJECT, 'product' );
+			} elseif ( in_array( $path, array( 'about', 'shipping-and-returns', 'image-credits', 'privacy-policy', 'terms' ), true ) ) {
+				$ok = (bool) get_page_by_path( $path );
+			}
+		}
+		if ( ! $ok ) {
+			return null;
+		}
+		$out[] = array( 'name' => $item->title, 'url' => $url );
+	}
+	return $out;
+}
+
+/**
+ * Category navigation block. Desktop: Shop, a Collections dropdown with the
+ * product categories, then the static pages. Overlay: a flat link list for
+ * the mobile menu. The theme-registered 'primary' menu is used when all of
+ * its links resolve; otherwise the nav is built from the live product
+ * categories, so it can never show a dead link.
+ */
+function urumi_store_category_nav_render( $attributes ) {
+	$variant = isset( $attributes['variant'] ) ? (string) $attributes['variant'] : 'desktop';
+	$shop = array( 'name' => 'Shop', 'url' => get_permalink( wc_get_page_id( 'shop' ) ) );
+
+	if ( 'pills' === $variant ) {
+		$current = '';
+		if ( is_tax( 'product_cat' ) ) {
+			$term = get_queried_object();
+			if ( $term && isset( $term->slug ) ) {
+				$current = $term->slug;
+			}
+		}
+		$out = '<div class="urumi-filter-pills" role="navigation" aria-label="Shop by category">';
+		$all_current = ( is_shop() && ! is_search() ) ? ' aria-current="page"' : '';
+		$out .= '<a class="urumi-pill urumi-pill--all"' . $all_current . ' data-cat="all" href="' . esc_url( $shop['url'] ) . '">All</a>';
+		foreach ( urumi_store_category_links() as $slug => $link ) {
+			$cur = ( $slug === $current ) ? ' aria-current="page"' : '';
+			$out .= '<a class="urumi-pill"' . $cur . ' data-cat="' . esc_attr( $slug ) . '" href="' . esc_url( $link['url'] ) . '">' . esc_html( $link['name'] ) . '</a>';
+		}
+		$out .= '</div>';
+		return $out;
+	}
+
+	if ( 'overlay' === $variant ) {
+		$out = '<a href="' . esc_url( $shop['url'] ) . '">Shop</a>';
+		foreach ( urumi_store_category_links() as $link ) {
+			$out .= '<a href="' . esc_url( $link['url'] ) . '">' . esc_html( $link['name'] ) . '</a>';
+		}
+		foreach ( urumi_store_page_links() as $link ) {
+			$out .= '<a href="' . esc_url( $link['url'] ) . '">' . esc_html( $link['name'] ) . '</a>';
+		}
+		return $out;
+	}
+
+	$menu_items = urumi_store_validated_menu_items();
+	if ( is_array( $menu_items ) ) {
+		$out = '<nav class="urumi-nav__links" aria-label="Primary">';
+		foreach ( $menu_items as $item ) {
+			$out .= '<a href="' . esc_url( $item['url'] ) . '">' . esc_html( $item['name'] ) . '</a>';
+		}
+		$out .= '</nav>';
+		return $out;
+	}
+
+	$out = '<nav class="urumi-nav__links" aria-label="Primary">';
+	$out .= '<a href="' . esc_url( $shop['url'] ) . '">Shop</a>';
+	$cats = urumi_store_category_links();
+	if ( $cats ) {
+		$out .= '<details class="urumi-nav__dropdown">';
+		$out .= '<summary>Collections</summary>';
+		$out .= '<div class="urumi-nav__dropdown-menu">';
+		foreach ( $cats as $link ) {
+			$out .= '<a href="' . esc_url( $link['url'] ) . '">' . esc_html( $link['name'] ) . '</a>';
+		}
+		$out .= '</div>';
+		$out .= '</details>';
+	}
+	foreach ( urumi_store_page_links() as $link ) {
+		$out .= '<a href="' . esc_url( $link['url'] ) . '">' . esc_html( $link['name'] ) . '</a>';
+	}
+	$out .= '</nav>';
+	return $out;
+}
+register_block_type( 'urumi-store/category-nav', array(
+	'render_callback' => 'urumi_store_category_nav_render',
+) );
+
+/**
+ * Catalogue price bounds (sale price wins), from products.json - the single
+ * source of truth for the demo catalogue.
+ */
+function urumi_store_price_bounds() {
+	$prices = array();
+	foreach ( urumi_store_products() as $p ) {
+		$price = isset( $p['sale_price'] ) && is_numeric( $p['sale_price'] ) && (float) $p['sale_price'] > 0 ? (float) $p['sale_price'] : ( ( isset( $p['price'] ) && is_numeric( $p['price'] ) ) ? (float) $p['price'] : 0 );
+		if ( $price > 0 ) {
+			$prices[] = $price;
+		}
+	}
+	if ( ! $prices ) {
+		return null;
+	}
+	return array( min( $prices ), max( $prices ) );
+}
+
+/**
+ * The current archive URL without filter query arguments, keeping the sort if
+ * one is active.
+ */
+function urumi_store_archive_base_url( $keep_orderby = true ) {
+	$url = '';
+	if ( is_product_taxonomy() ) {
+		$term = get_queried_object();
+		if ( $term && isset( $term->slug ) ) {
+			$url = get_term_link( $term, 'product_cat' );
+		}
+	}
+	if ( ! $url || is_wp_error( $url ) ) {
+		$url = get_permalink( wc_get_page_id( 'shop' ) );
+	}
+	if ( $keep_orderby && isset( $_GET['orderby'] ) && in_array( (string) wp_unslash( $_GET['orderby'] ), array( 'menu_order', 'date', 'price', 'price-desc' ), true ) ) {
+		$url = add_query_arg( 'orderby', (string) wp_unslash( $_GET['orderby'] ), $url );
+	}
+	return $url;
+}
+
+/**
+ * Price filter block: a compact GET form with min and max price fields, plus
+ * the catalogue's real price range as a hint. WooCommerce core applies
+ * min_price/max_price to the archive query, so this works with the
+ * product-collection block and needs no JavaScript to filter.
+ */
+function urumi_store_price_filter_render() {
+	if ( ! ( is_shop() || is_product_taxonomy() ) ) {
+		return '';
+	}
+	$bounds = urumi_store_price_bounds();
+	if ( ! $bounds ) {
+		return '';
+	}
+	$min = isset( $_GET['min_price'] ) && is_numeric( wp_unslash( $_GET['min_price'] ) ) ? (string) wp_unslash( $_GET['min_price'] ) : '';
+	$max = isset( $_GET['max_price'] ) && is_numeric( wp_unslash( $_GET['max_price'] ) ) ? (string) wp_unslash( $_GET['max_price'] ) : '';
+	$out = '<form class="urumi-price-filter" method="get" action="' . esc_url( urumi_store_archive_base_url() ) . '" data-urumi-price-filter>';
+	$out .= '<span class="urumi-price-filter__label" id="urumi-price-filter-label">Price $' . number_format( $bounds[0], 0 ) . '&ndash;$' . number_format( $bounds[1], 0 ) . '</span>';
+	$out .= '<span class="urumi-price-filter__fields">';
+	$out .= '<label class="urumi-search-label" for="urumi-min-price">Minimum price</label>';
+	$out .= '<input id="urumi-min-price" name="min_price" type="number" inputmode="numeric" min="0" step="1" placeholder="' . number_format( $bounds[0], 0 ) . '" value="' . esc_attr( $min ) . '" aria-describedby="urumi-price-filter-label" />';
+	$out .= '<label class="urumi-search-label" for="urumi-max-price">Maximum price</label>';
+	$out .= '<input id="urumi-max-price" name="max_price" type="number" inputmode="numeric" min="0" step="1" placeholder="' . number_format( $bounds[1], 0 ) . '" value="' . esc_attr( $max ) . '" aria-describedby="urumi-price-filter-label" />';
+	$out .= '<button class="urumi-btn urumi-btn--outline urumi-price-filter__apply" type="submit">Filter</button>';
+	$out .= '</span>';
+	$out .= '</form>';
+	return $out;
+}
+register_block_type( 'urumi-store/price-filter', array(
+	'render_callback' => 'urumi_store_price_filter_render',
+) );
+
+/**
+ * Active filter chips: one removable chip per active filter (category, price
+ * range, search term) so it is always clear why the grid shows what it shows.
+ * Renders nothing when no filter is active.
+ */
+function urumi_store_active_filters_render() {
+	$chips = array();
+	if ( is_product_taxonomy() ) {
+		$term = get_queried_object();
+		if ( $term && isset( $term->name ) ) {
+			$chips[] = array(
+				'label' => $term->name,
+				'url'   => urumi_store_archive_base_url(),
+			);
+		}
+	}
+	$min = isset( $_GET['min_price'] ) && is_numeric( wp_unslash( $_GET['min_price'] ) ) ? (float) wp_unslash( $_GET['min_price'] ) : null;
+	$max = isset( $_GET['max_price'] ) && is_numeric( wp_unslash( $_GET['max_price'] ) ) ? (float) wp_unslash( $_GET['max_price'] ) : null;
+	if ( null !== $min || null !== $max ) {
+		$label = 'Price ';
+		$label .= null !== $min ? '$' . number_format( $min, 0 ) : '';
+		$label .= ( null !== $min && null !== $max ) ? '&ndash;' : ( null !== $min ? '+' : ' up to ' );
+		$label .= null !== $max ? '$' . number_format( $max, 0 ) : '';
+		$url = urumi_store_archive_base_url();
+		$chips[] = array( 'label' => $label, 'url' => $url );
+	}
+	if ( is_search() ) {
+		$chips[] = array(
+			'label' => '&ldquo;' . esc_html( get_search_query() ) . '&rdquo;',
+			'url'   => get_permalink( wc_get_page_id( 'shop' ) ),
+		);
+	}
+	if ( ! $chips ) {
+		return '';
+	}
+	$out = '<div class="urumi-active-filters" role="list" aria-label="Active filters">';
+	foreach ( $chips as $chip ) {
+		$out .= '<a class="urumi-chip" role="listitem" href="' . esc_url( $chip['url'] ) . '">';
+		$out .= '<span class="urumi-chip__label">' . wp_kses( $chip['label'], array() ) . '</span>';
+		$out .= '<span class="urumi-chip__x" aria-hidden="true">&times;</span>';
+		$out .= '<span class="urumi-search-label">Remove filter ' . wp_strip_all_tags( $chip['label'] ) . '</span>';
+		$out .= '</a>';
+	}
+	if ( count( $chips ) > 1 ) {
+		$out .= '<a class="urumi-chip urumi-chip--clear" role="listitem" href="' . esc_url( urumi_store_archive_base_url( false ) ) . '">Clear all</a>';
+	}
+	$out .= '</div>';
+	return $out;
+}
+register_block_type( 'urumi-store/active-filters', array(
+	'render_callback' => 'urumi_store_active_filters_render',
+) );
+
+/**
+ * Related products from the same category as the current product, excluding
+ * the product itself. Four tiles (two on mobile) in the shared grid markup.
+ */
+function urumi_store_related_render() {
+	$product = wc_get_product( get_the_ID() );
+	if ( ! $product ) {
+		return '';
+	}
+	$terms = get_the_terms( $product->get_id(), 'product_cat' );
+	if ( ! $terms || is_wp_error( $terms ) ) {
+		return '';
+	}
+	$grid = urumi_store_render_grid( array(
+		'tax_query' => array(
+			array(
+				'taxonomy' => 'product_cat',
+				'field'    => 'term_id',
+				'terms'    => wp_list_pluck( $terms, 'term_id' ),
+			),
+		),
+		'post__not_in' => array( $product->get_id() ),
+		'orderby'      => 'title',
+		'order'        => 'ASC',
+	), 4 );
+	if ( '' === $grid ) {
+		return '';
+	}
+	$shop = get_permalink( wc_get_page_id( 'shop' ) );
+	$out = '<section class="urumi-related" aria-labelledby="urumi-related-title">';
+	$out .= '<div class="urumi-related__head"><h2 id="urumi-related-title" class="urumi-section-title">You may also like</h2>';
+	$out .= '<a class="urumi-btn-text" href="' . esc_url( $shop ) . '">View all</a></div>';
+	$out .= $grid;
+	$out .= '</section>';
+	return $out;
+}
+register_block_type( 'urumi-store/related', array(
+	'render_callback' => 'urumi_store_related_render',
+) );
+
+/**
+ * Sticky add-to-cart bar for mobile product pages: product name, price and a
+ * one-tap add (simple products) or a jump to the options form (variable or
+ * out-of-stock). The bar is hidden until the main add-to-cart form scrolls
+ * out of view; assets/store.js toggles it.
+ */
+function urumi_store_sticky_atc_render() {
+	if ( ! is_product() ) {
+		return '';
+	}
+	$product = wc_get_product( get_the_ID() );
+	if ( ! $product ) {
+		return '';
+	}
+	$id = $product->get_id();
+	$name = $product->get_name();
+	if ( $product->is_type( 'variable' ) ) {
+		$prices = $product->get_variation_prices( true );
+		$min = ! empty( $prices['price'] ) ? min( $prices['price'] ) : 0;
+		$price = '<span class="urumi-tile__from">from</span> ' . esc_html( urumi_store_format_price( $min ) );
+		$action = '<a class="urumi-btn urumi-btn--outline" href="#urumi-pdp-form">Choose options</a>';
+	} elseif ( $product->is_on_sale() && '' !== (string) $product->get_sale_price() ) {
+		$price = '<del aria-hidden="true">' . esc_html( urumi_store_format_price( $product->get_regular_price() ) ) . '</del> ' . esc_html( urumi_store_format_price( $product->get_sale_price() ) );
+		$action = urumi_store_sticky_atc_form( $id );
+	} else {
+		$price = esc_html( urumi_store_format_price( $product->get_price() ? $product->get_price() : $product->get_regular_price() ) );
+		$action = urumi_store_sticky_atc_form( $id );
+	}
+	if ( ! $product->is_in_stock() ) {
+		$price = esc_html( urumi_store_format_price( $product->get_regular_price() ) );
+		$action = '<a class="urumi-btn urumi-btn--outline" href="#urumi-pdp-form">View details</a>';
+	}
+	$out = '<div class="urumi-sticky-atc" data-urumi-sticky-atc hidden>';
+	$out .= '<span class="urumi-sticky-atc__name">' . esc_html( $name ) . '</span>';
+	$out .= '<span class="urumi-sticky-atc__price">' . $price . '</span>';
+	$out .= '<span class="urumi-sticky-atc__action">' . $action . '</span>';
+	$out .= '</div>';
+	return $out;
+}
+
+function urumi_store_sticky_atc_form( $id ) {
+	return '<form class="urumi-sticky-atc__form" method="get" action="' . esc_url( get_permalink( $id ) ) . '">'
+		. '<input type="hidden" name="add-to-cart" value="' . esc_attr( $id ) . '" />'
+		. '<input type="hidden" name="quantity" value="1" />'
+		. '<button class="urumi-btn urumi-btn--solid" type="submit">Add to cart</button>'
+		. '</form>';
+}
+register_block_type( 'urumi-store/sticky-atc', array(
+	'render_callback' => 'urumi_store_sticky_atc_render',
+) );
+
+// ---------------------------------------------------------------------------
 // Grid flags + PDP stock line (block filters)
 // ---------------------------------------------------------------------------
 
@@ -577,6 +1096,13 @@ function urumi_store_block_flags( $block_content, $block ) {
 	}
 	$product = wc_get_product( get_the_ID() );
 	$flags = $product ? urumi_store_tile_flags( $product ) : '';
+	// The theme renders its own overlaid flag chip, so WooCommerce's built-in
+	// sale badge (a second "Sale" label on the same image) is always removed.
+	$block_content = preg_replace(
+		'#<div class="wc-block-components-product-sale-badge[^"]*"[^>]*>.*?</div>#s',
+		'',
+		$block_content
+	);
 	if ( ! $flags ) {
 		return $block_content;
 	}

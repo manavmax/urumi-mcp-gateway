@@ -80,10 +80,35 @@ details:focus-visible,
 
 /* layout */
 
-body .is-layout-constrained > .alignwide,
-body .is-layout-constrained > .alignfull {
-	max-width: 1360px;
+/*
+ * ONE container for the whole storefront. Header content, breadcrumb, page
+ * title, category pills, toolbar, product grid, related products and footer
+ * all share the same max-width, the same horizontal gutter and therefore the
+ * same left and right edges, centered. Full-bleed sections (hero, category
+ * banner, the collections band) opt out via .alignfull and centre their own
+ * content with the same two tokens.
+ */
+:root {
+	--urumi-container: 1280px;
+	--urumi-gutter: clamp(16px, 3vw, 32px);
 }
+
+.urumi-nav,
+.urumi-footer,
+.urumi-hero__text,
+main > :not(.alignfull):not(.urumi-sticky-atc):not(.urumi-intro),
+.urumi-archive-head > *,
+.urumi-band--alt > .wp-block-group.alignwide {
+	max-width: var(--urumi-container);
+	margin-left: auto;
+	margin-right: auto;
+	padding-left: var(--urumi-gutter);
+	padding-right: var(--urumi-gutter);
+	box-sizing: border-box;
+}
+
+/* breathing room between the last section and the footer hairline */
+main { padding-bottom: clamp(32px, 4vw, 64px); }
 
 .urumi-section {
 	padding-top: clamp(56px, 8vw, 120px);
@@ -248,8 +273,9 @@ button.single_add_to_cart_button:hover,
 	gap: 32px;
 	min-height: 64px;
 	width: 100%;
-	max-width: 1360px;
-	padding: 0 clamp(16px, 3vw, 32px);
+	max-width: var(--urumi-container);
+	padding: 0 var(--urumi-gutter);
+	box-sizing: border-box;
 }
 
 .urumi-nav__logo {
@@ -261,6 +287,7 @@ button.single_add_to_cart_button:hover,
 	color: var(--urumi-ink);
 	margin-right: 16px;
 	white-space: nowrap;
+	flex: 0 0 auto;
 }
 
 .urumi-nav__links {
@@ -268,6 +295,7 @@ button.single_add_to_cart_button:hover,
 	align-items: center;
 	gap: 28px;
 	flex: 1;
+	min-width: 0;
 }
 
 .urumi-nav__links > a,
@@ -282,6 +310,7 @@ button.single_add_to_cart_button:hover,
 	min-height: 44px;
 	display: inline-flex;
 	align-items: center;
+	white-space: nowrap;
 }
 
 .urumi-nav__links > a:hover,
@@ -366,6 +395,14 @@ button.single_add_to_cart_button:hover,
 }
 
 .urumi-nav__icon:hover { color: var(--urumi-ink); text-decoration: underline; }
+
+/* narrow desktop: tighten gaps and the search width so one row always fits */
+@media (max-width: 1279px) and (min-width: 1024px) {
+	.urumi-nav { gap: 20px; }
+	.urumi-nav__links { gap: 20px; }
+	.urumi-nav__search .urumi-search-input { width: 150px; }
+	.urumi-nav__logo { margin-right: 4px; }
+}
 
 /* mini-cart: plain text */
 
@@ -511,9 +548,10 @@ body:has(.urumi-menu-toggle:checked) { overflow: hidden; }
 	position: relative;
 	z-index: 2;
 	width: 100%;
-	max-width: 1360px;
+	max-width: var(--urumi-container);
 	margin: 0 auto;
-	padding: clamp(24px, 4vw, 64px);
+	padding: clamp(24px, 4vw, 64px) var(--urumi-gutter);
+	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
@@ -661,24 +699,35 @@ a:hover .urumi-frame img,
 	.urumi-cat-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* product grid */
+/* product grid: shop, category, search results, related and home all share
+   one grid and one identical card structure (image, title, excerpt, price,
+   button) so every card in a row lines up. */
 
-ul.urumi-grid {
+ul.urumi-grid,
+.urumi-collection ul.wc-block-product-template,
+main > .wp-block-query .wp-block-post-template {
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
 	gap: 32px 24px;
 	list-style: none;
 	margin: 0;
 	padding: 0;
+	width: 100%;
 }
 
-.urumi-tile {
+/* every card: flex column so the price/button block pins to the card bottom
+   and all images in a row start at the same y regardless of text length */
+.urumi-tile,
+.urumi-collection .wc-block-product,
+main > .wp-block-query .wp-block-post-template > li {
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
+	position: relative;
 	background: transparent;
 	border: none;
 	border-radius: 0;
-	padding: 0;
+	padding: 0 0 12px;
 	box-shadow: none;
 	list-style: none;
 }
@@ -689,6 +738,7 @@ ul.urumi-grid {
 	background: var(--urumi-beige);
 	display: block;
 	position: relative;
+	width: 100%;
 }
 
 .urumi-tile__media img {
@@ -701,7 +751,47 @@ ul.urumi-grid {
 
 .urumi-tile__media:hover img { transform: scale(1.03); }
 
-.urumi-tile__name {
+/* WooCommerce product-image block inside the collection/search grids: same
+   fixed 4/5 frame as the theme tiles */
+.urumi-collection .wc-block-components-product-image,
+main > .wp-block-query .wc-block-components-product-image {
+	position: relative;
+	display: block;
+	width: 100%;
+	aspect-ratio: 4 / 5;
+	overflow: hidden;
+	background: var(--urumi-beige);
+	margin: 0;
+}
+
+.urumi-collection .wc-block-components-product-image a,
+main > .wp-block-query .wc-block-components-product-image a {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.urumi-collection .wc-block-components-product-image img,
+main > .wp-block-query .wc-block-components-product-image img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+	transition: transform 500ms var(--urumi-ease);
+}
+
+.urumi-collection .wc-block-components-product-image:hover img { transform: scale(1.03); }
+
+/* WooCommerce's own on-image sale badge is always suppressed: the theme
+   renders the one overlaid flag chip instead (never two labels) */
+.urumi-collection .wc-block-components-product-sale-badge,
+main > .wp-block-query .wc-block-components-product-sale-badge {
+	display: none;
+}
+
+.urumi-tile__name,
+.urumi-collection .urumi-tile-name,
+main > .wp-block-query .urumi-tile-name {
 	font-family: "Newsreader Variable", serif;
 	font-size: 16px;
 	font-weight: 500;
@@ -711,19 +801,52 @@ ul.urumi-grid {
 	margin-top: 12px;
 }
 
-.urumi-tile__name:hover { text-decoration: underline; }
+.urumi-tile__name:hover,
+.urumi-collection .urumi-tile-name a:hover,
+main > .wp-block-query .urumi-tile-name a:hover { text-decoration: underline; }
 
-.urumi-tile__price {
+/* archive-card descriptions: clamped to two lines, never clipped or
+   overlapping the price below */
+.urumi-tile-desc,
+main > .wp-block-query .wp-block-post-excerpt {
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 1.35;
+	letter-spacing: 0.26px;
+	color: var(--urumi-n4);
+	margin: 4px 0 0;
+}
+
+.urumi-tile-desc p { margin: 0; }
+
+.urumi-tile__price,
+.urumi-collection .wc-block-components-product-price,
+main > .wp-block-query .wc-block-components-product-price {
 	font-family: "Hanken Grotesk Variable", sans-serif;
 	font-size: 14px;
 	font-weight: 400;
 	color: var(--urumi-body);
 	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* price block pinned to the card bottom: prices and buttons align across a
+   row no matter how long the title or description is */
+.urumi-collection .wp-block-woocommerce-product-price,
+main > .wp-block-query .wp-block-woocommerce-product-price {
+	margin-top: auto;
+	padding-top: 12px;
 }
 
 /* Struck-through old prices: neutral-4, not neutral-1 - #999999 on canvas is
    2.75:1 and fails WCAG AA; the spec's contrast gate outranks the token note. */
-.urumi-tile__price del {
+.urumi-tile__price del,
+.urumi-collection .wc-block-components-product-price del {
 	color: var(--urumi-n4);
 	text-decoration: line-through;
 	margin-right: 6px;
@@ -734,22 +857,38 @@ ul.urumi-grid {
 
 .urumi-tile__row {
 	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 8px;
-	margin-top: 2px;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 2px;
+	margin-top: auto;
+	padding-top: 8px;
 }
 
-/* add-to-cart inside a tile: quiet text link */
+/* price line above the button line: both pinned to the card bottom, so they
+   align across a row no matter how long the title is */
+.urumi-tile__row .urumi-tile__price { display: block; }
 
-.urumi-tile__add .button,
-.urumi-tile__add .added_to_cart {
+.urumi-tile__row .urumi-tile__add { display: block; }
+
+.urumi-tile__row .urumi-tile__add .button,
+.urumi-tile__row .urumi-tile__add .added_to_cart {
+	width: 100%;
+	justify-content: flex-start;
+	text-align: left;
+	white-space: nowrap;
+}
+
+/* add-to-cart inside a theme tile: quiet text link, compact, same on every
+   card (specificity above Woo's `.woocommerce a.button` outline) */
+
+.urumi-tile .urumi-tile__add .button,
+.urumi-tile .urumi-tile__add .added_to_cart {
 	background: none;
 	border: none;
 	box-shadow: none;
-	padding: 7px 0;
+	padding: 4px 0;
 	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 400;
 	letter-spacing: 0.26px;
 	text-transform: uppercase;
@@ -759,20 +898,54 @@ ul.urumi-grid {
 	line-height: 1.35;
 }
 
-.urumi-tile__add .button:hover,
-.urumi-tile__add .added_to_cart:hover {
+.urumi-tile .urumi-tile__add .button:hover,
+.urumi-tile .urumi-tile__add .added_to_cart:hover {
 	text-decoration: underline;
 	opacity: 0.7;
 	background: none;
 	color: var(--urumi-body);
 }
 
-/* flags: plain text, no fill, no colour */
+/* add-to-cart inside the collection/search grid (Woo block button): compact,
+   full card width, identical on every card, inside the card bounds */
+.urumi-collection .urumi-tile-add {
+	margin: 8px 0 0;
+}
+
+.urumi-collection .urumi-tile-add .wc-block-components-product-button__button {
+	width: 100%;
+	min-height: 36px;
+	padding: 0 12px;
+	font-size: 12px;
+	box-sizing: border-box;
+	justify-content: center;
+}
+
+/* flags: one small chip overlaid inside the image box (top-left, absolutely
+   positioned, never in normal flow, shown once) */
 
 .urumi-flags {
 	display: flex;
-	gap: 12px;
-	margin-bottom: 8px;
+	gap: 8px;
+	background: var(--urumi-canvas);
+	padding: 3px 8px;
+}
+
+/* on a theme tile the flags sit directly inside the card, above the media */
+.urumi-tile > .urumi-flags,
+.urumi-flags-host > .urumi-flags {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	z-index: 2;
+	margin: 0;
+}
+
+/* the host wraps flags + image block: relative so the chip lands inside the
+   image box and takes no flow space */
+.urumi-flags-host {
+	position: relative;
+	display: block;
 }
 
 .urumi-flag--sale { text-decoration: underline; }
@@ -787,9 +960,10 @@ ul.urumi-grid {
 	gap: 40px;
 	align-items: center;
 	width: 100%;
-	max-width: 1360px;
+	max-width: var(--urumi-container);
 	margin: 0 auto;
-	padding: clamp(56px, 8vw, 120px) clamp(16px, 3vw, 32px);
+	padding: clamp(56px, 8vw, 120px) var(--urumi-gutter);
+	box-sizing: border-box;
 	background: var(--urumi-surface-alt);
 }
 
@@ -891,7 +1065,8 @@ ul.urumi-grid {
 	justify-content: space-between;
 	border-top: 1px solid var(--urumi-hairline);
 	border-bottom: 1px solid var(--urumi-hairline);
-	padding: 4px 0;
+	padding: 4px var(--urumi-gutter);
+	box-sizing: border-box;
 	margin-bottom: 32px;
 }
 
@@ -899,36 +1074,6 @@ ul.urumi-grid {
 	font-family: "Hanken Grotesk Variable", sans-serif;
 	font-size: 13px;
 	color: var(--urumi-n3);
-}
-
-.urumi-collection .wc-block-layout {
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 28px 24px;
-}
-
-.urumi-collection .wc-block-layout > * { min-width: 0; }
-
-.urumi-collection .wp-block-post-title,
-.urumi-tile-name {
-	font-family: "Newsreader Variable", serif;
-	font-size: 16px;
-	font-weight: 500;
-	line-height: 1.35;
-	color: var(--urumi-ink);
-}
-
-.urumi-tile-name a { color: var(--urumi-ink); text-decoration: none; }
-.urumi-tile-name a:hover { text-decoration: underline; }
-
-.urumi-tile-desc {
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
-	font-weight: 400;
-	line-height: 1.35;
-	letter-spacing: 0.26px;
-	color: var(--urumi-n4);
-	margin: 4px 0 0;
 }
 
 /* pagination: plain text */
@@ -959,222 +1104,23 @@ ul.urumi-grid {
 
 /* product */
 
-.woocommerce-breadcrumb {
-	margin: 24px 0;
-}
-
-.woocommerce-breadcrumb a { color: var(--urumi-n3); }
-.woocommerce-breadcrumb a:hover { color: var(--urumi-ink); }
-
-.urumi-pdp {
-	align-items: flex-start;
-	margin-top: 8px;
-	gap: 40px;
-}
-
 /* gallery: vertical thumbnails on desktop, swipe strip on mobile */
 
-.urumi-pdp__gallery { flex-basis: 55% !important; }
-
-.woocommerce-product-gallery {
-	display: flex;
-	flex-direction: row-reverse;
-	gap: 12px;
-}
-
-.woocommerce-product-gallery__wrapper { flex: 1; margin: 0; }
-
-.woocommerce-product-gallery__image img {
-	width: 100%;
-	height: auto;
-	display: block;
-}
-
-.flex-control-thumbs {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	width: 72px;
-	order: -1;
-	list-style: none;
-	margin: 0;
-	padding: 0;
-}
-
-.flex-control-thumbs li { width: 72px; }
-
-.flex-control-thumbs img {
-	width: 72px;
-	height: 90px;
-	object-fit: cover;
-	display: block;
-	opacity: 1;
-	border: 1px solid transparent;
-	border-radius: 0;
-}
-
-.flex-control-thumbs .flex-active,
-.flex-control-thumbs img:hover {
-	border-color: var(--urumi-ink);
-	opacity: 1;
-}
-
 @media (max-width: 767px) {
-	.woocommerce-product-gallery { flex-direction: column-reverse; }
-	.flex-control-thumbs {
-		flex-direction: row;
-		width: 100%;
-		overflow-x: auto;
-		scroll-snap-type: x mandatory;
-	}
-	.flex-control-thumbs li { width: 64px; flex: 0 0 auto; scroll-snap-align: start; }
+	
+	
+	
 }
-
-.urumi-pdp__title {
-	font-family: "Newsreader Variable", serif;
-	font-size: 28px;
-	font-weight: 500;
-	line-height: 1.2;
-	letter-spacing: -0.2px;
-	color: var(--urumi-ink);
-	margin: 0 0 8px;
-}
-
-.urumi-pdp__price,
-.urumi-pdp__price .woocommerce-Price-amount {
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 16px;
-	font-weight: 500;
-	font-variant-numeric: tabular-nums;
-	color: var(--urumi-body);
-}
-
-.urumi-pdp__excerpt {
-	font-family: "Newsreader Variable", serif;
-	font-size: 16px;
-	font-weight: 500;
-	line-height: 1.35;
-	color: var(--urumi-body);
-}
-
-.urumi-pdp__meta { margin-top: 16px; }
 
 /* forms: 44px controls, hairline borders, ink focus */
 
-input[type="text"],
-input[type="search"],
-input[type="email"],
-input[type="tel"],
-input[type="number"],
-input[type="password"],
-select,
-textarea,
-.woocommerce form .form-row input.input-text,
-.woocommerce form .form-row textarea,
-.woocommerce form .form-row select,
-.wc-block-components-text-input input,
-.wc-block-components-select__select {
-	height: 44px;
-	border: 1px solid var(--urumi-n2);
-	border-radius: 0;
-	background: transparent;
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
-	letter-spacing: 0.26px;
-	color: var(--urumi-ink);
-	padding: 0 12px;
-	box-shadow: none;
-	transition: border-color 200ms ease;
-}
-
-select { padding-right: 32px; }
-textarea { min-height: 96px; padding: 12px; height: auto; }
-
-input:focus,
-select:focus,
-textarea:focus {
-	border-color: var(--urumi-ink);
-	box-shadow: inset 0 0 0 1px rgb(235, 235, 235);
-}
-
-label,
-.wc-block-components-text-input label {
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 12px;
-	letter-spacing: 0.48px;
-	text-transform: uppercase;
-	color: var(--urumi-n3);
-}
-
-.quantity .qty {
-	height: 44px;
-	border: 1px solid var(--urumi-n2);
-}
-
 /* accordions: plain, hairline-ruled */
 
-.urumi-accordion,
-.urumi-details {
-	border-top: 1px solid var(--urumi-hairline);
-	border-radius: 0;
-}
-
-.urumi-accordion summary,
-.urumi-accordion summary h2 {
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
-	font-weight: 500;
-	letter-spacing: 0.26px;
-	text-transform: uppercase;
-	color: var(--urumi-ink);
-	padding: 14px 0;
-	cursor: pointer;
-	list-style: none;
-}
-
-.urumi-accordion summary::-webkit-details-marker { display: none; }
-.urumi-accordion summary::after { content: "+"; float: right; font-weight: 400; }
-.urumi-accordion[open] summary::after { content: "\2212"; }
-
-.urumi-accordion__body,
-.urumi-details > * {
-	font-family: "Newsreader Variable", serif;
-	font-size: 16px;
-	line-height: 1.35;
-}
-
-.urumi-stock { margin: 0 0 12px; }
-
-.urumi-stock--out { color: var(--urumi-ink); font-weight: 500; }
-
 /* notices and errors: words, weight, underline. Ink left border. Never red. */
-
-.woocommerce-message,
-.woocommerce-info,
-.woocommerce-error,
-.wc-block-components-notice-banner,
-.urumi-error {
-	background: transparent;
-	border: none;
-	border-left: 1px solid var(--urumi-ink);
-	border-radius: 0;
-	color: var(--urumi-ink);
-	font-family: "Newsreader Variable", serif;
-	font-size: 16px;
-	font-weight: 500;
-	padding: 12px 0 12px 16px;
-	margin: 16px 0;
-	list-style: none;
-	box-shadow: none;
-}
 
 .woocommerce-error::before,
 .wc-block-components-notice-banner > .wc-block-components-notice-banner__content .wc-block-components-error-message,
 .wc-block-components-notice-banner.is-error { color: var(--urumi-ink); }
-
-.woocommerce-message::before,
-.woocommerce-info::before,
-.woocommerce-error::before { display: none; }
 
 .urumi-error,
 .form-row.woocommerce-invalid input {
@@ -1187,58 +1133,6 @@ label,
 
 .urumi-cart-wrap,
 .urumi-checkout-wrap { padding: clamp(32px, 4vw, 64px) 0; }
-
-.woocommerce-cart-form table.shop_table,
-table.shop_table,
-.wc-block-cart-items {
-	border: none;
-	border-collapse: collapse;
-	border-radius: 0;
-	background: transparent;
-}
-
-table.shop_table th,
-table.shop_table td,
-.wc-block-cart-items th {
-	border: none;
-	border-bottom: 1px solid var(--urumi-hairline);
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
-	letter-spacing: 0.26px;
-	color: var(--urumi-n3);
-	padding: 16px 8px;
-	text-transform: uppercase;
-}
-
-table.shop_table img {
-	width: 72px;
-	height: 90px;
-	object-fit: cover;
-	display: block;
-}
-
-table.shop_table td.product-name,
-.wc-block-cart-item__product a {
-	font-family: "Newsreader Variable", serif;
-	font-size: 16px;
-	font-weight: 500;
-	color: var(--urumi-ink);
-}
-
-.cart_totals,
-.wc-block-cart__totals,
-.urumi-summary {
-	background: var(--urumi-surface-alt);
-	border: none;
-	border-radius: 0;
-	padding: 24px;
-	font-family: "Hanken Grotesk Variable", sans-serif;
-}
-
-.woocommerce-cart .wc-proceed-to-checkout a.checkout-button,
-.wc-block-cart__submit-button {
-	width: 100%;
-}
 
 /* order summary on surface-alt */
 .wc-block-checkout__sidebar,
@@ -1278,70 +1172,9 @@ table.shop_table td.product-name,
 	justify-content: space-between;
 }
 
-.woocommerce-order-overview li strong { color: var(--urumi-ink); font-weight: 500; }
-
-/* account, search, 404 */
-
-.urumi-404 {
-	padding: clamp(56px, 8vw, 120px) 16px;
-	max-width: 560px;
-	margin: 0 auto;
-	text-align: left;
-}
-
-.urumi-404 h1 {
-	font-size: 28px;
-	font-weight: 500;
-	line-height: 1.2;
-	margin: 0 0 12px;
-}
-
-.urumi-404__search {
-	display: flex;
-	gap: 8px;
-	margin: 24px 0;
-}
-
-.urumi-404__search input[type="search"] {
-	flex: 1;
-	height: 44px;
-	border: 1px solid var(--urumi-n2);
-	border-radius: 0;
-	padding: 0 12px;
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
-	background: transparent;
-}
-
-.urumi-404__links { display: flex; gap: 16px; align-items: center; }
+/* account, search */
 
 /* search results + account: same grid, minimal */
-
-.woocommerce-account .woocommerce-MyAccount-navigation ul {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-}
-
-.woocommerce-account .woocommerce-MyAccount-navigation li {
-	border-bottom: 1px solid var(--urumi-hairline);
-}
-
-.woocommerce-account .woocommerce-MyAccount-navigation-link a {
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
-	letter-spacing: 0.26px;
-	text-transform: uppercase;
-	color: var(--urumi-n3);
-	display: block;
-	padding: 14px 0;
-	min-height: 44px;
-}
-
-.woocommerce-account .woocommerce-MyAccount-navigation-link.is-active a {
-	color: var(--urumi-ink);
-	text-decoration: underline;
-}
 
 /* footer */
 
@@ -1350,19 +1183,6 @@ table.shop_table td.product-name,
 	border-top: 1px solid var(--urumi-hairline);
 	margin-top: 0;
 	padding: clamp(40px, 6vw, 72px) 0 32px;
-}
-
-.urumi-footer {
-	max-width: 1360px;
-	margin: 0 auto;
-	padding: 0 clamp(16px, 3vw, 32px);
-}
-
-.urumi-footer__cols {
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 24px;
-	margin-bottom: 32px;
 }
 
 .urumi-footer__col ul {
@@ -1374,46 +1194,8 @@ table.shop_table td.product-name,
 	gap: 2px;
 }
 
-.urumi-footer__col a {
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 13px;
-	font-weight: 400;
-	letter-spacing: 0.26px;
-	color: var(--urumi-n3);
-	padding: 7px 0;
-	display: inline-block;
-}
-
-.urumi-footer__col a:hover { color: var(--urumi-ink); text-decoration: underline; }
-
-.urumi-footer__blurb {
-	font-family: "Newsreader Variable", serif;
-	font-size: 16px;
-	font-weight: 500;
-	color: var(--urumi-body);
-	margin: 0 0 4px;
-}
-
-.urumi-footer__demo,
-.urumi-footer__credits,
-.urumi-footer__small {
-	font-family: "Hanken Grotesk Variable", sans-serif;
-	font-size: 12px;
-	font-weight: 400;
-	letter-spacing: 0.24px;
-	color: var(--urumi-n3);
-	margin: 4px 0;
-}
-
-.urumi-footer__credits a {
-	color: var(--urumi-n3);
-	text-decoration: underline;
-}
-
-.urumi-footer__small { margin-top: 16px; }
-
 @media (max-width: 767px) {
-	.urumi-footer__cols { grid-template-columns: 1fr 1fr; }
+	
 }
 
 .urumi-footer__cols {
@@ -1423,26 +1205,10 @@ table.shop_table td.product-name,
 
 /* search + 404 + account */
 
-.urumi-404 {
-	padding: clamp(56px, 8vw, 120px) 16px;
-	max-width: 720px;
-	margin: 0 auto;
-}
-
 .urumi-404__search {
 	display: flex;
 	gap: 8px;
 	margin: 24px 0;
-}
-
-.urumi-404__search input[type="search"] {
-	flex: 1;
-	max-width: 360px;
-	height: 44px;
-	border: 1px solid var(--urumi-n2);
-	border-radius: 0;
-	padding: 0 12px;
-	background: transparent;
 }
 
 .urumi-search-results-grid ul.urumi-grid { margin-top: 24px; }
@@ -1487,11 +1253,6 @@ button {
 }
 
 .wc-block-components-radio-control__option {
-	border: 1px solid var(--urumi-n2);
-	border-radius: 0;
-}
-
-.wc-block-components-radio-control__option {
 	border-radius: 0;
 }
 
@@ -1514,31 +1275,24 @@ input:disabled,
 /* motion off */
 
 @media (prefers-reduced-motion: reduce) {
-	.urumi-frame img,
-	.urumi-frame .urumi-photo,
-	.urumi-tile__media img,
-	.urumi-cat-tile:hover .urumi-photo,
-	.urumi-tile__media:hover img {
-		transition: none;
-		transform: none;
-	}
+	
 
-	.urumi-menu-overlay { transition: none; }
+	
 
-	a, .urumi-btn, button, .urumi-btn-text { transition: none; }
+	
 }
 
 /* responsive grids */
 
 @media (max-width: 1023px) {
-	ul.urumi-grid { grid-template-columns: repeat(3, 1fr); }
-	.urumi-collection .wc-block-layout { grid-template-columns: repeat(3, 1fr); }
+	
+	
 }
 
 @media (max-width: 767px) {
-	ul.urumi-grid { grid-template-columns: repeat(2, 1fr); gap: 24px 16px; }
-	.urumi-collection .wc-block-layout { grid-template-columns: repeat(2, 1fr); }
-	.urumi-nav { gap: 16px; }
+	
+	
+	
 }
 
 /* touch targets and no horizontal scroll at 375 */
@@ -1547,21 +1301,7 @@ input:disabled,
 	html, body { overflow-x: hidden; }
 }
 
-img { max-width: 100%; height: auto; }
-
 /* screen-reader text (Woo core) stays hidden but focusable-reachable */
-
-.screen-reader-text {
-	border: 0;
-	clip: rect(1px, 1px, 1px, 1px);
-	clip-path: inset(50%);
-	height: 1px;
-	width: 1px;
-	margin: -1px;
-	overflow: hidden;
-	padding: 0;
-	position: absolute;
-}
 
 /* product */
 
@@ -1896,9 +1636,10 @@ table.shop_table td.product-name,
 /* 404 + search */
 
 .urumi-404 {
-	padding: clamp(56px, 8vw, 120px) 16px;
-	max-width: 720px;
+	padding: clamp(56px, 8vw, 120px) var(--urumi-gutter);
+	max-width: var(--urumi-container);
 	margin: 0 auto;
+	text-align: left;
 }
 
 .urumi-404 h1 {
@@ -1922,6 +1663,8 @@ table.shop_table td.product-name,
 	border: 1px solid var(--urumi-n2);
 	border-radius: 0;
 	padding: 0 12px;
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 13px;
 	background: transparent;
 }
 
@@ -1936,9 +1679,10 @@ table.shop_table td.product-name,
 }
 
 .urumi-footer {
-	max-width: 1360px;
+	max-width: var(--urumi-container);
 	margin: 0 auto;
-	padding: 0 clamp(16px, 3vw, 32px);
+	padding: 0 var(--urumi-gutter);
+	box-sizing: border-box;
 }
 
 .urumi-footer__cols {
@@ -2067,17 +1811,24 @@ select:disabled,
 	}
 }
 
-/* responsive grids: 4 / 3 / 2 columns */
+/* responsive grids: shop-family 4 / 3 / 2 (1440+, ~1024, 768 and below);
+   the related row keeps 4 on desktop and drops to 2 on tablet and mobile */
 
-@media (max-width: 1023px) {
-	ul.urumi-grid { grid-template-columns: repeat(3, 1fr); }
-	.urumi-collection .wc-block-layout { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 1439px) and (min-width: 769px) {
+	ul.urumi-grid,
+	.urumi-collection ul.wc-block-product-template,
+	main > .wp-block-query .wp-block-post-template { grid-template-columns: repeat(3, 1fr); }
 }
 
-@media (max-width: 767px) {
-	ul.urumi-grid { grid-template-columns: repeat(2, 1fr); gap: 24px 16px; }
-	.urumi-collection .wc-block-layout { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 768px) {
+	ul.urumi-grid,
+	.urumi-collection ul.wc-block-product-template,
+	main > .wp-block-query .wp-block-post-template { grid-template-columns: repeat(2, 1fr); gap: 24px 16px; }
 	.urumi-nav { gap: 16px; }
+}
+
+@media (max-width: 1023px) {
+	.urumi-related ul.urumi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* guards */
@@ -2094,4 +1845,410 @@ img { max-width: 100%; height: auto; }
 	overflow: hidden;
 	padding: 0;
 	position: absolute;
+}
+
+/* ==========================================================================
+ * Shopping-flow polish (docs/POLISH_STORE.md): prominent search with
+ * suggestions, price filter, active-filter chips, sticky mobile add-to-cart,
+ * one clear checkout button in the mini-cart, related products.
+ * ========================================================================== */
+
+/* header search: prominent, with an attached submit button */
+
+.urumi-nav__search {
+	gap: 0;
+}
+
+.urumi-nav__search .urumi-search-input {
+	width: 260px;
+	transition: border-color 200ms var(--urumi-ease);
+}
+
+.urumi-nav__search-submit {
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 12px;
+	letter-spacing: 0.48px;
+	text-transform: uppercase;
+	color: var(--urumi-body);
+	background: transparent;
+	border: 1px solid var(--urumi-n2);
+	border-left: none;
+	height: 44px;
+	padding: 0 14px;
+	border-radius: 0;
+	box-shadow: none;
+	cursor: pointer;
+	transition: background-color 200ms var(--urumi-ease), color 200ms var(--urumi-ease);
+}
+
+.urumi-nav__search-submit:hover {
+	background: var(--urumi-hover-fill);
+	border-color: var(--urumi-hover-fill);
+	color: var(--urumi-canvas);
+}
+
+/* suggestions listbox (same-origin Store API; vanilla JS in assets/store.js) */
+
+.urumi-suggest {
+	position: absolute;
+	top: calc(100% + 2px);
+	left: 0;
+	width: min(420px, 86vw);
+	background: var(--urumi-canvas);
+	border: 1px solid var(--urumi-hairline);
+	border-radius: 0;
+	box-shadow: none;
+	z-index: 70;
+	display: flex;
+	flex-direction: column;
+}
+
+.urumi-suggest[hidden] { display: none; }
+
+.urumi-suggest__option,
+.urumi-suggest__all {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	min-height: 44px;
+	text-decoration: none;
+	color: var(--urumi-body);
+	background: transparent;
+}
+
+.urumi-suggest__option:hover,
+.urumi-suggest__option.is-active {
+	background: var(--urumi-raised);
+}
+
+.urumi-suggest__thumb {
+	width: 36px;
+	height: 45px;
+	flex: 0 0 auto;
+}
+
+.urumi-suggest__thumb img {
+	width: 36px;
+	height: 45px;
+	object-fit: cover;
+	display: block;
+}
+
+.urumi-suggest__thumb.urumi-photo--empty {
+	background: var(--urumi-beige);
+}
+
+.urumi-suggest__name {
+	font-family: "Newsreader Variable", serif;
+	font-size: 15px;
+	font-weight: 500;
+	color: var(--urumi-ink);
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.urumi-suggest__price {
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 13px;
+	color: var(--urumi-body);
+	font-variant-numeric: tabular-nums;
+}
+
+.urumi-suggest__all {
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 12px;
+	letter-spacing: 0.48px;
+	text-transform: uppercase;
+	color: var(--urumi-n3);
+	border-top: 1px solid var(--urumi-hairline);
+}
+
+.urumi-suggest__all:hover {
+	color: var(--urumi-ink);
+	text-decoration: underline;
+}
+
+/* price filter: quiet inline form inside the sort row */
+
+.urumi-price-filter {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+	margin-right: 24px;
+	flex-wrap: wrap;
+}
+
+.urumi-price-filter__label {
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 12px;
+	font-weight: 400;
+	letter-spacing: 0.48px;
+	text-transform: uppercase;
+	color: var(--urumi-n3);
+	white-space: nowrap;
+}
+
+.urumi-price-filter__fields {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.urumi-price-filter input[type="number"] {
+	width: 76px;
+	height: 36px;
+	border: 1px solid var(--urumi-n2);
+	border-radius: 0;
+	background: transparent;
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 13px;
+	color: var(--urumi-ink);
+	padding: 0 8px;
+	box-shadow: none;
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+
+.urumi-price-filter input[type="number"]::-webkit-outer-spin-button,
+.urumi-price-filter input[type="number"]::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.urumi-price-filter input[type="number"]:focus {
+	border-color: var(--urumi-ink);
+	box-shadow: inset 0 0 0 1px rgb(235, 235, 235);
+}
+
+.urumi-price-filter__apply {
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 12px;
+	letter-spacing: 0.48px;
+	text-transform: uppercase;
+	color: var(--urumi-body);
+	background: transparent;
+	border: 1px solid var(--urumi-n2);
+	height: 36px;
+	padding: 0 12px;
+	border-radius: 0;
+	cursor: pointer;
+	transition: background-color 200ms var(--urumi-ease), border-color 200ms var(--urumi-ease), color 200ms var(--urumi-ease);
+}
+
+.urumi-price-filter__apply:hover {
+	background: var(--urumi-hover-fill);
+	border-color: var(--urumi-hover-fill);
+	color: var(--urumi-canvas);
+}
+
+/* active filter chips */
+
+.urumi-active-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 16px;
+}
+
+.urumi-active-filters:empty { display: none; }
+
+.urumi-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 12px;
+	letter-spacing: 0.48px;
+	text-transform: uppercase;
+	color: var(--urumi-ink);
+	background: var(--urumi-surface-alt);
+	border: 1px solid var(--urumi-hairline);
+	border-radius: 0;
+	padding: 8px 12px;
+	min-height: 36px;
+	text-decoration: none;
+}
+
+.urumi-chip:hover {
+	border-color: var(--urumi-ink);
+	text-decoration: none;
+}
+
+.urumi-chip__label { white-space: nowrap; }
+
+.urumi-chip__x {
+	font-size: 14px;
+	line-height: 1;
+	color: var(--urumi-n3);
+}
+
+.urumi-chip:hover .urumi-chip__x { color: var(--urumi-ink); }
+
+.urumi-chip--clear {
+	color: var(--urumi-n3);
+}
+
+.urumi-chip--clear:hover { color: var(--urumi-ink); }
+
+/* archive breadcrumbs sit tight under the header */
+
+main > .woocommerce-breadcrumb,
+main > .wp-block-woocommerce-breadcrumbs { margin: 24px 0 0; }
+
+/* sticky add-to-cart bar (mobile product pages; JS toggles visibility) */
+
+.urumi-sticky-atc {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 55;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	background: var(--urumi-canvas);
+	border-top: 1px solid var(--urumi-hairline);
+	padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+}
+
+.urumi-sticky-atc[hidden] { display: none; }
+
+.urumi-sticky-atc__name {
+	font-family: "Newsreader Variable", serif;
+	font-size: 15px;
+	font-weight: 500;
+	color: var(--urumi-ink);
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.urumi-sticky-atc__price {
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--urumi-body);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.urumi-sticky-atc__price del {
+	color: var(--urumi-n4);
+	margin-right: 6px;
+}
+
+.urumi-sticky-atc__action .urumi-btn { min-height: 40px; padding: 8px 16px; }
+
+body.has-sticky-atc { padding-bottom: 60px; }
+
+/* related products section */
+
+.urumi-related {
+	margin-top: clamp(40px, 6vw, 72px);
+}
+
+.urumi-related__head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 20px;
+}
+
+.urumi-related__head .urumi-section-title { margin: 0; }
+
+/* mini-cart drawer: subtotal in Hanken, ONE clear checkout button */
+
+.wc-block-mini-cart__footer .wc-block-mini-cart__footer-subtotal {
+	font-family: "Hanken Grotesk Variable", sans-serif;
+	font-size: 13px;
+	letter-spacing: 0.26px;
+	color: var(--urumi-n3);
+}
+
+.wc-block-mini-cart__footer .wc-block-mini-cart__footer-subtotal .wc-block-components-totals-item__value {
+	font-size: 15px;
+	font-weight: 500;
+	color: var(--urumi-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+.wc-block-mini-cart__footer-subtotal .wc-block-components-totals-item__description {
+	font-family: "Newsreader Variable", serif;
+	font-size: 13px;
+	text-transform: none;
+	letter-spacing: 0;
+	color: var(--urumi-n4);
+}
+
+.wc-block-mini-cart__footer-actions {
+	display: flex;
+	flex-direction: column-reverse;
+	gap: 4px;
+}
+
+.wc-block-mini-cart__footer-actions .wc-block-mini-cart__footer-checkout {
+	width: 100%;
+}
+
+.wc-block-mini-cart__footer-actions .wc-block-mini-cart__footer-checkout .wc-block-components-button {
+	width: 100%;
+}
+
+.wc-block-mini-cart__footer-actions .wc-block-mini-cart__footer-cart {
+	background: none;
+	border: none;
+	box-shadow: none;
+	text-decoration: underline;
+	text-underline-offset: 4px;
+	min-height: 40px;
+	padding: 8px 0;
+}
+
+.wc-block-mini-cart__footer-actions .wc-block-mini-cart__footer-cart:hover {
+	background: none;
+	border: none;
+	opacity: 0.7;
+}
+
+.wc-block-mini-cart__footer-actions .wc-block-mini-cart__footer-cart .wc-block-components-button__text {
+	font-size: 12px;
+	letter-spacing: 0.48px;
+	text-transform: uppercase;
+}
+
+/* mobile: search submit inside the overlay, sort row wraps cleanly */
+
+@media (max-width: 1023px) {
+	.urumi-sort-row {
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+	.urumi-price-filter {
+		margin-left: 0;
+		order: 3;
+		width: 100%;
+	}
+}
+
+@media (max-width: 767px) {
+	.urumi-nav__search .urumi-search-input { width: 100%; }
+	.urumi-menu-overlay__search .urumi-search-input { width: 100%; }
+	.urumi-menu-overlay__search .urumi-nav__search-submit { flex: 0 0 auto; }
+	.urumi-price-filter__label { width: 100%; }
+	.urumi-sort-row .woocommerce-result-count { width: 100%; }
+	.urumi-sticky-atc__name { font-size: 14px; }
+}
+
+/* reduced motion: no new transitions either */
+
+@media (prefers-reduced-motion: reduce) {
+	.urumi-nav__search-submit,
+	.urumi-price-filter__apply,
+	.urumi-suggest__option { transition: none; }
 }
