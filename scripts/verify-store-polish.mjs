@@ -52,6 +52,12 @@ function attachWatchers(page, thirdParty, consoleErrors) {
   page.on("pageerror", (e) => consoleErrors.push(String(e)));
 }
 
+async function weightCheck(page, name, results, check) {
+  const w = await pageWeight(page);
+  const kb = Math.round(w / 1024);
+  check(`${name} page weight under 800KB`, w < 800 * 1024, `${kb}KB`);
+}
+
 async function overflowX(page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
@@ -91,33 +97,6 @@ async function addToCartViaUrl(ctx) {
   await page.goto(`${simplePermalink}?add-to-cart=${pid}`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2500);
   await page.close();
-}
-
-async function shootPage(ctx, out, name, url, width, height, opts = {}) {
-  const page = await ctx.newPage();
-  const thirdParty = [];
-  const consoleErrors = [];
-  attachWatchers(page, thirdParty, consoleErrors);
-  const resp = await page.goto(`${STORE}${url}`, { waitUntil: "domcontentloaded", timeout: 45000 });
-  await sleep(opts.settle ?? 2000);
-  const status = resp ? resp.status() : 0;
-  check(`${name} ${width} HTTP 200`, status === 200, `status=${status}`);
-  const broken = await page.evaluate(() =>
-    [...document.images].filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.src.split("/").pop())
-  );
-  check(`${name} ${width} images loaded`, broken.length === 0, broken.slice(0, 3).join(", "));
-  check(`${name} ${width} zero third-party`, thirdParty.length === 0, thirdParty.slice(0, 2).join(" "));
-  const realErrors = name === "404" ? consoleErrors.filter((e) => !e.includes("404")) : consoleErrors;
-  check(`${name} ${width} no console errors`, realErrors.length === 0, realErrors.slice(0, 1).join(" "));
-  const ov = await overflowX(page);
-  check(`${name} ${width} no horizontal overflow`, ov <= 1, `overflow=${ov}px`);
-  if (width === 1440 && ["home", "shop-filters", "product", "cart", "checkout"].includes(name)) {
-    const w = await pageWeight(page);
-    check(`${name} page weight KB`, w < 800 * 1024, `${(w / 1024).toFixed(0)}KB`);
-  }
-  await page.screenshot({ path: path.join(out, `${name}-${width}.png`), fullPage: opts.fullPage ?? true });
-  await page.close();
-  return { thirdParty, consoleErrors };
 }
 
 async function pixelStat(file) {
@@ -203,6 +182,7 @@ async function main() {
     check("quick add to cart on tiles", tileAdd > 0, `count=${tileAdd}`);
     await page.screenshot({ path: path.join(ART, "shop-filters-1440.png"), fullPage: true });
     shots.push("shop-filters-1440");
+    await weightCheck(page, "shop-filters-1440", results, check);
 
     // --- category
     await page.goto(`${STORE}/product-category/ceramics/`, { waitUntil: "domcontentloaded" });
@@ -213,6 +193,7 @@ async function main() {
     check("category banner", (await page.locator(".urumi-cat-banner").count()) > 0, "");
     await page.screenshot({ path: path.join(ART, "category-1440.png"), fullPage: true });
     shots.push("category-1440");
+    await weightCheck(page, "category-1440", results, check);
 
     // --- product
     if (!simplePermalink) throw new Error("no simple product found - cannot continue");
@@ -232,6 +213,7 @@ async function main() {
     check("PDP shipping/COD accordion", (await page.locator(".urumi-accordion:has-text('Shipping and returns')").count()) > 0, "");
     await page.screenshot({ path: path.join(ART, "product-1440.png"), fullPage: true });
     shots.push("product-1440");
+    await weightCheck(page, "product-1440", results, check);
 
     // --- mini-cart drawer (opened from a product page; Woo disables the
     // mini-cart button on the cart page itself)
@@ -270,6 +252,7 @@ async function main() {
     check("cart qty steppers", (await page.locator(".wc-block-cart .wc-block-components-quantity-selector").count()) > 0, "");
     await page.screenshot({ path: path.join(ART, "cart-1440.png"), fullPage: true });
     shots.push("cart-1440");
+    await weightCheck(page, "cart-1440", results, check);
 
     // --- checkout
     await page.goto(`${STORE}/checkout/`, { waitUntil: "domcontentloaded" });
@@ -279,12 +262,14 @@ async function main() {
     check("COD option present", cod > 0, `count=${cod}`);
     await page.screenshot({ path: path.join(ART, "checkout-1440.png"), fullPage: true });
     shots.push("checkout-1440");
+    await weightCheck(page, "checkout-1440", results, check);
 
     // --- home desktop shot
     await page.goto(`${STORE}/`, { waitUntil: "domcontentloaded" });
     await sleep(2000);
     await page.screenshot({ path: path.join(ART, "home-1440.png"), fullPage: true });
     shots.push("home-1440");
+    await weightCheck(page, "home-1440", results, check);
     await ctx.close();
 
     // ------------------------------------------------------------------ mobile

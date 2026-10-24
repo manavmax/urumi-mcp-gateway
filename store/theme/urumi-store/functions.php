@@ -430,28 +430,29 @@ register_block_type( 'urumi-store/category-banner', array(
 
 /**
  * Category tiles: six photo tiles in a 3 by 2 grid (2 by 3 on mobile). Each is
- * the category's first product photo; the category name sits below in
- * label-caps. Without photos the tile is a beige block.
+ * the category's first product photo, taken from the sideloaded attachment so
+ * the 600px derivative ships through srcset (the full 1200px file would cost
+ * ~3x the bytes for a tile the grid renders at ~430px). Without an attachment
+ * the tile falls back to the raw catalog file, and without any photo to a
+ * beige block.
  */
 function urumi_store_categories_render() {
 	$json = urumi_store_catalog();
 	$cats = array();
 	foreach ( $json['categories'] ?? array() as $c ) {
 		$cats[ $c['slug'] ] = array(
-			'name' => $c['name'],
-			'count' => 0,
-			'img' => '',
-			'alt' => '',
+			'name'     => $c['name'],
+			'sku'      => '',
+			'img'      => '',
+			'alt'      => '',
 		);
 	}
 	foreach ( $json['products'] ?? array() as $p ) {
 		$slug = sanitize_title( $p['category'] ?? '' );
-		if ( isset( $cats[ $slug ] ) ) {
-			$cats[ $slug ]['count']++;
-			if ( '' === $cats[ $slug ]['img'] && isset( $p['image'] ) ) {
-				$cats[ $slug ]['img'] = $p['image'];
-				$cats[ $slug ]['alt'] = $p['alt'] ?? $p['name'];
-			}
+		if ( isset( $cats[ $slug ] ) && '' === $cats[ $slug ]['img'] && isset( $p['image'] ) ) {
+			$cats[ $slug ]['img'] = $p['image'];
+			$cats[ $slug ]['alt'] = $p['alt'] ?? $p['name'];
+			$cats[ $slug ]['sku'] = $p['sku'] ?? '';
 		}
 	}
 
@@ -461,9 +462,26 @@ function urumi_store_categories_render() {
 		if ( is_wp_error( $link ) ) {
 			$link = get_permalink( wc_get_page_id( 'shop' ) );
 		}
+		$img = '';
+		$product_id = $c['sku'] ? wc_get_product_id_by_sku( $c['sku'] ) : 0;
+		if ( $product_id ) {
+			$product = wc_get_product( $product_id );
+			$img_id = $product ? $product->get_image_id() : 0;
+			if ( $img_id ) {
+				$img = wp_get_attachment_image( $img_id, 'woocommerce_single', false, array(
+					'class'    => 'urumi-photo',
+					'loading'  => 'lazy',
+					'decoding' => 'async',
+					'sizes'    => '(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 430px',
+				) );
+			}
+		}
+		if ( '' === $img ) {
+			$img = urumi_store_photo_img( $c['img'], $c['alt'] ? $c['alt'] : $c['name'], 480, 600 );
+		}
 		$out .= '<a class="urumi-cat-tile" href="' . esc_url( $link ) . '" role="listitem">';
 		$out .= '<span class="urumi-cat-tile__media urumi-frame">';
-		$out .= urumi_store_photo_img( $c['img'], $c['alt'] ? $c['alt'] : $c['name'], 480, 600 );
+		$out .= $img;
 		$out .= '</span>';
 		$out .= '<span class="urumi-cat-tile__label">' . esc_html( $c['name'] ) . '</span>';
 		$out .= '</a>';
