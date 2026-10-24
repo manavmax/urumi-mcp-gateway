@@ -2048,3 +2048,25 @@ config AND duplicated per-server in seeded rows, and nothing in Helm exposed
 either, so an operator could not tune them. Sentinel resolution keeps old
 databases correct without touching data, and the new defaults apply to new and
 existing servers alike on the next deploy.
+
+## 2026-10-25: Hosted registry allowlist entries normalised (trailing slash) (ADR-090)
+
+**Decision.** The gateway's hosted-server image allowlist
+(hostedServers.allowedRegistries) now normalises every comma-separated entry:
+strip whitespace, strip ONE trailing run of slashes (`rstrip("/")`), ignore
+entries that end up empty. The "/" boundary check is kept, so `ghcr.io/manavmax`
+still never matches `ghcr.io/manavmax-evil/...`, and an empty allowlist still
+means "any registry". helm/values-prod.example.yaml and the docs that showed
+`ghcr.io/<owner>/` now show the bare form (both forms work).
+
+**Alternatives.** (1) Document "trailing slash breaks it" - rejected: a config
+footgun that silently rejects every image is worse than a one-line
+normalisation. (2) Rewrite entries into a set of regexes - over-engineered for
+a prefix match. (3) A migration-style fix at the Helm layer only - wrong layer:
+the check lives in gateway code and values files are only one of its inputs.
+
+**Why.** `image.startswith(a + "/")` never matched an entry stored as
+`ghcr.io/manavmax/`, so an operator copying the example value verbatim got a
+400 "image registry is not on the allowlist" for every legitimate image. The
+normalisation is applied to the CONFIG side only; matching keeps the explicit
+`/` boundary so a prefix can never match a namespace that merely extends it.

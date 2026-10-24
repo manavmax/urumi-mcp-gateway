@@ -121,7 +121,7 @@ noise, and the solver NetworkPolicy keeps the default-deny story intact.
 documents the keys) turns on the risky flags with deliberately small caps:
 provisioner.enabled, stores.globalMax=3, stores.maxPerUser=1,
 stores.maxConcurrent=1, stores.tls.*, hostedServers.enabled with
-allowedRegistries=ghcr.io/<owner>/ and hostedServers.globalMax=2, oauth.enabled.
+allowedRegistries=ghcr.io/<owner> and hostedServers.globalMax=2, oauth.enabled.
 Committed values stay false, so a flags-off install renders the same object
 list as before.
 
@@ -134,7 +134,7 @@ ServiceAccount remains the true blast radius (cluster-scoped secrets read +
 workload writes; label guard is CODE, not RBAC) - spelled out in
 THREAT_MODEL.md; accepted for a single-node VPS where the alternative
 (dynamic per-namespace RBAC) costs more than it buys. Hosted images are
-pinned to ghcr.io/<owner>/ by allowedRegistries and capped by globalMax=2 +
+pinned to ghcr.io/<owner> by allowedRegistries and capped by globalMax=2 +
 mandatory resource caps, so even a hostile admin cannot introduce an
 unbounded or foreign-registry workload.
 

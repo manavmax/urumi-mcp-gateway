@@ -61,7 +61,8 @@ async def harness(monkeypatch):
         hosted_enabled=True,
         provisioner_url="http://fake",
         provisioner_token="test-token",
-        hosted_registry_allowlist="ghcr.io/urumi",
+        # ADR-090: a trailing slash on an entry must behave like the bare prefix
+        hosted_registry_allowlist="ghcr.io/urumi/",
         hosted_global_max=3,
     )
     monkeypatch.setattr(config, "get_settings", lambda: test_settings)
@@ -243,3 +244,53 @@ async def test_provision_timeout_marks_failed(harness):
         row = (await db.execute(select(HostedServer).where(HostedServer.name == "slow2"))).scalars().first()
         assert row.status == "Failed"
         assert "not ready" in row.failure_reason
+
+
+# --------------------------------------------------------------------------- allowlist normalisation (ADR-090)
+
+async def test_allowlist_entry_with_and_without_trailing_slash(monkeypatch):
+    """An entry written with a trailing slash ("ghcr.io/manavmax/") must accept
+    ghcr.io/manavmax/app:1 exactly like the bare prefix, while the "/" boundary
+    still keeps ghcr.io/manavmax-evil and other registries out."""
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+    from hosted.routes import _validate_image
+
+    good = "ghcr.io/manavmax/app:1"
+    evil = "ghcr.io/manavmax-evil/app:1"
+    other = "docker.io/manavmax/app:1"
+
+    monkeypatch.setattr(config, "get_settings", lambda: SimpleNamespace(hosted_registry_allowlist="ghcr.io/manavmax/"))
+    assert _validate_image(good) == good
+    monkeypatch.setattr(config, "get_settings", lambda: SimpleNamespace(hosted_registry_allowlist="ghcr.io/manavmax"))
+    assert _validate_image(good) == good
+
+    # the "/" boundary is kept: a longer namespace never matches a shorter prefix
+    monkeypatch.setattr(config, "get_settings", lambda: SimpleNamespace(hosted_registry_allowlist="ghcr.io/manavmax"))
+    with pytest.raises(HTTPException, match="allowlist"):
+        _validate_image(evil)
+    with pytest.raises(HTTPException, match="allowlist"):
+        _validate_image(other)
+
+    # empty allowlist keeps today's behaviour: every registry accepted
+    monkeypatch.setattr(config, "get_settings", lambda: SimpleNamespace(hosted_registry_allowlist=""))
+    assert _validate_image(other) == other
+
+    # blank / slash-only entries are ignored, never matched against
+    monkeypatch.setattr(config, "get_settings", lambda: SimpleNamespace(hosted_registry_allowlist=", / ,,ghcr.io/manavmax"))
+    assert _validate_image(good) == good
+    with pytest.raises(HTTPException, match="allowlist"):
+        _validate_image(evil)
+
+
+async def test_allowlist_trailing_slash_end_to_end(harness):
+    """The whole POST /api/hosted flow accepts an allowed-registry image when
+    the configured entry carries a trailing slash (the values-prod.example form)."""
+    client, _ = harness
+    admin_h = await _login(client, **ADMIN)
+    r = await client.post("/api/hosted", json={"name": "slashy", "image": IMAGE, "port": 8000}, headers=admin_h)
+    assert r.status_code == 201, r.text
+    # other registries stay rejected
+    r = await client.post("/api/hosted", json={"name": "bad3", "image": "ghcr.io/manavmax-evil/app:1", "port": 8000}, headers=admin_h)
+    assert r.status_code == 400, r.text

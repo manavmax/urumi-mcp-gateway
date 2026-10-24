@@ -54,7 +54,12 @@ def _validate_image(image: str) -> str:
         raise HTTPException(status_code=400, detail="image needs a tag or digest (e.g. ...:0.1.0)")
     if image.endswith(":latest"):
         raise HTTPException(status_code=400, detail=":latest is not allowed; pin a version tag or digest")
-    allow = [a.strip() for a in (get_settings().hosted_registry_allowlist or "").split(",") if a.strip()]
+    # Normalise each entry (ADR-090): strip whitespace AND a trailing slash, so
+    # "ghcr.io/manavmax/" and "ghcr.io/manavmax" behave identically; empty
+    # entries are ignored. The "/" boundary below is kept, so ghcr.io/manavmax
+    # never matches ghcr.io/manavmax-evil/....
+    allow = [a.strip().rstrip("/") for a in (get_settings().hosted_registry_allowlist or "").split(",")]
+    allow = [a for a in allow if a]
     if allow and not any(image == a or image.startswith(a + "/") for a in allow):
         raise HTTPException(status_code=400, detail="image registry is not on the allowlist")
     return image

@@ -14,7 +14,7 @@ cluster access:
   loop cannot farm namespaces unboundedly;
 - run store charts (bounded resources: per-namespace ResourceQuota + LimitRange
   render in every store namespace) and hosted images ONLY from the
-  configured registry prefixes (hostedServers.allowedRegistries=ghcr.io/<owner>/,
+  configured registry prefixes (hostedServers.allowedRegistries=ghcr.io/<owner>,
   enforced at apply time; anything else refused);
 - the provisioner is NOT reachable from outside the cluster (no Ingress; the
   NetworkPolicy admits gateway pods only) and the gateway exposes no
@@ -41,7 +41,7 @@ would shrink this, at the cost of dynamic RBAC management the demo rejects.
 **Hosted servers, production shape:** same controls as the phase-6 posture
 (non-root, read-only rootfs, NO SA token, mandatory caps, default-deny with
 gateway-only ingress and DNS-only egress) plus the prod allowlist
-(ghcr.io/<owner>/ - an attacker with dashboard admin cannot pull an arbitrary
+(ghcr.io/<owner> - an attacker with dashboard admin cannot pull an arbitrary
 registry image) and globalMax=2. What a malicious hosted image gets: code
 execution in a locked-down pod, DNS-resolvable egress only, and its tool
 output served to gateway users. It gets NO service-account token, no PVCs, no

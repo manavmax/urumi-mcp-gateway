@@ -156,7 +156,7 @@ hostedServers:
   enabled: true
   # comma-separated registry prefixes the admin may host images from; anything
   # else is refused at apply time. Restrict to YOUR GHCR namespace.
-  allowedRegistries: "ghcr.io/<owner>/"
+  allowedRegistries: "ghcr.io/<owner>"  # no trailing slash needed (ADR-090 normalises one away, but write it bare)
   globalMax: 2
   # timeoutSeconds/resources keep their values.yaml defaults unless overridden.
 
