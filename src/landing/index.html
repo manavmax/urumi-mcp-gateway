@@ -10,7 +10,9 @@
   <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/dm-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <script src="/theme-init.js"></script>
-  <link rel="stylesheet" href="/styles.css">
+  <!-- ?v=2: one-time cache-bust; browsers holding the old 7-day-public
+       styles.css never revalidate on their own (nginx now sends no-cache). -->
+  <link rel="stylesheet" href="/styles.css?v=2">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>

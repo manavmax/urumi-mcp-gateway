@@ -64,6 +64,9 @@
   --dot: rgba(255, 255, 255, 0.07);
   --glow: rgba(20, 184, 166, 0.16);
   /* hero connection lines: clearly visible in both themes (ADR-087) */
+  /* band-art box fill: --surface is nearly invisible on the --surface-alt band
+     in dark, so the strips get a raised fill (white in light) */
+  --ba-box: #2C2E2B;
   --flow-line: rgba(227, 229, 225, 0.34);
 
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -120,6 +123,7 @@
   --chip2-bg: rgba(17, 25, 21, 0.04);
   --dot: rgba(17, 25, 21, 0.10);
   --glow: rgba(15, 118, 110, 0.12);
+  --ba-box: #FFFFFF;
   --flow-line: rgba(17, 25, 21, 0.38);
   --shadow-micro: rgba(17, 25, 21, 0.08) 0 1px 3px 0, rgba(17, 25, 21, 0.10) 0 2px 24px 0;
   --shadow-inset: rgba(0, 0, 0, 0.06) 0 0 0 1px inset;
@@ -208,13 +212,13 @@ pre code { background: none; padding: 0; }
 .band-art svg { display: block; width: 100%; height: auto; }
 .ba-line { stroke: var(--flow-line); stroke-width: 1.5; fill: none; stroke-dasharray: 3 5; stroke-linecap: round; }
 .ba-solid { stroke: var(--hairline-strong); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.ba-box { fill: var(--surface); stroke: var(--hairline-strong); stroke-width: 1.5; }
+.ba-box { fill: var(--ba-box); stroke: var(--hairline-strong); stroke-width: 1.5; }
 .ba-acc { stroke: var(--accent); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .ba-vio { stroke: var(--violet); stroke-width: 1.5; fill: none; stroke-linecap: round; }
 .ba-dot { fill: var(--accent); }
 .ba-viodot { fill: var(--violet); }
-.ba-gate { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
-.ba-check { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
+.ba-gate { fill: var(--ba-box); stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
+.ba-check { fill: var(--ba-box); stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
 .ba-tick { fill: var(--faint); }
 .ba-caret { fill: var(--accent); }
 .ba-ok { stroke: var(--accent); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }

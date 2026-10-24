@@ -106,6 +106,27 @@ runs ≥450px** in both themes at both widths; every band-art clip shows painted
    first frame. Now driven with a real `page.mouse.wheel` gesture and a settle wait — deterministic
    and closer to the behaviour the page promises.
 
+## Follow-up: "black graphics" report (2026-10-24, after review)
+
+Cause: nginx served `styles.css` (and js/svg/woff2) with `expires 7d; Cache-Control: public` at
+unversioned URLs while `index.html` is not long-cached. A browser that had visited earlier in the day
+kept the pre-band-art stylesheet for 7 days and rendered the new SVGs with default styling — solid
+black shapes, no strokes, no motion. Fixes:
+
+- nginx: the static-asset location now sends `Cache-Control: no-cache` (revalidate via ETag; one 304
+  per asset per load) instead of a 7-day public cache. The site has no build step, so asset URLs are
+  never content-hashed and long caches guarantee stale-HTML/CSS mismatches after every redesign.
+- One-time cache-bust: the stylesheet link is now `/styles.css?v=2`, so browsers already holding the
+  old 7-day copy fetch the new CSS on the next normal reload.
+- Dark-mode legibility of the strips themselves: box fills were `--surface` (#1A1C19) on the
+  `--surface-alt` band (#131412) — near-invisible dark-on-dark. New `--ba-box` token
+  (#2C2E2B dark / #FFFFFF light) used by `.ba-box/.ba-gate/.ba-check`. Verified by canvas histogram of
+  the dark strip: band 19,20,18 = 80.5%, raised boxes 44,46,43 = 14.8%, teal accents present.
+
+All gates re-pass (total 216,414B ≤ 358,400B, JS unchanged, contrast 63/63 both themes). Motion note:
+the strips are calm by design — dash drift, pod pulse, caret blink, tour pulses; with
+`prefers-reduced-motion: reduce` the pulses are hidden and the rest is static.
+
 ## Needs human eyes
 
 - Aesthetics of the six strips (balance, whether the compositions read well at 342px on mobile).
