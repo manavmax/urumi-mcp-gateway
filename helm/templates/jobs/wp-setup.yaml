@@ -810,13 +810,23 @@ spec:
                 echo "  created Photography credits page."
               fi
 
-              # Primary menu: Shop + the four categories, assigned to the `primary`
-              # location (registered in the theme's functions.php).
+              # Primary menu: Shop + one entry per product category that ACTUALLY
+              # exists at seed time. The category list is queried from
+              # product_cat after the seed, never hardcoded: hardcoded slugs
+              # drifted from the catalogue once and seeded four dead menu links.
+              # The `primary` location is registered in the theme's functions.php.
               echo "Ensuring Primary menu..."
               wp menu create "Primary" --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
               MENU_ID=$(wp menu list --fields=term_id,name --format=csv --allow-root --path=$WP_PATH 2>/dev/null | grep ',Primary' | head -n1 | cut -d, -f1)
               if [ -n "$MENU_ID" ]; then
-                for ITEM in "Shop|/shop/" "Ceramics|/product-category/ceramics/" "Textiles|/product-category/textiles/" "Candles & Care|/product-category/candles-care/" "Desk & Paper|/product-category/desk-paper/" "Kitchen|/product-category/kitchen/" "Carry|/product-category/carry/"; do
+                {
+                  printf '%s\n' "Shop|/shop/"
+                  # CSV rows "name,slug" -> "name|/product-category/slug/"; the slug
+                  # is the LAST comma-separated field (slugs never contain commas),
+                  # so category names holding spaces/ampersands/commas survive.
+                  wp term list product_cat --fields=name,slug --format=csv --allow-root --path=$WP_PATH 2>/dev/null | tail -n +2 | awk -F, '{ slug=$NF; if (slug == "" || slug == "slug") { next } name=$0; sub("," slug "$", "", name); gsub(/"/, "", name); print name "|/product-category/" slug "/" }'
+                } | while IFS= read -r ITEM; do
+                  [ -n "$ITEM" ] || continue
                   TITLE="${ITEM%%|*}"; LINK="${ITEM#*|}"
                   if ! wp menu item list "$MENU_ID" --format=json --allow-root --path=$WP_PATH 2>/dev/null | grep -q "$LINK"; then
                     wp menu item add-custom "$MENU_ID" "$TITLE" "$LINK" --allow-root --path=$WP_PATH >/dev/null 2>&1 || true
