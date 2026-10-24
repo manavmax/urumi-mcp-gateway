@@ -3,25 +3,18 @@
 <!-- wp:group {"tagName":"main","layout":{"type":"constrained"}} -->
 <main class="wp-block-group">
 	<!-- wp:urumi-store/category-banner {"align":"full"} /-->
+	<!-- wp:woocommerce/breadcrumbs /-->
 	<!-- wp:group {"className":"urumi-archive-head","align":"full","layout":{"type":"constrained"}} -->
 	<div class="wp-block-group urumi-archive-head alignfull">
 		<!-- wp:query-title {"type":"archive","showPrefix":false,"align":"wide"} /-->
 		<!-- wp:term-description {"align":"wide"} /-->
 		<!-- wp:woocommerce/store-notices /-->
-		<!-- wp:html -->
-		<div class="urumi-filter-pills" role="navigation" aria-label="Shop by category">
-			<a class="urumi-pill" href="/shop/">All</a>
-			<a class="urumi-pill" href="/product-category/ceramics/">Ceramics</a>
-			<a class="urumi-pill" href="/product-category/textiles/">Textiles</a>
-			<a class="urumi-pill" href="/product-category/candles-care/">Candles & Care</a>
-			<a class="urumi-pill" href="/product-category/desk-paper/">Desk & Paper</a>
-			<a class="urumi-pill" href="/product-category/kitchen/">Kitchen</a>
-			<a class="urumi-pill" href="/product-category/carry/">Carry</a>
-		</div>
-		<!-- /wp:html -->
+		<!-- wp:urumi-store/category-nav {"variant":"pills"} /-->
+		<!-- wp:urumi-store/active-filters /-->
 		<!-- wp:group {"align":"wide","layout":{"type":"flex","flexWrap":"nowrap","justifyContent":"space-between"}} -->
 		<div class="wp-block-group alignwide urumi-sort-row">
 			<!-- wp:woocommerce/product-results-count /-->
+			<!-- wp:urumi-store/price-filter /-->
 			<!-- wp:woocommerce/catalog-sorting /-->
 		</div>
 		<!-- /wp:group -->
