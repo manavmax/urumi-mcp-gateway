@@ -294,3 +294,39 @@ async def test_allowlist_trailing_slash_end_to_end(harness):
     # other registries stay rejected
     r = await client.post("/api/hosted", json={"name": "bad3", "image": "ghcr.io/manavmax-evil/app:1", "port": 8000}, headers=admin_h)
     assert r.status_code == 400, r.text
+
+
+# --------------------------------------------------------------------------- ADR-091: global call timeout
+
+@pytest.mark.asyncio
+async def test_hosted_upstream_resolves_to_the_global_call_timeout(harness):
+    """The registered hosted upstream carries the LEGACY_TIMEOUT_MS sentinel
+    (not the old hard 5000), so its call timeout resolves to the global call
+    default; a stale pre-ADR-091 5000 row self-heals on the next sync pass."""
+    from types import SimpleNamespace
+
+    from db.models import LEGACY_TIMEOUT_MS
+    from gw_mcp.router import effective_call_timeout_seconds
+
+    client, SessionLocal = harness
+    admin_h = await _login(client, **ADMIN)
+    r = await client.post("/api/hosted", json={"name": "t9", "image": IMAGE, "port": 8000}, headers=admin_h)
+    assert r.status_code == 201, r.text
+    PROV_STATE["t9"] = {"phase": "ready", "reason": ""}
+    await sync.sync_hosted_once()
+    async with SessionLocal() as db:
+        srv = (await db.execute(select(Server).where(Server.slug == "t9"))).scalars().one()
+    assert srv.internal is True
+    assert srv.timeout_ms == LEGACY_TIMEOUT_MS
+    assert effective_call_timeout_seconds(srv, SimpleNamespace(call_timeout_seconds=15)) == 15.0
+
+    # the hosted Ready self-heal re-asserts the registration every pass, so a
+    # row written by the pre-ADR-091 sync (hard 5000) is corrected by it
+    async with SessionLocal() as db:
+        srv = (await db.execute(select(Server).where(Server.slug == "t9"))).scalars().one()
+        srv.timeout_ms = 5000  # simulate the pre-ADR-091 registration
+        await db.commit()
+    await sync.sync_hosted_once()
+    async with SessionLocal() as db:
+        srv = (await db.execute(select(Server).where(Server.slug == "t9"))).scalars().one()
+        assert srv.timeout_ms == LEGACY_TIMEOUT_MS

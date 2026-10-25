@@ -17,10 +17,21 @@ from __future__ import annotations
 
 import logging
 
-from db.models import Server, Store
+from db.models import LEGACY_TIMEOUT_MS, Server, Store
 from sqlalchemy import select
 
 logger = logging.getLogger("gateway.stores")
+
+
+def _reassert_call_default(server: Server) -> None:
+    """Sync-owned (internal) upstreams follow the global call default (ADR-089).
+
+    A row registered before the timeout cleanup carries a hard 5000; re-assert
+    the sentinel on every sync so it self-heals to the global call default.
+    Non-internal rows (admin-created servers) are never touched.
+    """
+    if server.internal and server.timeout_ms != LEGACY_TIMEOUT_MS:
+        server.timeout_ms = LEGACY_TIMEOUT_MS
 
 
 async def register_store_upstream(db, store: Store) -> None:
@@ -33,12 +44,13 @@ async def register_store_upstream(db, store: Store) -> None:
             existing.url = url
         existing.enabled = True
         existing.internal = True
+        _reassert_call_default(existing)
         return
     db.add(Server(
         slug=store.slug,
         url=url,
         auth_type="none",
-        timeout_ms=5000,
+        timeout_ms=LEGACY_TIMEOUT_MS,  # sentinel: follows the global call default (ADR-089)
         enabled=True,
         internal=True,
         status="Unknown",
@@ -91,6 +103,17 @@ async def sync_once() -> None:
                 await remove_store_upstream(db, store)
                 await db.delete(store)
                 logger.info("store %s teardown complete; row removed", store.slug)
+        # self-heal: a Ready store's registration is written once (at the
+        # Provisioning -> Ready transition), so rows carrying the pre-ADR-089
+        # hard 5000 would never be revisited. Re-assert the global call default
+        # on sync-owned rows every pass (timeout only: never url/enabled, so an
+        # admin-disabled upstream stays disabled). The hosted path already
+        # re-asserts via its Ready self-heal.
+        ready = (await db.execute(select(Store).where(Store.status == "Ready"))).scalars().all()
+        for store in ready:
+            srv = (await db.execute(select(Server).where(Server.slug == store.slug))).scalars().first()
+            if srv:
+                _reassert_call_default(srv)
         await db.commit()
 
 
@@ -129,12 +152,13 @@ async def register_hosted_upstream(db, hosted) -> None:
             existing.url = url
         existing.enabled = True
         existing.internal = True
+        _reassert_call_default(existing)
         return
     db.add(Server(
         slug=hosted.name,
         url=url,
         auth_type="none",
-        timeout_ms=5000,
+        timeout_ms=LEGACY_TIMEOUT_MS,  # sentinel: follows the global call default (ADR-089)
         enabled=True,
         internal=True,
         status="Unknown",

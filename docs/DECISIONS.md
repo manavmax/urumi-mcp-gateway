@@ -2070,3 +2070,25 @@ the check lives in gateway code and values files are only one of its inputs.
 400 "image registry is not on the allowlist" for every legitimate image. The
 normalisation is applied to the CONFIG side only; matching keeps the explicit
 `/` boundary so a prefix can never match a namespace that merely extends it.
+
+## 2026-10-25: Store/hosted upstreams follow the global call timeout (ADR-091)
+
+**Decision.** The store sync (stores/sync.py) and hosted sync register their
+internal upstreams with the LEGACY_TIMEOUT_MS sentinel instead of a hard
+5000, so their call timeout follows the global default (ADR-089, 15s via
+CALL_TIMEOUT_SECONDS); sync re-asserts the sentinel on sync-owned (internal)
+rows every pass, so existing rows registered with 5000 self-heal without a
+data migration. Admin-created (non-internal) servers are never touched, and
+the 3s list budget is unchanged.
+
+**Alternatives.** (1) Keep 5000 - rejected: it silently starves slow
+WordPress calls (e.g. create_product) that the 15s default would allow.
+(2) A separate store-timeout setting - rejected: a second knob duplicating
+call_timeout_seconds for no operator need; the sentinel already expresses
+"follow the global default".
+
+**Why.** The store and hosted sync are the only writers still pinning 5000
+after the ADR-089 cleanup, and their registrations are written once (stores)
+or re-asserted without the timeout (hosted), so old rows would keep the
+too-short cut-off forever; re-asserting on sync-owned rows keeps the fix
+idempotent and migration-free.
