@@ -298,3 +298,90 @@ async def test_servers_api_refuses_internal_delete_and_mutation(harness):
     # enable/disable stays allowed
     r = await client.patch(f"/api/servers/{sid}", json={"enabled": False}, headers=a)
     assert r.status_code == 200
+
+
+# ---- ADR-091: store/hosted upstreams follow the global call timeout ----------
+
+@pytest.mark.asyncio
+async def test_store_upstream_resolves_to_the_global_call_timeout(harness):
+    """The registered store upstream carries the LEGACY_TIMEOUT_MS sentinel
+    (not the old hard 5000), so its call timeout resolves to the global call
+    default - a slow WordPress call (create_product) gets the full budget."""
+    from types import SimpleNamespace
+
+    from db.models import LEGACY_TIMEOUT_MS
+    from gw_mcp.router import effective_call_timeout_seconds
+
+    client, SessionLocal = harness
+    m = await _login(client, MEMBER["email"], MEMBER["password"])
+    r = await _create(client, m, "alphato")
+    assert r.status_code == 201, r.text
+    PROV_STATE["alphato"] = {"phase": "ready", "reason": ""}
+    await sync.sync_once()
+    async with SessionLocal() as db:
+        srv = (await db.execute(select(Server).where(Server.slug == "alphato"))).scalars().one()
+    assert srv.internal is True
+    assert srv.timeout_ms == LEGACY_TIMEOUT_MS
+    assert effective_call_timeout_seconds(srv, SimpleNamespace(call_timeout_seconds=15)) == 15.0
+
+
+@pytest.mark.asyncio
+async def test_sync_corrects_a_stale_5000_store_row(harness):
+    """A store upstream registered by the pre-ADR-091 sync carries 5000; the
+    next sync pass self-heals the sync-owned row to the sentinel."""
+    from db.models import LEGACY_TIMEOUT_MS
+
+    client, SessionLocal = harness
+    m = await _login(client, MEMBER["email"], MEMBER["password"])
+    r = await _create(client, m, "staleto")
+    assert r.status_code == 201, r.text
+    PROV_STATE["staleto"] = {"phase": "ready", "reason": ""}
+    await sync.sync_once()
+    async with SessionLocal() as db:
+        srv = (await db.execute(select(Server).where(Server.slug == "staleto"))).scalars().one()
+        srv.timeout_ms = 5000  # simulate the pre-ADR-091 registration
+        await db.commit()
+    await sync.sync_once()  # Ready stores are revisited every pass
+    async with SessionLocal() as db:
+        srv = (await db.execute(select(Server).where(Server.slug == "staleto"))).scalars().one()
+        assert srv.timeout_ms == LEGACY_TIMEOUT_MS
+
+
+@pytest.mark.asyncio
+async def test_admin_set_timeout_still_wins_and_list_timeout_unchanged(harness):
+    """Sync never rewrites a NON-internal (admin-created) server: an explicit
+    7000 survives sync passes and still resolves to 7.0s. The 3s list cut-off
+    stays the global list_timeout_seconds setting (the list path never reads
+    per-server timeout_ms at all)."""
+    from types import SimpleNamespace
+
+    from config import Settings
+    from gw_mcp.router import effective_call_timeout_seconds
+
+    client, SessionLocal = harness
+    a = await _login(client, ADMIN["email"], ADMIN["password"])
+    m = await _login(client, MEMBER["email"], MEMBER["password"])
+    r = await client.post(
+        "/api/servers",
+        json={"slug": "admin-srv", "url": "http://admin-srv.invalid:8000/mcp", "auth_type": "none", "timeout_ms": 7000},
+        headers=a,
+    )
+    assert r.status_code == 201, r.text
+    # a live store so the sync pass (transition + Ready self-heal) actually runs
+    r = await _create(client, m, "shoply")
+    assert r.status_code == 201, r.text
+    PROV_STATE["shoply"] = {"phase": "ready", "reason": ""}
+    await sync.sync_once()
+    await sync.sync_once()
+    async with SessionLocal() as db:
+        srv = (await db.execute(select(Server).where(Server.slug == "admin-srv"))).scalars().one()
+        assert srv.internal is False
+        assert srv.timeout_ms == 7000
+    assert effective_call_timeout_seconds(srv, SimpleNamespace(call_timeout_seconds=15)) == 7.0
+    # the 3s list budget is unchanged by this change (and per-server timeout_ms
+    # plays no part in listing: gw_mcp.aggregator uses list_timeout_seconds)
+    assert Settings().list_timeout_seconds == 3
+    assert Settings().call_timeout_seconds == 15
+    # the admin row's id is still valid (nothing was swept away)
+    r = await client.get(f"/api/servers/{srv.id}", headers=a)
+    assert r.status_code == 200 and r.json()["timeout_ms"] == 7000
