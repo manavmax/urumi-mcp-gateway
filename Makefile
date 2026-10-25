@@ -40,9 +40,11 @@ ingress:
 lint:
 	helm lint ./helm -f helm/values-local.yaml
 	helm lint ./helm -f helm/values-prod.yaml
+	helm lint ./helm -f helm/values-prod.example.yaml
 	$(MAKE) chart-parity
 	python3 scripts/check-doc-links.py
 	python3 scripts/check-prose-style.py
+	python3 scripts/check-workload-hardening.py
 	@if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check .; \
 	  else echo "ERROR: .venv/bin/ruff missing - run 'make test' once to bootstrap .venv from requirements-dev.txt" >&2; exit 1; fi
 
@@ -455,4 +457,5 @@ help:
 	@echo "  make helm-prod-first   FIRST install on a fresh cluster: no --wait (hook ordering,"
 	@echo "    docs/DEPLOY_VPS.md); upgrades afterwards use make helm-prod"
 	@echo "  make upgrade ARGS='--set x=y' / make rollback REV=<n>   rehearsed upgrade/rollback"
-	@echo "  make verify-store verify-mcp verify-gateway verify-llm verify-hardening   live gates"
+	@echo "  make verify-store verify-mcp verify-gateway verify-llm   live gates"
+	@echo "  bash scripts/verify-hardening.sh   live security table (53 checks)"
