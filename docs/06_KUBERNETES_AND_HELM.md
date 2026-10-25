@@ -175,7 +175,7 @@ helm upgrade urumi ./helm -n urumi -f values-local.yaml --set gateway.image.tag=
 | MariaDB | StatefulSet 1× | ClusterIP 3306 | wp data 5Gi RWO (volumeClaimTemplates) | `mariadb-secret` | No |
 | Postgres | StatefulSet 1× | ClusterIP 5432 | `pg-data` 5Gi RWO | `pg-secret` | No |
 | `Woo-MCP` | Deployment 1× | ClusterIP 8000 | n/a | `woo-secrets` | **No** (only gateway via NP) |
-| Gateway | Deployment 1×(local)/2×(prod) | ClusterIP 8000 | n/a | `gateway-secrets` | Yes (via Ingress `dashboard.<domain>/api` + `/mcp`) |
+| Gateway | Deployment 1× (replica safe; the shipped values run 1 in prod) | ClusterIP 8000 | n/a | `gateway-secrets` | Yes (via Ingress `dashboard.<domain>/api` + `/mcp`) |
 | Dashboard | Deployment 1× (nginx:alpine) | ClusterIP 80 | n/a | n/a | Yes (via Ingress `dashboard.<domain>/`) |
 | Extra MCPs | Deployment each | ClusterIP | n/a | optional | No |
 
