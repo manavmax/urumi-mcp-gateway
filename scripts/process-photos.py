@@ -268,7 +268,7 @@ CONTACT_HERO_BANNERS = ROOT / "artifacts" / "store-photos" / "contact-sheet-hero
 def main() -> None:
     if not CHOICES.exists():
         sys.exit(f"no {CHOICES}; photo curation has not happened yet. "
-                 "See docs/REVIEW_NEEDED_STORE.md.")
+                 "See docs/DECISIONS.md (photo-first catalogue, ADR-078).")
     choices = json.loads(CHOICES.read_text())
     IMAGES.mkdir(exist_ok=True)
     entries: list[dict] = []
