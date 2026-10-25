@@ -41,6 +41,7 @@ lint:
 	helm lint ./helm -f helm/values-local.yaml
 	helm lint ./helm -f helm/values-prod.yaml
 	$(MAKE) chart-parity
+	python3 scripts/check-doc-links.py
 	@if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check .; \
 	  else echo "ERROR: .venv/bin/ruff missing - run 'make test' once to bootstrap .venv from requirements-dev.txt" >&2; exit 1; fi
 

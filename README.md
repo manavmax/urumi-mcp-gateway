@@ -2,7 +2,7 @@
 
 WooCommerce store + a team MCP gateway on Kubernetes + Helm, built as a take-home. One `/mcp` endpoint aggregates N Streamable-HTTP MCP servers behind deterministic `slug__tool` names, with a React dashboard (servers, members, keys, audit, chat), a chat agent that calls tools as the logged-in user, a provisioned multi-store system, hosted servers, and OAuth 2.1 for MCP clients. Take-home due 26 Oct 2026, 11:59 PM IST.
 
-**Status:** complete and verified live: kind locally, k3s on a VPS since 2026-10-20 (Let's Encrypt production cert). `make test` green (gateway 327, woo-mcp 21, demo-mcp-time 8), `make lint` clean, `bash scripts/regress-core.sh` passes end to end.
+**Status:** complete and verified live: kind locally, k3s on a VPS since 2026-10-20 (Let's Encrypt production cert). `make test` green (gateway 419 passed + 2 skipped, woo-mcp 21, demo-mcp-time 8), `make lint` clean, `bash scripts/regress-core.sh` passes end to end.
 
 ## Architecture in 5 lines
 
