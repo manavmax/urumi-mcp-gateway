@@ -334,7 +334,7 @@ Status legend: **VERIFIED IN REPO** (file or command evidence below), **LIVE ONL
 | Requirement | Status | Evidence |
 |---|---|---|
 | A1 dashboard shows registered servers with status and tools | VERIFIED IN REPO | `src/dashboard/src/pages/Servers.tsx`, `src/gateway/routes/servers.py`, `src/gateway/gw_mcp/health_state.py` |
-| A2 Woo MCP already registered as the first server | VERIFIED IN REPO | seeded in `src/gateway`, `helm/values.yaml` |
+| A2 Woo MCP already registered as the first server | VERIFIED IN REPO | `seed_default_servers` in `src/gateway/registry/crud.py` seeds `woo` first, then `time` and `notes` |
 | A3 add, edit, disable, remove a server by URL and credential | VERIFIED IN REPO | `src/gateway/routes/servers.py`, dashboard Servers page |
 | A4 invite members, issue and revoke API keys | VERIFIED IN REPO | `src/gateway/routes/members.py`, `src/gateway/routes/keys.py` |
 | A5 audit log of every call | VERIFIED IN REPO | `audit_logs` table in `src/gateway/db/models.py`, async audit queue |
