@@ -29,6 +29,7 @@ venv/
 .ruff_cache/
 
 # Node / Dashboard
+node_modules
 node_modules/
 src/dashboard/dist/
 src/dashboard/.vite/

@@ -217,11 +217,12 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
   now 56 DONE / 2 PARTIAL (both documented with workarounds) / 0 NOT DONE.
 - README.md: feature-flag table (provisioner/hosted/oauth + stores caps),
   one-paragraph feature summaries, regress gate, demo script steps 5-8.
-- docs/SYSTEM_DESIGN_AND_TRADEOFFS.md: NEW - the phases 0-8 design + accepted
-  trade-offs (per ADR-054..063) for live defense.
+- SYSTEM_DESIGN_AND_TRADEOFFS.md (root): NEW - the phases 0-8 design + accepted
+  trade-offs (per ADR-054..063) for live defense. (Moved from docs/ to root
+  2026-10-25; see docs/DECISIONS.md consolidation section.)
 - docs/EXPLAINER.md: provisioner, hosted servers, OAuth sections complete.
-- docs/THREAT_MODEL.md: hosted-image risk, OAuth redirect/token risks,
-  one-member-versus-another.
+- THREAT_MODEL.md (root): hosted-image risk, OAuth redirect/token risks,
+  one-member-versus-another. (Moved from docs/ to root 2026-10-25.)
 - docs/UPGRADE_ROLLBACK.md: new-components upgrade notes (provisioner image
   bakes the store chart; store/hosted state is cluster state; migration 011
   additive; flag-off->on is a plain upgrade; ADR-061 migration verification).
