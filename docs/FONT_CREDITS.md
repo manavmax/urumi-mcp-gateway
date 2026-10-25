@@ -1,10 +1,10 @@
 # Font credits
 
-All fonts are self-hosted (no CDN, no external font requests) and licensed under the SIL Open Font License 1.1. Landing page and store theme are listed separately.
+All fonts are self hosted (no CDN, no external font requests) and licensed under the SIL Open Font License 1.1. Landing page and store theme are listed separately.
 
 ## Landing page font credits
 
-The landing page self-hosts two typefaces as woff2, latin subset only (ADR-086).
+The landing page self hosts two typefaces as woff2, latin subset only (`ADR-086`).
 No font CDN, no external font request; the fonts are served from `src/landing/fonts/`
 by the landing nginx image, same origin as the page.
 
@@ -18,7 +18,7 @@ by the landing nginx image, same origin as the page.
 
 - Packages were installed into a temporary folder OUTSIDE this repository
   (`npm install @fontsource-variable/inter @fontsource/dm-mono`), and only the
-  latin-subset woff2 files listed above were copied into `src/landing/fonts/`.
+  latin subset woff2 files listed above were copied into `src/landing/fonts/`.
   No other file from either package ships in the repo or the image.
 - Both packages state `"license": "OFL-1.1"` in their `package.json`.
 - Inter is copyright The Inter Project Authors
@@ -40,8 +40,8 @@ by the landing nginx image, same origin as the page.
 
 ## Font credits (Loam & Ember store theme)
 
-Self-hosted in `store/theme/urumi-store/assets/fonts/`, latin subset, variable
-weight, `font-display: swap`, served from the store-assets image. No CDN, no
+Self hosted in `store/theme/urumi-store/assets/fonts/`, latin subset, variable
+weight, `font-display: swap`, served from the `store-assets` image. No CDN, no
 external font requests at runtime.
 
 | Family | File | Source package | Version | Licence |
@@ -54,7 +54,7 @@ external font requests at runtime.
 
 - Installed with npm into a temporary folder outside the repository:
   `@fontsource-variable/newsreader` and `@fontsource-variable/hanken-grotesk`.
-- Copied only the `*-latin-wght-*.woff2` variable-font files (weight axis,
+- Copied only the `*-latin-wght-*.woff2` variable font files (weight axis,
   latin unicode range) into the theme. No other subsets ship.
 - The npm packages and temp folder live outside the repository; only the
   woff2 binaries are committed here.
@@ -71,7 +71,7 @@ external font requests at runtime.
 - SIL OFL 1.1 permits bundling and redistribution in web projects, including
   commercial use, provided the fonts are not sold by themselves and reserved
   names are respected. Both families meet the store requirement of a freely
-  licensed, self-hostable typeface.
+  licensed, self hostable typeface.
 - Full licence texts are distributed with the fontsource packages
-  (node_modules/@fontsource-variable/<family>/LICENSE) and upstream at
+  (`node_modules/@fontsource-variable/<family>/LICENSE`) and upstream at
   https://openfontlicense.org .
