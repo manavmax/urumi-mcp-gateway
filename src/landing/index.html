@@ -128,7 +128,7 @@
               <circle class="hv-pulse" cx="500" cy="250" r="118"/>
               <circle class="hv-ring" cx="500" cy="250" r="94"/>
               <rect x="425" y="175" width="150" height="150" rx="22"/>
-              <g class="hv-grid">
+              <g class="hv-grid" data-decor>
                 <path d="M425 205h150M425 235h150M425 265h150M425 295h150M455 175v150M485 175v150M515 175v150M545 175v150"/>
               </g>
               <text class="hv-hub-label" x="500" y="244">/mcp</text>
@@ -244,27 +244,27 @@
             <div class="lc-col">
               <p class="lc-coltitle">3 upstream servers</p>
               <div class="lc-card">
-                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-dot lc-dot-ok" data-ink></span>
                 <span class="lc-name">woo</span>
                 <span class="lc-status status-ok">Connected</span>
                 <span class="lc-meta">8 tools</span>
               </div>
               <div class="lc-card">
-                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-dot lc-dot-ok" data-ink></span>
                 <span class="lc-name">time</span>
                 <span class="lc-status status-ok">Connected</span>
                 <span class="lc-meta">2 tools</span>
               </div>
               <div class="lc-card">
-                <span class="lc-dot" data-ink style="background: var(--accent)"></span>
+                <span class="lc-dot lc-dot-ok" data-ink></span>
                 <span class="lc-name">notes</span>
                 <span class="lc-status status-ok">Connected</span>
                 <span class="lc-meta">3 tools</span>
               </div>
               <p class="lc-legend">
-                <span class="lc-dot" data-ink style="background: var(--accent)"></span><span>Connected</span>
-                <span class="lc-dot" data-ink style="background: var(--warn)"></span><span>Disabled</span>
-                <span class="lc-dot" data-ink style="background: var(--danger)"></span><span>Unreachable</span>
+                <span class="lc-dot lc-dot-ok" data-ink></span><span>Connected</span>
+                <span class="lc-dot lc-dot-warn" data-ink></span><span>Disabled</span>
+                <span class="lc-dot lc-dot-err" data-ink></span><span>Unreachable</span>
               </p>
               <p class="lc-note">Per-server timeouts and a circuit breaker: tool list 3s, tool call 15s. One dead server never breaks the rest.</p>
             </div>

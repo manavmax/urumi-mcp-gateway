@@ -128,7 +128,7 @@ async function newCase(c, extra = {}) {
   const requests = [];
   const consoleErrors = [];
   page.on("request", (r) => requests.push(r.url()));
-  page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
+  page.on("console", (m) => { if (m.type() === "error" || /content security policy/i.test(m.text())) consoleErrors.push(m.text()); });
   page.on("pageerror", (e) => consoleErrors.push("pageerror: " + e.message));
   await page.goto(URL_BASE, { waitUntil: "networkidle" });
   return { ctx, page, requests, consoleErrors };

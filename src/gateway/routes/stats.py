@@ -40,9 +40,9 @@ DURATION_FETCH_CAP = 50000
 # 14-point sparkline per server, docs/11_OBSERVABILITY.md §2).
 SPARKLINE_MAX_POINTS = 14
 
-# Admin top-tools aggregate for the Overview page (docs/POLISH_DASHBOARD.md):
-# top N exposed tool names by calls over the selected window. Counts only -
-# never argument values or credentials.
+# Admin top-tools aggregate for the Overview page (docs/DECISIONS.md, dashboard
+# polish entry): top N exposed tool names by calls over the selected window.
+# Counts only - never argument values or credentials.
 TOP_TOOLS_MAX = 6
 
 

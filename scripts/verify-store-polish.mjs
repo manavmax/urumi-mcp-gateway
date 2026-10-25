@@ -353,7 +353,7 @@ async function main() {
     const netErrors = globalConsole.filter((e) => e.includes("Failed to load resource"));
     check("no failed resource loads", netErrors.length === 0, netErrors.slice(0, 3).join(" | ") || "none");
     // The "ResizeObserver loop" console warning from the Woo block cart is a
-    // known cosmetic issue (docs/REVIEW_NEEDED_STORE.md section 4); it carries
+    // known cosmetic issue (docs/STORE_VERIFY.md console row); it carries
     // no stack and breaks nothing. Everything else fails the run.
     const KNOWN_BENIGN = [/ResizeObserver loop/];
     const jsErrors = globalConsole.filter(

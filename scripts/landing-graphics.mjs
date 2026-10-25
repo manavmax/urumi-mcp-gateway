@@ -216,10 +216,37 @@ for (const theme of THEMES) {
     const requests = [];
     const consoleErrors = [];
     page.on("request", (r) => requests.push(r.url()));
-    page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
+    page.on("console", (m) => { if (m.type() === "error" || /content security policy/i.test(m.text())) consoleErrors.push(m.text()); });
     page.on("pageerror", (e) => consoleErrors.push("pageerror: " + e.message));
     await page.goto(URL_BASE, { waitUntil: "networkidle" });
     await page.evaluate(() => document.fonts.ready);
+    const caseName = `${c.name}-${theme}`;
+    const caseReport = { case: caseName, figs: {}, checks: {} };
+    await page.evaluate(`(() => { ${EVAL_SRC}; window.__minPx = ${c.minPx}; })()`);
+
+    // Pre-reveal pass: measure every graphic BEFORE the scroll-through lights
+    // the tour diagram and reveals the data-io sections. This is the state a
+    // visitor first sees (unlit strokes, e.g. .dpath-back) and the state the
+    // earlier "green" runs never measured; it must pass too.
+    const measureFigs = async (label) => {
+      for (const fig of FIGS) {
+        const visible = await page.evaluate((id) => {
+          const el = document.getElementById(id);
+          return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+        }, fig.id);
+        if (!visible) { caseReport.figs[fig.id] = { skipped: "not visible at this width" }; continue; }
+        const m = await page.evaluate(`window.__measure(${JSON.stringify(fig.id)})`);
+        if (m.missing) { fail(`${caseName} ${fig.id}: element missing`); continue; }
+        caseReport.figs[fig.id] = m;
+        if (m.widthPct < c.minPct - 0.5)
+          fail(`${caseName} ${fig.id}: width ${m.widthPct}% < ${c.minPct}% of section content`);
+        if (m.minText === null)
+          fail(`${caseName} ${fig.id}: no measurable text`);
+        if (m.problems.length) m.problems.forEach((p) => fail(`${caseName} ${fig.id}: ${p}${label}`));
+      }
+    };
+    await measureFigs(" (pre-reveal)");
+
     // reveal everything (instant jumps: html has smooth scroll-behavior)
     await page.evaluate(async () => {
       const step = window.innerHeight * 0.8;
@@ -231,26 +258,8 @@ for (const theme of THEMES) {
     });
     await page.waitForTimeout(800);
 
-    const caseName = `${c.name}-${theme}`;
-    const caseReport = { case: caseName, figs: {}, checks: {} };
-
-    // 1-4: per-graphic gates
-    await page.evaluate(`(() => { ${EVAL_SRC}; window.__minPx = ${c.minPx}; })()`);
-    for (const fig of FIGS) {
-      const visible = await page.evaluate((id) => {
-        const el = document.getElementById(id);
-        return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
-      }, fig.id);
-      if (!visible) { caseReport.figs[fig.id] = { skipped: "not visible at this width" }; continue; }
-      const m = await page.evaluate(`window.__measure(${JSON.stringify(fig.id)})`);
-      if (m.missing) { fail(`${caseName} ${fig.id}: element missing`); continue; }
-      caseReport.figs[fig.id] = m;
-      if (m.widthPct < c.minPct - 0.5)
-        fail(`${caseName} ${fig.id}: width ${m.widthPct}% < ${c.minPct}% of section content`);
-      if (m.minText === null)
-        fail(`${caseName} ${fig.id}: no measurable text`);
-      if (m.problems.length) m.problems.forEach((p) => fail(`${caseName} ${fig.id}: ${p}`));
-    }
+    // 1-4: per-graphic gates (post-reveal: diagram fully lit)
+    await measureFigs("");
     const measured = Object.values(caseReport.figs).filter(f => f.widthPct !== undefined);
     const sizes = measured.filter(f => f.minText != null).map(f => f.minText);
     if (measured.length && !measured.some(f => f.problems?.length) && sizes.length)

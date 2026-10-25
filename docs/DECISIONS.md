@@ -2174,3 +2174,55 @@ been lost context for future changes.
 **Why.** A reviewer reading the root files must get the full current truth;
 per-run status reports contradict that goal once their runs are merged, and
 stale REVIEW_NEEDED items read as unresolved when most are resolved.
+
+## 2026-10-25: Landing CSP fixed with CSS classes; gates run against the nginx container (ADR-092)
+
+**What changed.** (1) The six lifecycle-figure status dots carried inline
+`style="background: var(--accent)"` attributes, which `style-src 'self'` (no
+`unsafe-inline`) refuses: every page load logged six "Refused to apply inline
+style" CSP violations. They were replaced with CSS classes (`lc-dot-ok`,
+`lc-dot-warn`, `lc-dot-err`) added next to `.lc-dot` in `src/landing/styles.css`;
+the CSP header in `src/landing/nginx.conf` is unchanged. The JS in
+`main.js`/`theme-init.js` sets styles only through the CSSOM (`.style.x = ...`),
+which the same CSP does not block, so no JS change was needed. (2) Two
+pre-reveal contrast failures were fixed: the tour diagram's return path
+`#tourWide .dpath.dpath-back` blended to 2.15:1 (dark) / 1.99:1 (light) because
+`opacity: 0.6` stacked on the 0.45/0.52-alpha `--flow-line`; raised to
+`opacity: 0.9` so it measures 3.32:1 / 3.02:1 while staying the quietest path
+(the forward paths are 3.82/3.51). The only sub-3 heroVisual stroke was the
+decorative `.hv-grid` texture wash (opacity 0.05, inside the hub); it is now
+marked `data-decor`, the gate's documented exemption for decorative washes -
+the meaningful hero strokes (`hv-path`, `hv-ring`, `hv-dot`) all already
+measured >= 3. (3) The gates now run against the real nginx container by
+default: `make landing-verify` and `make landing-graphics` build the production
+image, run it behind the strict CSP on a free port, run the gate, and always
+stop the container (trap EXIT, so it cleans up even on failure). Both scripts
+also now fail on any console error or CSP-violation message, and the graphics
+gate adds a pre-reveal measurement pass so the unlit state (what a visitor
+first sees) is gated too. One command, documented in README: `make
+landing-verify` / `make landing-graphics`.
+
+**Why classes instead of `unsafe-inline`.** Loosening the CSP to
+`style-src 'unsafe-inline'` would defeat the strict-CSP guarantee the landing
+component exists for (ADR-080/083/086) - inline styles are a DOM-XSS sink and
+the whole hardening story is that the page ships only `'self'` scripts and
+styles. CSS classes are free of inline attributes, keep the header strict, and
+are trivially themeable.
+
+**Why the gate change.** Earlier "green" runs pointed `LANDING_URL` at a
+python `http.server` preview, which sends no CSP header at all, so the
+production violations were invisible to them. Running against the built nginx
+container reproduces exactly what production serves, and the pre-reveal pass
+closes the gap where the unlit diagram strokes (the brief's 2.59/1.31 numbers,
+measured on an older image with a dimmer `--flow-line`) were never exercised.
+
+**Alternatives considered.**
+- `style-src 'unsafe-inline'` / hashes / nonces for the six attributes: rejected
+  - unsafe-inline defeats the CSP; per-attribute hashes add maintenance and
+  nginx cannot inject nonces into static HTML without a templating step.
+- Keep `opacity: 0.6` on `.dpath-back` and exempt it: rejected - it is a
+  meaningful connector (the audited return path), not a wash; raising to 0.9
+  preserves the secondary look while meeting 3:1.
+- Exempt `.hv-grid` without a marker: rejected - the gate's `data-decor`
+  exemption exists precisely for decorative washes; marking it keeps the gate
+  honest rather than special-casing this element.
