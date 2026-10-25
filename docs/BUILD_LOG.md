@@ -30,7 +30,7 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
 - GATE: `bash scripts/regress-core.sh` (after make helm-local + image rebuilds) -> `REGRESS-CORE: ALL CHECKS PASSED`:
   tools/list admin=13 member=13; storefront order #102 placed (Store API COD) and visible via MCP woo__list_orders; disabled upstream hidden from tools/list AND chat tool load; revoked key -> 401; audit rows attributed (member time row, 4 admin rows); demo-time pod killed: woo+notes stayed 200, dashboard showed Unreachable, time recovered.
 - Full suites after the changes: gateway 327 passed; demo-time 8 passed (5 new default-timezone); woo-mcp 21 passed; ruff clean; helm lint local+prod clean.
-- Environment quirk: the kind node container lives under the colima docker context (default desktop-linux has no containers). Image build/import used `docker --context colima`. Manav should confirm which context is intended -> docs/REVIEW_NEEDED.md.
+- Environment quirk: the kind node container lives under the colima docker context (default desktop-linux has no containers). Image build/import used `docker --context colima`. RESOLVED: the Makefile now carries `DOCKER_CONTEXT ?= colima` (see docs/DECISIONS.md, 2026-10-25 consolidation section).
 
 ## 2026-10-21 Phase 1 — observability (ADR-056)
 
@@ -217,11 +217,12 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
   now 56 DONE / 2 PARTIAL (both documented with workarounds) / 0 NOT DONE.
 - README.md: feature-flag table (provisioner/hosted/oauth + stores caps),
   one-paragraph feature summaries, regress gate, demo script steps 5-8.
-- docs/SYSTEM_DESIGN_AND_TRADEOFFS.md: NEW - the phases 0-8 design + accepted
-  trade-offs (per ADR-054..063) for live defense.
+- SYSTEM_DESIGN_AND_TRADEOFFS.md (root): NEW - the phases 0-8 design + accepted
+  trade-offs (per ADR-054..063) for live defense. (Moved from docs/ to root
+  2026-10-25; see docs/DECISIONS.md consolidation section.)
 - docs/EXPLAINER.md: provisioner, hosted servers, OAuth sections complete.
-- docs/THREAT_MODEL.md: hosted-image risk, OAuth redirect/token risks,
-  one-member-versus-another.
+- THREAT_MODEL.md (root): hosted-image risk, OAuth redirect/token risks,
+  one-member-versus-another. (Moved from docs/ to root 2026-10-25.)
 - docs/UPGRADE_ROLLBACK.md: new-components upgrade notes (provisioner image
   bakes the store chart; store/hosted state is cluster state; migration 011
   additive; flag-off->on is a plain upgrade; ADR-061 migration verification).

@@ -156,8 +156,9 @@ STORE_URL=http://localhost:18088 node scripts/verify-store-contrast.mjs
 - Screenshot review by eye: this session's model cannot view images; the
   19 screenshots in artifacts/store-v2-shots await a human/photo-capable pass.
 - Post-photo re-measurement of page weight (tiles will add ~300-600 KB
-  fetched; the 800 KB home budget needs re-checking then - see
-  docs/REVIEW_NEEDED_STORE.md).
+  fetched; the 800 KB home budget needs re-checking then - DONE post-photo:
+  home 748KB, gate held; see docs/DECISIONS.md, 2026-10-25 consolidation
+  section).
 
 ## What ran on the LOCAL KIND CLUSTER after the photo pass (2026-10-23)
 
