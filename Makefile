@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down ingress lint chart-parity template helm-local helm-prod helm-prod-first rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image landing-image wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
+.PHONY: kind-up kind-down ingress lint chart-parity template helm-local helm-prod helm-prod-first rotate-secrets clean logs ps port-forward verify-store wp-logs verify-cod woo-mcp-image verify-mcp demo-time-image demo-notes-image demo-images store-assets-image verify-demo admin-password gateway-admin-password gateway-image dashboard-image landing-image landing-verify landing-graphics wordpress-image wp-cli-image verify-gateway verify-dashboard verify-llm deploy test demo-reset images-push images-pull images-push smoke-images help upgrade rollback
 
 NAMESPACE ?= urumi
 RELEASE   ?= urumi
@@ -207,6 +207,33 @@ landing-image:
 	$(DOCKER) save urumi/landing:0.2.0 | $(DOCKER) exec -i urumi-control-plane ctr -n k8s.io images import -
 	@echo "loaded urumi/landing:0.2.0 into kind node"
 	@echo "REMINDER: pods are NOT restarted by an import - restart with: kubectl rollout restart deployment/urumi-landing -n $(NAMESPACE)"
+
+# Landing gates (ADR-080/084/086) - the honest path. They build the production
+# image and run the gate against the REAL nginx container (CSP style-src 'self')
+# on a free port, NOT a header-less python http.server; the earlier green runs
+# used a preview server and could not see the CSP/console failures. The
+# container is always stopped (trap EXIT) even when the gate fails. A gate
+# fails on any console error or CSP violation message.
+define LANDING_GATE_RUN
+set -e; \
+PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()"); \
+CID=''; \
+cleanup(){ [ -n "$$CID" ] && $(DOCKER) stop $$CID >/dev/null 2>&1 || true; }; \
+trap cleanup EXIT; \
+$(DOCKER) rm -f urumi-landing-gate >/dev/null 2>&1 || true; \
+$(DOCKER) build -q -t urumi/landing:0.2.0 src/landing; \
+CID=$$($(DOCKER) run -d --rm --name urumi-landing-gate --user 101 --tmpfs /tmp:mode=1777 --tmpfs /var/cache/nginx:mode=1777 --tmpfs /var/run:mode=1777 -p 127.0.0.1:$$PORT:8080 urumi/landing:0.2.0); \
+echo "== landing gate against nginx container on http://127.0.0.1:$$PORT =="; \
+LANDING_URL=http://127.0.0.1:$$PORT node $(1)
+endef
+
+landing-verify:
+	@$(call LANDING_GATE_RUN,scripts/landing-verify.mjs)
+
+landing-graphics:
+	@$(call LANDING_GATE_RUN,scripts/landing-graphics.mjs)
+
+
 
 # Rebuild Layer 3 images, import them into the kind node, then RESTART the pods so
 # the new build actually lands. Without the rollout restart, `ctr images import`

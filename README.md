@@ -98,7 +98,7 @@ With every flag off the core demo path is unchanged (regress-core gate proves it
 | Chat LLM (streams, tool loop) | `make verify-llm` |
 | OAuth full flow | `bash scripts/phase7-oauth-gate.sh` |
 | Store UI/browser gates | `node scripts/verify-store.mjs`, `scripts/verify-store-contrast.mjs`, `scripts/verify-checkout.mjs` |
-| Landing gates | `node scripts/landing-verify.mjs`, `node scripts/landing-graphics.mjs` (dockerised page) |
+| Landing gates | `make landing-verify`, `make landing-graphics` (build, run the real nginx container on a free port, test, auto-cleanup) |
 | Demo reset | `make demo-reset` (dry run) / `CONFIRM=yes` |
 
 `make demo-reset` is dry-run by default, refuses non-kind contexts, uses official APIs only, and restores the demo state (29 seed products survive, audits/permissions/users reset).
@@ -138,7 +138,7 @@ Non-root everywhere with explicit uids, no SA tokens (one secrets-only exception
 
 ## Landing page (apex host)
 
-`src/landing/` is a one-page static site (no build step, zero external requests, strict CSP, nginx uid 101 on 8080) served at the apex by the `landing` component (ADR-080/083/086). Design source of truth: `docs/LANDING_DESIGN.md`. Every GitHub link builds at runtime from the chart value `landing.repoUrl`, injected as `/landing-config.js`; "Beyond the brief" items are toggled in `src/landing/features.js`. Verify with `node scripts/landing-verify.mjs` and `node scripts/landing-graphics.mjs` against the dockerised page (`make landing-image`, then the docker command in the script header).
+`src/landing/` is a one-page static site (no build step, zero external requests, strict CSP, nginx uid 101 on 8080) served at the apex by the `landing` component (ADR-080/083/086). Design source of truth: `docs/LANDING_DESIGN.md`. Every GitHub link builds at runtime from the chart value `landing.repoUrl`, injected as `/landing-config.js`; "Beyond the brief" items are toggled in `src/landing/features.js`. Verify with `make landing-verify` and `make landing-graphics` (each builds the production image, runs it behind the real nginx with the strict CSP, and always cleans up).
 
 ## Known limitations (honest)
 
