@@ -34,6 +34,7 @@ HYPHENATED = re.compile(r"[A-Za-z][A-Za-z0-9]*-[A-Za-z][A-Za-z0-9-]*[A-Za-z0-9]|
 
 URL = re.compile(r"(?:https?://[^\s)\]>\"']+|<https?://[^>]+>|mailto:[^\s)\]>\"']+)")
 LINK_TARGET = re.compile(r"\]\([^)]*\)")
+HTML_TAG = re.compile(r"<[^>]*>")
 REF_DEF = re.compile(r"^\s*\[[^\]]+\]:\s+\S+")
 LIST_MARKER = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 
@@ -92,6 +93,8 @@ def check_text(path: Path, text: str) -> list[str]:
             continue
         prose = URL.sub(" ", prose)
         prose = LINK_TARGET.sub(" ", prose)
+        if stripped.startswith("<"):
+            prose = HTML_TAG.sub(" ", prose)
         prose = LIST_MARKER.sub("", prose, count=1)
         for ch in prose:
             if ch in DASHES:
