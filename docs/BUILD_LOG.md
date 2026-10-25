@@ -30,7 +30,7 @@ Append-only evidence: real commands, trimmed real output. Newest sections at the
 - GATE: `bash scripts/regress-core.sh` (after make helm-local + image rebuilds) -> `REGRESS-CORE: ALL CHECKS PASSED`:
   tools/list admin=13 member=13; storefront order #102 placed (Store API COD) and visible via MCP woo__list_orders; disabled upstream hidden from tools/list AND chat tool load; revoked key -> 401; audit rows attributed (member time row, 4 admin rows); demo-time pod killed: woo+notes stayed 200, dashboard showed Unreachable, time recovered.
 - Full suites after the changes: gateway 327 passed; demo-time 8 passed (5 new default-timezone); woo-mcp 21 passed; ruff clean; helm lint local+prod clean.
-- Environment quirk: the kind node container lives under the colima docker context (default desktop-linux has no containers). Image build/import used `docker --context colima`. Manav should confirm which context is intended -> docs/REVIEW_NEEDED.md.
+- Environment quirk: the kind node container lives under the colima docker context (default desktop-linux has no containers). Image build/import used `docker --context colima`. RESOLVED: the Makefile now carries `DOCKER_CONTEXT ?= colima` (see docs/DECISIONS.md, 2026-10-25 consolidation section).
 
 ## 2026-10-21 Phase 1 — observability (ADR-056)
 

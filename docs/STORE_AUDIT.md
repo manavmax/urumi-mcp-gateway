@@ -22,8 +22,8 @@ Date: 2026-10-22. Baseline: `main` as of commit `8cf8f73` (ADR-052/053), branch 
 **Honest limitation:** the screenshots exist, but the assistant in this session cannot view
 images (model limitation). The audit is therefore DOM/measurement-based; every finding below
 comes from computed styles, geometry and network/console evidence, not eyeballing. A human
-visual pass over `artifacts/store-audit/` is still worthwhile; it is listed in
-docs/REVIEW_NEEDED_STORE.md.
+visual pass over `artifacts/store-audit/` is still worthwhile; it is kept open in
+docs/DECISIONS.md (2026-10-25 consolidation section).
 
 ## Results that already pass (kept as gates)
 

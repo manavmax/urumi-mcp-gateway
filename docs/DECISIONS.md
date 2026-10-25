@@ -916,8 +916,8 @@ rows) so the demo shows the same numbers the audit table holds.
 upstream tools, per the brief). Percentiles use the bounded-sample pattern rather
 than SQL percentile_cont (portable across the sqlite test harness). /metrics is
 unauthenticated by default in-cluster (token optional) — an in-cluster scraper is
-added later by opening a NetworkPolicy exception for it; documented in
-REVIEW_NEEDED.md.
+added later by opening a NetworkPolicy exception for it; accepted for the demo
+(see the 2026-10-25 consolidation section).
 
 ## 2026-10-21: per-key and per-user rate limits in Postgres (ADR-057)
 
@@ -1568,7 +1568,8 @@ announcement persistence, mobile sheet, tab switch. `helm lint` 0 failures; flag
 its packets intentionally stay paused until it is scrolled into view, which is the spec's
 off-screen pause. This session's model has NO image input, so the screenshots and frames
 were not visually reviewed here; scripted geometry and motion probes substitute, and the
-visual pass is the top item for Manav in docs/REVIEW_NEEDED_LANDING.md.
+visual pass is the top item for Manav (kept open in the 2026-10-25
+consolidation section).
 
 
 ## 2026-10-22: Landing nav fix pass: hidden-attribute overrides, the invisible pills, and the packets that never painted (ADR-087)
@@ -1627,8 +1628,8 @@ regions in both full-page shots show a 221/230 luminance spread, i.e. text paint
 transform because the brief asked for a literal 64px-to-56px transition. The smooth-scroll
 spy legitimately walks the highlight through sections while a long scroll settles; the
 verify gate uses instant scrolling for determinism. Screenshots and frames were retaken and
-the open-sheet states saved for Manav, but the visual review is still his: see
-docs/REVIEW_NEEDED_LANDING.md.
+the open-sheet states saved for Manav, but the visual review still needs human
+eyes (kept open in the 2026-10-25 consolidation section).
 
 
 ## 2026-10-23: One repo URL for every landing link, injected from the chart (ADR-088)
@@ -2092,3 +2093,84 @@ after the ADR-089 cleanup, and their registrations are written once (stores)
 or re-asserted without the timeout (hosted), so old rows would keep the
 too-short cut-off forever; re-asserting on sync-owned rows keeps the fix
 idempotent and migration-free.
+
+## 2026-10-25: Documentation consolidation; dev run reports folded and deleted
+
+**What happened.** The phase 0-8 delta appendices (docs/THREAT_MODEL.md,
+docs/SYSTEM_DESIGN_AND_TRADEOFFS.md) were folded into the ROOT THREAT_MODEL.md and
+SYSTEM_DESIGN_AND_TRADEOFFS.md as coherent sections, and the docs/ duplicates were
+deleted. The POLISH_*.md and REVIEW_NEEDED_*.md run reports were folded into this
+section and deleted. This section records everything in them a reviewer still needs.
+
+**Durable facts preserved from the deleted run reports:**
+
+- Dashboard polish (was POLISH_DASHBOARD.md): dark mode maps the landing tokens;
+  the Overview redesign adds an admin-only `top_tools` aggregate to `/api/stats`
+  (additive, no contract change); the verification scripts live in
+  `src/dashboard/scripts/` (shoot-dashboard, verify-pixels, verify-dom,
+  verify-contrast, verify-overflow) and run against the live deployment.
+  KNOWN LIMITATION kept: light-theme chart bars measure 1.52:1 non-text contrast
+  against the white card (approved light design, left untouched; the same data is
+  available as text via axis labels, tooltips, aria-labels and the per-server
+  table). Dark bars were raised to 3.43:1. All text pairs pass AA in both themes.
+- Landing polish (ADR-086..088 territory): the hero order (heading, subtext, flow
+  graphic, chat card, buttons) is owner-decided and gated by
+  `scripts/landing-verify.mjs`; the six alternate bands carry labeled band-art
+  schematics. STALE-CACHE FIX worth knowing: nginx served styles.css/js/woff2 with
+  a 7-day public cache at unversioned URLs, so a browser that had visited earlier
+  rendered new SVGs with stale CSS (the "black graphics" report). Static assets
+  now send `Cache-Control: no-cache` (ETag revalidation) and the stylesheet link
+  is `/styles.css?v=2`; the site has no build step, so asset URLs are never
+  content-hashed and long caches guarantee stale-HTML/CSS mismatches.
+- Store shopping-flow polish decisions now live only here: the seeded wp-setup
+  "Primary" menu still lists four retired categories (Apparel/Home/Accessories/
+  Stationery); the theme renders the seeded menu ONLY when every link resolves
+  against the live shop and otherwise builds the nav from live `product_cat`
+  terms, so a stale menu can never show a dead link. The wp-setup seed should
+  eventually list the six current categories (report-only item). Other durable
+  bits: search suggestions hit the same-origin Store API with 200ms debounce;
+  the theme rewrites same-host `https://` URLs to `http://` in REST responses
+  ONLY for plain-HTTP ingress requests (local TLS-less ingress); catalog sorting
+  drops popularity/rating (dishonest for a demo with no real sales); the price
+  filter uses Woo's min_price/max_price GET vars; styles.css had ~700 lines of
+  byte-identical duplicates removed cascade-safely; the 800KB page-weight gate
+  held (home 748KB) with WooCommerce's own mini-cart JS the remaining bulk.
+- Photo pass (store-v2): catalogue cut 36 -> 29 (ADR-082); curation verbatim in
+  a gitignored choices.json; the pipeline writes docs/IMAGE_CREDITS.md. Human
+  eyeball items that were never completed (kept here so they are not lost):
+  desk-product crops were zoomed blind (check for laptops/phones in the desk
+  photos and banners), the hero headline AA contrast against the photo should be
+  re-checked with scripts/verify-store-contrast.mjs, and three photo/alt pairings
+  looked odd on paper (KIT-001 serving board, CAR-005/006 carry bags, DSK-001
+  notebook).
+- Open confirmations folded from REVIEW_NEEDED.md (most were since resolved):
+  the colima docker context question is RESOLVED (Makefile `DOCKER_CONTEXT ?= colima`);
+  chat "today" resolves in `gateway.defaultTimezone` (Asia/Kolkata locally, UTC in
+  prod), accepted; /metrics is unauthenticated in-cluster by default with an
+  optional METRICS_BEARER token, accepted for the demo; prod runs 1 replica (PDB
+  renders only at 2+, so prod has none); LLM model-fallback cooldowns are
+  per-replica and ~45s per model, bounded residual; kind's policy controller makes
+  in-pod calls to the gateway Service VIP obey the gateway's own default-deny
+  egress, so live probes go through the Ingress (correct, surprising);
+  ADR-061's migration fix carried an honest correction: phase 4's "migrations ran
+  on both replicas" was pod-log-only and over-claimed (migration 008 was silently
+  lost live; any phase-4 conclusion that assumed 008 was applied, e.g. login
+  lockout, was fail-open in that window); stores on the VPS need a wildcard DNS
+  RECORD for <slug>.<baseDomain> (the CERTIFICATE is per-store HTTP-01 per
+  ADR-064, never a wildcard); regress-core's kill-window flake was stabilized
+  (5+ green runs).
+- Landing open items that remain: the apex A record must point at the server
+  before enabling the landing component in prod; "Beyond the brief" items flip
+  only after their branch merges; the demo video block stays hidden until
+  `landing.videoUrl`; the www subdomain is not served.
+
+**Alternatives.** (1) Keep the run reports in docs/: rejected, they are
+session narratives with model-limitation caveats and per-run gate output that
+ages badly; a reviewer needs the durable decisions, not the transcripts.
+(2) Delete without folding: rejected, three items above (light-theme chart
+contrast, the landing cache fix, the wp-setup dead-categories seed) would have
+been lost context for future changes.
+
+**Why.** A reviewer reading the root files must get the full current truth;
+per-run status reports contradict that goal once their runs are merged, and
+stale REVIEW_NEEDED items read as unresolved when most are resolved.
