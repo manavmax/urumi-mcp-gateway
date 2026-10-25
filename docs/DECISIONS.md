@@ -290,7 +290,8 @@ as the per key MCP limiter.
 **API.** `GET /api/admin-events` (admin only, members get 403) is paginated with
 filters by actor (user id or email), action and date range. Actor emails are resolved
 in the same query pattern as `GET /api/audit`. The response shape:
-```json{"total": N, "limit": 100, "offset": 0, "events": [
+```json
+{"total": N, "limit": 100, "offset": 0, "events": [
   {"id": 1, "ts": "...", "actor_user_id": "uuid|null", "actor_email": "email|null",
    "action": "server.create", "target_type": "server", "target_ref": "slug",
    "outcome": "success|failure", "details": {}}

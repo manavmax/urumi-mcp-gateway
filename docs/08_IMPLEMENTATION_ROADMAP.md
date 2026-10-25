@@ -113,7 +113,8 @@
 
 ## 3. Daily Verification Commands
 
-```bash# DoD slice
+```bash
+# DoD slice
 curl -s store.127.0.0.1.nip.io | head
 kubectl get pods -n urumi && kubectl get ingress -n urumi && kubectl get pvc -n urumi
 kubectl get svc woo-mcp -n urumi  # ClusterIP

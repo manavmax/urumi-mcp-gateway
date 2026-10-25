@@ -1,23 +1,17 @@
 # UPGRADE_ROLLBACK.md: rehearsed procedure
 
 Everything in this document was REHEARSED on the local kind cluster with real
-output (release `urumi`, revisions 1-15, 2026-10-19/20). The install/upgrade
-procedure was then run for real on the VPS (first live deploy 2026-10-20,
-including the first install gotcha below); the deliberately bad upgrade
-rehearsal itself has only run on kind so far.
-
-# UPGRADE_ROLLBACK.md: rehearsed procedure
-
-Everything in this document was REHEARSED on the local kind cluster with real
 output (release `urumi`, revisions 1-15, 2026-10-19/20). The VPS run of the same
-procedure is now DONE (first live deploy 2026-10-20); this document is the
-rehearsed baseline for it.
+procedure is now DONE (first live deploy 2026-10-20, including the first
+install gotcha below); the deliberately bad upgrade rehearsal itself has only
+run on kind so far.
 
 ## The rule
 
 FIRST install on a fresh cluster (no --wait, no rollback flag):
 
-```bashhelm upgrade --install urumi ./helm -n urumi -f helm/values-prod.yaml --timeout 15m
+```bash
+helm upgrade --install urumi ./helm -n urumi -f helm/values-prod.yaml --timeout 15m
 # then wait for the hook that provisions WordPress + creates woo-secrets:
 kubectl wait --for=condition=complete job/urumi-wp-setup -n urumi --timeout=15m
 ```
@@ -29,7 +23,8 @@ hook has run. Every later upgrade can wait because the Secret already exists.
 
 EVERY UPGRADE after that:
 
-```bashhelm upgrade --install urumi ./helm -n urumi -f helm/values-prod.yaml \
+```bash
+helm upgrade --install urumi ./helm -n urumi -f helm/values-prod.yaml \
   --timeout 15m --rollback-on-failure --wait
 ```
 - `--timeout 15m`: the explicit budget (`ADR-048`). The post install/upgrade
@@ -80,7 +75,8 @@ Take a dump BEFORE the upgrade (release `urumi`, namespace `rc-verify`; on the
 VPS substitute the real namespace). Custom format (`-Fc`) keeps it compressed
 and selective:
 
-```bash# 1. DUMP (run immediately before the upgrade)
+```bash
+# 1. DUMP (run immediately before the upgrade)
 kubectl exec urumi-postgres-0 -n rc-verify -- \
   sh -c 'pg_dump -U urumi -d urumi -Fc -f /tmp/urumi-pre-upgrade.dump'
 
@@ -93,7 +89,8 @@ dump into a scratch database and reproduced the exact pre upgrade state
 (alembic_version `006_chat_uploads`, 211 audit rows, 3 users, 9 tables, 0
 pg_restore errors):
 
-```bash# 3a. drill: restore into a scratch DB and verify
+```bash
+# 3a. drill: restore into a scratch DB and verify
 kubectl exec urumi-postgres-0 -n rc-verify -- psql -U urumi -d postgres \
   -c 'DROP DATABASE IF EXISTS urumi_restored' -c 'CREATE DATABASE urumi_restored'
 kubectl exec urumi-postgres-0 -n rc-verify -- \
@@ -124,7 +121,8 @@ line:
 The WooCommerce store lives in MariaDB (`mariadb:11.4` StatefulSet), NOT in the
 pg_dump. Back it up the same way, from the mariadb pod:
 
-```bash# 1. DUMP the store database (run immediately before the upgrade; consistent
+```bash
+# 1. DUMP the store database (run immediately before the upgrade; consistent
 #    InnoDB snapshot via --single-transaction)
 kubectl exec urumi-mariadb-0 -n rc-verify -- sh -c \
   'mariadb-dump -u wordpress -p"$MARIADB_PASSWORD" wordpress --single-transaction --routines --triggers > /tmp/rc-store-dump.sql'
@@ -136,7 +134,8 @@ kubectl cp rc-verify/urumi-mariadb-0:/tmp/rc-store-dump.sql rc-store-dump.sql -c
 Restore: the RECOVERY DRILL executed in this rehearsal (407,722-byte dump,
 21 INSERT sections, 0 restore errors):
 
-```bash# 3a. drill: restore into a scratch database, then compare counts
+```bash
+# 3a. drill: restore into a scratch database, then compare counts
 kubectl exec -i urumi-mariadb-0 -n rc-verify -- sh -c \
   'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -u root -e \
    "DROP DATABASE IF EXISTS store_restore_check; CREATE DATABASE store_restore_check;" \
@@ -274,7 +273,8 @@ $ ... products publish count                        -> 12
 ```
 ## One liners
 
-```bashmake upgrade ARGS='--set gateway.image.tag=<new-tag>'   # values-driven upgrade
+```bash
+make upgrade ARGS='--set gateway.image.tag=<new-tag>'   # values-driven upgrade
 make rollback REV=4                                      # manual rollback
 ```
 Both use `--timeout 15m --rollback-on-failure --wait` (`ADR-048`; the Makefile

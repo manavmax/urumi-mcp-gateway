@@ -2,7 +2,8 @@
 
 ## 1. Helm Chart Structure (umbrella, single chart for grading)
 
-```helm/
+```helm
+/
   Chart.yaml                # name: urumi, version: 0.1.0, appVersion: 1.0.0
   values.yaml               # defaults (local-biased)
   values-local.yaml         # Kind: standard, nip.io, no TLS
@@ -37,7 +38,8 @@
 
 ### 2.1 `kind-config`.yaml
 
-```yamlkind: Cluster
+```yaml
+kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
@@ -49,12 +51,14 @@ nodes:
     hostPort: 443
     protocol: TCP
 ```
-```bashkind create cluster --name urumi --config kind-config.yaml
+```bash
+kind create cluster --name urumi --config kind-config.yaml
 kubectl cluster-info
 ```
 ### 2.2 `Ingress-nginx`
 
-```bashkubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
 ```
 ### 2.3 Local Domain (document both, use nip.io for zero friction)
@@ -65,7 +69,8 @@ kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.
 | `/etc/hosts` | `127.0.0.1 store.localtest.me dashboard.localtest.me` | Pretty, but manual edit |
 
 Set `global.domain` accordingly:
-```yaml# values-local.yaml
+```yaml
+# values-local.yaml
 global:
   domain: 127.0.0.1.nip.io
   ingressClass: nginx
@@ -82,7 +87,8 @@ ingress:
 
 ### 3.1 VPS Provision (Hetzner/Vultr $6/mo or Oracle Free)
 
-```bash# on VPS
+```bash
+# on VPS
 curl -sfL https://get.k3s.io | sh -s - --disable traefik  # or keep traefik and set ingressClass traefik
 # kubeconfig at /etc/rancher/k3s/k3s.yaml
 # point local kubectl: scp vps:/etc/rancher/k3s/k3s.yaml ~/.kube/k3s.yaml && KUBECONFIG=~/.kube/k3s.yaml kubectl get nodes
@@ -92,7 +98,8 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main
 ```
 ### 3.2 What's Different (real values diff)
 
-```yaml# values-prod.yaml
+```yaml
+# values-prod.yaml
 global:
   domain: yourdomain.com  # or <vps-ip>.nip.io if no domain
   ingressClass: nginx
@@ -118,7 +125,8 @@ postgres:
 ```
 ### 3.3 TLS (optional, strong polish)
 
-```bashkubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
 kubectl apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -130,7 +138,8 @@ EOF
 
 ## 4. Deploy / Upgrade / Rollback
 
-```bash# local
+```bash
+# local
 helm upgrade --install urumi ./helm -n urumi --create-namespace -f helm/values-local.yaml --atomic --timeout 5m
 
 # prod
@@ -172,7 +181,8 @@ helm upgrade urumi ./helm -n urumi -f values-local.yaml --set gateway.image.tag=
 
 **Ingress (templates/ingress.yaml):**
 
-```yaml{{- if .Values.ingress.enabled }}
+```yaml
+{{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -201,7 +211,8 @@ spec:
 
 ## 6. Probes & Resources (every workload)
 
-```yaml# WordPress
+```yaml
+# WordPress
 startupProbe: {httpGet: {path: /, port: 80}, periodSeconds: 5, failureThreshold: 30}
 livenessProbe: {httpGet: {path: /wp-login.php, port: 80}, periodSeconds: 15, failureThreshold: 3, initialDelaySeconds: 60}
 readinessProbe: {httpGet: {path: /wp-login.php, port: 80}, periodSeconds: 5, failureThreshold: 2, initialDelaySeconds: 30}
@@ -236,7 +247,8 @@ resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 300m, memory: 25
 
 ## 8. NetworkPolicy (deny by default + explicit allows)
 
-```yaml# default-deny
+```yaml
+# default-deny
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: {name: default-deny}
@@ -277,7 +289,8 @@ spec:
 
 ## 9. Persistent Storage
 
-```yaml# pvc-wordpress.yaml
+```yaml
+# pvc-wordpress.yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata: {name: wp-content}
@@ -295,7 +308,8 @@ spec:
 
 ## 10. WP Setup Job (Helm hook)
 
-```yamlapiVersion: batch/v1
+```yaml
+apiVersion: batch/v1
 kind: Job
 metadata:
   name: wp-setup

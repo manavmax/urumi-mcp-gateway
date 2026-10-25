@@ -49,13 +49,15 @@ when the router reconnects, ISP changes, or you move networks, SSH starts
 timing out and the tunnel in section 5 cannot come up. Update the SG source
 (never widen it to 0.0.0.0/0):
 
-```bashcurl -s https://checkip.amazonaws.com    # your CURRENT public IP, e.g. 203.0.113.7
+```bash
+curl -s https://checkip.amazonaws.com    # your CURRENT public IP, e.g. 203.0.113.7
 ```
 - AWS console: EC2 -> Security Groups -> the instance's SG -> Inbound rules ->
   Edit the `ssh` rule: set source to `<new-ip>/32` (this replaces the old /32).
 - AWS CLI alternative (find the SG id first with `aws ec2 describe-instances`):
 
-```bashaws ec2 revoke-security-group-ingress --group-id <sg-id> --protocol tcp --port 22 --cidr <old-ip>/32
+```bash
+aws ec2 revoke-security-group-ingress --group-id <sg-id> --protocol tcp --port 22 --cidr <old-ip>/32
 aws ec2 authorize-security-group-ingress --group-id <sg-id> --protocol tcp --port 22 --cidr <new-ip>/32
 ```
 Then reestablish the tunnel (section 5). Everything else in the SG stays as is.
@@ -77,7 +79,8 @@ Instance hardening checklist (one time):
 
 Run as root once; everything later runs as `ops`:
 
-```bash# non-root sudo user + SSH key login
+```bash
+# non-root sudo user + SSH key login
 adduser ops && usermod -aG sudo ops
 mkdir -p /home/ops/.ssh && cp /root/.ssh/authorized_keys /home/ops/.ssh/authorized_keys
 chown -R ops:ops /home/ops/.ssh && chmod 700 /home/ops/.ssh && chmod 600 /home/ops/.ssh/authorized_keys
@@ -96,17 +99,20 @@ runs fine with the Ubuntu default swap state (swap is NOT a requirement here).
 The server was bootstrapped with the standard stable channel installer and is at
 v1.36.5+k3s1. For reproducibility, the exact command that produced it is:
 
-```bashcurl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL=stable sh -s - \
+```bash
+curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL=stable sh -s - \
   --disable traefik --write-kubeconfig-mode 600
 ```
 Pinned equivalent (same result, explicit version):
 
-```bashcurl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.36.5+k3s1" sh -s - \
+```bash
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.36.5+k3s1" sh -s - \
   --disable traefik --write-kubeconfig-mode 600
 ```
 On the server, verify and note the facts the chart needs:
 
-```bashkubectl get nodes                                  # Ready, v1.36.5+k3s1
+```bash
+kubectl get nodes                                  # Ready, v1.36.5+k3s1
 ip -4 addr show | grep inet                        # note the node IP (EC2 private, e.g. 172.31.x.x)
 kubectl -n kube-system get ds                      # (no CNI ds: k3s ships its own netpol agent)
 ```
@@ -127,7 +133,8 @@ kubectl -n kube-system get ds                      # (no CNI ds: k3s ships its o
 Kubeconfig lives at `/etc/rancher/k3s/k3s.yaml` with mode 600. Copy it to the
 laptop over scp and NEVER commit it (it is a cluster admin credential):
 
-```bashscp ops@<ip>:/etc/rancher/k3s/k3s.yaml ~/kubeconfigs/urumi-vps.yaml
+```bash
+scp ops@<ip>:/etc/rancher/k3s/k3s.yaml ~/kubeconfigs/urumi-vps.yaml
 ```
 ## 5. kubectl/helm access from the laptop (SSH tunnel)
 
@@ -137,7 +144,8 @@ tunnel dies silently when the network changes (laptop sleep, wifi handover,
 hotspot switch) and every kubectl/helm call then fails with connection errors
 that look like cluster problems (finding (f), gotcha section 8.1).
 
-```bash# terminal 1 (leave open while operating the cluster; keep-alives every 30s)
+```bash
+# terminal 1 (leave open while operating the cluster; keep-alives every 30s)
 ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -L 6443:127.0.0.1:6443 ops@<ip>
 ```
 `ServerAliveInterval=30` sends a keepalive every 30s (keeps NAT/firewall state
@@ -172,14 +180,16 @@ to reach the VPS (gotcha (g)). ALWAYS do one of:
 
 Before anything destructive, confirm where you are pointing:
 
-```bashKUBECONFIG=~/kubeconfigs/urumi-vps.yaml kubectl config current-context   # NOT kind-urumi
+```bash
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml kubectl config current-context   # NOT kind-urumi
 ```
 Guard rails: never commit the kubeconfig (add it to .gitignore); the tunnel is
 the only path; keep the SSH session closed when not deploying.
 
 ## 6. `ingress-nginx` + `cert-manager` (pinned charts)
 
-```bashhelm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+```bash
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo add jetstack https://charts.jetstack.io
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -n ingress-nginx --create-namespace \
@@ -193,18 +203,21 @@ helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespa
 trustedProxies chain (`ADR-049`). With ServiceLB present, confirm the ingress
 service bound the node ports:
 
-```bashkubectl -n ingress-nginx get svc    # EXTERNAL-IP = the node IP (the Elastic IP's private address)
+```bash
+kubectl -n ingress-nginx get svc    # EXTERNAL-IP = the node IP (the Elastic IP's private address)
 ```
 Then apply the STAGING issuer first (edit the placeholder email first):
 
-```bashkubectl apply -f deploy/cluster-issuer-staging.yaml
+```bash
+kubectl apply -f deploy/cluster-issuer-staging.yaml
 ```
 ## 7. DNS + propagation check
 
 Create A records for `store.<domain>` and `dashboard.<domain>` pointing at the
 Elastic IP. Check propagation from the laptop:
 
-```bashdig +short store.<domain> @1.1.1.1     # expect the Elastic IP
+```bash
+dig +short store.<domain> @1.1.1.1     # expect the Elastic IP
 dig +short dashboard.<domain> @8.8.8.8
 ```
 ## 8. Deploy day: the exact order of commands
@@ -213,7 +226,8 @@ Placeholders: `<domain>` = the real domain, `<owner>` = the GHCR owner,
 `<owner-ip>` = the owner's home IP, `<tag>` = the tag `make images-push` produced.
 Run from the repo root on the laptop with `KUBECONFIG` and the tunnel up.
 
-```bash# 0. tunnel + context (section 5). EVERY command below is prefixed with
+```bash
+# 0. tunnel + context (section 5). EVERY command below is prefixed with
 #    KUBECONFIG=... (or run in the one dedicated tab that exported it first):
 #    a bare kubectl/helm targets the local kind cluster.
 ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -L 6443:127.0.0.1:6443 ops@<ip>
@@ -300,7 +314,8 @@ log") and docs/DECISIONS.md `ADR-051`.
   default in `values-prod`.yaml (gateway 100m, wordpress 150m, mariadb 100m,
   postgres 100m, chart total 700m).
 
-```bashkubectl describe pod -n urumi <pending-pod> | grep -A3 Events   # shows "Insufficient cpu"
+```bash
+kubectl describe pod -n urumi <pending-pod> | grep -A3 Events   # shows "Insufficient cpu"
 kubectl get pods -n urumi -o custom-columns=NAME:.metadata.name,CPU_REQ:.spec.containers[*].resources.requests.cpu
 ```
 - (c) Let's Encrypt `HTTP-01` solver pods blocked by the default deny
@@ -308,7 +323,8 @@ kubectl get pods -n urumi -o custom-columns=NAME:.metadata.name,CPU_REQ:.spec.co
   solver pod, the CertificateRequest hung. The chart now ships
   `urumi-allow-acme-solver` (`ADR-051`). Diagnose with:
 
-```bashkubectl get pods -n urumi -l acme.cert-manager.io/http01-solver=true
+```bash
+kubectl get pods -n urumi -l acme.cert-manager.io/http01-solver=true
 kubectl describe certificaterequest -n urumi    # "Waiting for HTTP-01 challenge"
 kubectl get netpol -n urumi                     # urumi-allow-acme-solver must exist
 ```
@@ -319,7 +335,8 @@ kubectl get netpol -n urumi                     # urumi-allow-acme-solver must e
   error": transient on the ACME side. Delete the failed CertificateRequest and
   let `cert-manager` retry; it issued on the next attempt:
 
-```bashkubectl get certificaterequest -n urumi
+```bash
+kubectl get certificaterequest -n urumi
 kubectl delete certificaterequest <name> -n urumi
 ```
 - (f) SSH tunnel drops when the network changes (wifi handover, sleep). Use the
@@ -327,16 +344,19 @@ kubectl delete certificaterequest <name> -n urumi
   if SSH itself times out, your owner IP changed: update the SG (section 2) and
   redial:
 
-```bashssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -L 6443:127.0.0.1:6443 ops@<ip>
+```bash
+ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -L 6443:127.0.0.1:6443 ops@<ip>
 ```
 - (g) `make gateway-admin-password` said "no password found in Secret" when the
   real problem was a dead tunnel / wrong context: a bare kubectl targeted the
   local kind cluster. The make target now prints the real kubectl error and a
   hint; run it with the prefix:
 
-```bashKUBECONFIG=~/kubeconfigs/urumi-vps.yaml make gateway-admin-password
+```bash
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml make gateway-admin-password
 ```
-```bashKUBECONFIG=~/kubeconfigs/urumi-vps.yaml make gateway-admin-password
+```bash
+KUBECONFIG=~/kubeconfigs/urumi-vps.yaml make gateway-admin-password
 ```
 ## 9. First NetworkPolicy enforcement on k3s (diagnosis guide)
 
@@ -378,11 +398,13 @@ to adopt a resource it does not manage, so delete it right before that upgrade
 (the solver pod only exists while a challenge is in flight, so deleting the
 policy between renewals is safe):
 
-```bashkubectl delete networkpolicy urumi-allow-acme-solver -n urumi
+```bash
+kubectl delete networkpolicy urumi-allow-acme-solver -n urumi
 ```
 Fast diagnosis recipe:
 
-```bashkubectl -n urumi get netpol                          # the 8+ policies exist
+```bash
+kubectl -n urumi get netpol                          # the 8+ policies exist
 kubectl -n urumi describe netpol urumi-default-deny  # policyTypes ingress+egress, podSelector {}
 kubectl describe pod -n urumi <stuck-pod>            # Events: probe failures vs pull failures
 # throwaway probe from inside the namespace:
@@ -399,7 +421,8 @@ unaccepted posture: the default deny is what bounds every tier.
 
 Repeat the blocked connection probe on the VPS as the live confirmation:
 
-```bash# a wp-setup-labelled pod must NOT reach the internet (trimmed NP: no 0.0.0.0/0 rule)
+```bash
+# a wp-setup-labelled pod must NOT reach the internet (trimmed NP: no 0.0.0.0/0 rule)
 kubectl run egress-probe -n urumi --image=busybox:1.36 --labels="app=wp-setup" \
   --restart=Never --rm -i -- \
   sh -c 'wget -T 6 -q -O /dev/null https://wordpress.org/ && echo REACHED-FAIL || echo BLOCKED-OK'
@@ -417,7 +440,8 @@ with real timing in docs/UPGRADE_ROLLBACK.md section b2 (5:09.84 on kind).
 
 ## 11. Logs, teardown
 
-```bashkubectl logs -n urumi deploy/urumi-gateway --tail=100
+```bash
+kubectl logs -n urumi deploy/urumi-gateway --tail=100
 kubectl logs -n urumi -l app=wordpress --tail=100
 helm history urumi -n urumi
 helm uninstall urumi -n urumi     # teardown (PVCs/kept Secrets stay - see ADR notes)

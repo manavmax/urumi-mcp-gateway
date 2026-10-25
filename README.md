@@ -402,7 +402,7 @@ Status legend: **VERIFIED IN REPO** (file or command evidence below), **LIVE ONL
 | Chart render | `helm template urumi ./helm -n urumi -f helm/values-local.yaml` | exact YAML the cluster gets |
 | Store + COD + MCP + gateway live gates | `make verify-store verify-cod verify-mcp verify-gateway` | storefront, checkout, MCP handshake, routing |
 | Full DoD on kind | `bash scripts/regress-core.sh` | the core demo path end to end |
-| Security table + live probes | `bash scripts/verify-hardening.sh` | per workload security posture (53 checks) |
+| Security table + live probes | `bash scripts/verify-hardening.sh` | per workload security posture (64 checks on the live local cluster) |
 | Chat LLM | `make verify-llm` | streams, tool loop, wrong key error |
 | OAuth full flow | `bash scripts/phase7-oauth-gate.sh` | metadata, registration, consent, token, revoke |
 | Landing gates | `make landing-verify`, `make landing-graphics` | CSP and console clean against the real nginx image |

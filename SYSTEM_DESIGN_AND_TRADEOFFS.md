@@ -74,7 +74,7 @@ Rehearsed procedure with real output in `docs/UPGRADE_ROLLBACK.md`; the short st
 
 ## Security controls and accepted tradeoffs
 
-The control table (non root uids, SAs, default deny NetworkPolicies, lockout, cookies, CSP, SSRF, secret hygiene) lives in THREAT_MODEL.md with its proof scripts (`scripts/verify-hardening.sh`, 53 checks). Accepted tradeoffs: public 443 egress for the LLM, provider visible chat content, per replica counters, three readOnlyRootFilesystem exceptions, the provisioner ClusterRole, admin chosen hosted images, and (prod) trusting the k3s pod CIDR for `X-Forwarded-For`, which only `ingress-nginx` can exploit because the chart's NetworkPolicy admits only the controller.
+The control table (non root uids, SAs, default deny NetworkPolicies, lockout, cookies, CSP, SSRF, secret hygiene) lives in THREAT_MODEL.md with its proof scripts (`scripts/verify-hardening.sh`, 64 checks against the live cluster). Accepted tradeoffs: public 443 egress for the LLM, provider visible chat content, per replica counters, three readOnlyRootFilesystem exceptions, the provisioner ClusterRole, admin chosen hosted images, and (prod) trusting the k3s pod CIDR for `X-Forwarded-For`, which only `ingress-nginx` can exploit because the chart's NetworkPolicy admits only the controller.
 
 ## Stand out
 
