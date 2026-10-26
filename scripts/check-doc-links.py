@@ -22,6 +22,8 @@ ROOT = Path(__file__).resolve().parent.parent
 MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 BLOB_MAIN = re.compile(r"""github\.com/[^/\s"']+/[^/\s"']+/blob/main/([^\s)#?'"]+)""")
 REPO_PATH = re.compile(r'data-repo-path="([^"]+)"')
+# srcset / src attributes in README HTML (the <picture> banner) must resolve
+HTML_SRC = re.compile(r'\b(?:src|srcset)="([^"]+)"')
 BAD_SCHEME = ("http://", "https://", "mailto:", "#")
 
 
@@ -48,6 +50,15 @@ def check() -> list[str]:
         for target in markdown_targets(text):
             if not relative_ok(md, target):
                 problems.append(f"{md.relative_to(ROOT)}: broken markdown link -> {target}")
+        # HTML src/srcset in README (the <picture> banner): each path must exist
+        if md.name == "README.md":
+            for src in HTML_SRC.findall(text):
+                for part in src.split():
+                    clean = part.split(",", 1)[0]
+                    if clean.startswith(BAD_SCHEME) or clean.startswith("data:"):
+                        continue
+                    if not repo_ok(clean):
+                        problems.append(f"README.md: broken image src -> {clean}")
     landing = ROOT / "src/landing/index.html"
     if landing.exists():
         html = landing.read_text(encoding="utf-8", errors="replace")
