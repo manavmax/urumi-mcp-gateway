@@ -4,7 +4,7 @@
   <img alt="Urumi AI: one MCP endpoint for your whole team" src="docs/assets/banner-dark.svg">
 </picture>
 
-**Urumi AI** is a take home build: a WooCommerce store plus a team MCP gateway on Kubernetes, Helm, React and FastAPI. One `/mcp` endpoint aggregates every enabled server behind deterministic `slug__tool` names, with a React dashboard, a chat agent that calls the same tools as the logged in user, a provisioned multi store system, hosted servers and OAuth for MCP clients.
+**Urumi MCP Gateway** is a take home build: a WooCommerce store plus a team MCP gateway on Kubernetes, Helm, React and FastAPI. One `/mcp` endpoint aggregates every enabled server behind deterministic `slug__tool` names, with a React dashboard, a chat agent that calls the same tools as the logged in user, a provisioned multi store system, hosted servers and OAuth for MCP clients.
 
 [Overview](#at-a-glance) · [Architecture](#architecture) · [Quick start](#quick-start-local-on-kind) · [Usage](#usage) · [Kubernetes](#kubernetes-layout) · [Security](#security-posture) · [Stand out items](#stand-out-items) · [Coverage](#requirement-coverage) · [Repository map](#repository-map)
 
