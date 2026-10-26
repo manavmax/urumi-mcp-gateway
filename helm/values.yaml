@@ -126,7 +126,7 @@ postgres:
     requests: { cpu: 200m, memory: 256Mi }
     limits: { cpu: 500m, memory: 512Mi }
 
-# Placeholders — not deployed in Day 1-2 but present for helm lint
+# Component defaults. values-local.yaml and values-prod.yaml enable the gateway, dashboard and landing.
 gateway:
   enabled: false
   image: { repository: ghcr.io/urumi/gateway, tag: "0.1.0", pullPolicy: IfNotPresent }
