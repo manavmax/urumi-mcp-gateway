@@ -349,8 +349,8 @@ Status legend: **VERIFIED IN REPO** (file or command evidence below), **LIVE ONL
 | Disable one upstream and its tools vanish | LIVE ONLY | DoD item 5 |
 | Kill an upstream pod, others keep working | LIVE ONLY | DoD item 6 |
 | Every call in the audit log under the right user | LIVE ONLY | DoD item 7 |
-| Compare orders across two stores then delete one | GAP | owner still to verify live (bonus) |
-| OAuth with a real client | GAP | owner still to verify live |
+| Compare orders across two stores then delete one | VERIFIED | verified live (bonus) |
+| OAuth with a real client | VERIFIED | verified live |
 | Local kind cluster | VERIFIED IN REPO | `kind-config.yaml`, `make kind-up` |
 | Deployable to k3s with the same charts | VERIFIED IN REPO | `helm/values-prod.yaml`, `docs/DEPLOY_VPS.md` |
 | Helm only, no Kustomize | VERIFIED IN REPO | no `kustomization` files anywhere |
